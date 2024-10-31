@@ -206,6 +206,16 @@ def main():
     # Sort by total mana spent
     df_sorted = df.sort_values('total_mana_spent', ascending=False)
     
+    # Calculate average CMC distribution for the top 10 decks
+    top_10 = df_sorted.head(10)
+    avg_cmc_top_10 = {f'cmc_{i}': top_10[f'cmc_{i}'].mean() for i in range(8)}
+    avg_cmc_top_10['cmc_8plus'] = top_10['cmc_8plus'].mean()
+    
+    # Calculate average CMC distribution for the remaining decks
+    remaining_decks = df_sorted.iloc[10:]
+    avg_cmc_remaining = {f'cmc_{i}': remaining_decks[f'cmc_{i}'].mean() for i in range(8)}
+    avg_cmc_remaining['cmc_8plus'] = remaining_decks['cmc_8plus'].mean()
+    
     # Set pandas display options to show all columns
     pd.set_option('display.max_columns', None)  # Show all columns
     pd.set_option('display.width', None)        # Don't wrap wide tables
@@ -214,23 +224,24 @@ def main():
     # Save results
     df_sorted.to_csv('simulation_results.csv', index=False)
     
-    # Print top 10 configurations
-    print("\nTop 10 Configurations:")
-    print(df_sorted.head(10))
+    # Print top 10 configurations (first table with specified columns)
+    print("\nTop 10 Configurations (Selected Columns):")
+    selected_columns = [
+        'lands', 'mana_rocks', 'land_ramp', 'immediate_draw', 
+        'per_turn_draw', 'on_cast_draw', 'curve', 
+        'actual_curve', 'total_mana_spent', 
+        'ramp_mana_spent', 'nonramp_mana_spent'
+    ]
+    print(top_10[selected_columns])
     
-    # Print expanded statistical analysis
-    print("\nParameter Impact Analysis:")
-    for param in ['lands', 'mana_rocks', 'land_ramp', 'immediate_draw', 
-                 'per_turn_draw', 'on_cast_draw', 'curve', 'actual_curve']:
-        correlation = df[param].corr(df['total_mana_spent'])
-        print(f"{param}: correlation with total mana spent = {correlation:.3f}")
-    
-    # Print average CMC distribution
-    print("\nAverage CMC Distribution:")
-    for cmc in range(8):
-        avg_count = df[f'cmc_{cmc}'].mean()
-        print(f"CMC {cmc}: {avg_count:.1f}")
-    print(f"CMC 8+: {df['cmc_8plus'].mean():.1f}")
+    # Print average CMC distribution in a separate table (second table)
+    print("\nAverage CMC Distribution (Top 10 vs Remaining):")
+    cmc_distribution = pd.DataFrame({
+        'CMC': [f'CMC {i}' for i in range(8)] + ['CMC 8+'],
+        'Top 10 Average': [avg_cmc_top_10[f'cmc_{i}'] for i in range(8)] + [avg_cmc_top_10['cmc_8plus']],
+        'Remaining Average': [avg_cmc_remaining[f'cmc_{i}'] for i in range(8)] + [avg_cmc_remaining['cmc_8plus']]
+    })
+    print(cmc_distribution)
 
 if __name__ == "__main__":
     main()
