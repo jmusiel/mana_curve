@@ -1,0 +1,258 @@
+[
+    {
+        "name": "Basic Land",
+        "cmc": 0,
+        "quantity": 36,
+        "is_land": true
+    },
+    {
+        "name": "Ramp Land (eye of ugin, temple of false god)",
+        "cmc": 0,
+        "quantity": 2
+    },
+    {
+        "name": "Sol Ring",
+        "cmc": 1,
+        "quantity": 2,
+        "ramp_amount": 2,
+        "is_ramp": true,
+        "ramp_type": "mana"
+    },
+
+    {
+        "name": "1 Mana Rock",
+        "cmc": 2,
+        "quantity": 5,
+        "ramp_amount": 1,
+        "is_ramp": true,
+        "ramp_type": "mana"
+    },
+
+    {
+        "name": "Worn Powerstone Mana Rock",
+        "cmc": 3,
+        "quantity": 2,
+        "ramp_amount": 2,
+        "is_ramp": true,
+        "ramp_type": "mana"
+    },
+
+    
+
+    {
+        "name": "Skyclave Mana Rock",
+        "cmc": 6,
+        "quantity": 1,
+        "ramp_amount": 3,
+        "is_ramp": true,
+        "ramp_type": "mana"
+    },
+
+    {
+        "name": "Stonespeaker Crystal Mana Rock",
+        "cmc": 4,
+        "quantity": 4,
+        "ramp_amount": 2,
+        "is_ramp": true,
+        "ramp_type": "mana"
+    },
+
+    {
+        "name": "Thran Mana Rock",
+        "cmc": 4,
+        "quantity": 1,
+        "ramp_amount": 3,
+        "is_ramp": true,
+        "ramp_type": "mana"
+    },
+
+    {
+        "name": "Gilded Mana Rock",
+        "cmc": 5,
+        "quantity": 1,
+        "ramp_amount": 3,
+        "is_ramp": true,
+        "ramp_type": "mana"
+    },
+
+    {
+        "name": "Dreamstone Mana Rock",
+        "cmc": 6,
+        "quantity": 1,
+        "ramp_amount": 3,
+        "is_ramp": true,
+        "ramp_type": "mana"
+    },
+
+    {
+        "name": "Unstable Obelisk Mana Rock",
+        "cmc": 3,
+        "quantity": 1,
+        "ramp_amount": 1,
+        "is_ramp": true,
+        "ramp_type": "mana"
+    },
+
+    {
+        "name": "Ugin Discount Mana Rock",
+        "cmc": 6,
+        "quantity": 1,
+        "ramp_amount": 2,
+        "is_ramp": true,
+        "ramp_type": "mana"
+    },
+
+    {
+        "name": "Moonsilver Tutor Thran Mana Rock",
+        "cmc": 5,
+        "quantity": 1,
+        "ramp_amount": 3,
+        "is_ramp": true,
+        "ramp_type": "mana"
+    },
+
+    
+    {
+        "name": "Solemn Land Ramp",
+        "cmc": 4,
+        "quantity": 1,
+        "ramp_amount": 1,
+        "is_ramp": true,
+        "ramp_type": "land"
+    },
+
+    {
+        "name": "Burnished Land Ramp",
+        "cmc": 6,
+        "quantity": 1,
+        "ramp_amount": 2,
+        "is_ramp": true,
+        "ramp_type": "land"
+    },
+
+    {
+        "name": "Oblivion Sower Land Ramp",
+        "cmc": 6,
+        "quantity": 1,
+        "ramp_amount": 1,
+        "is_ramp": true,
+        "ramp_type": "land"
+    },
+
+    {
+        "name": "Ugin/Staff Per Turn Draw",
+        "cmc": 6,
+        "quantity": 2,
+        "draw_amount": 1,
+        "is_draw": true,
+        "draw_type": "per_turn"
+    },
+
+    {
+        "name": "Karn Per Turn Draw",
+        "cmc": 4,
+        "quantity": 1,
+        "draw_amount": 1,
+        "is_draw": true,
+        "draw_type": "per_turn"
+    },
+
+    {
+        "name": "Mystic Forge Cast Draw",
+        "cmc": 4,
+        "quantity": 1,
+        "draw_amount": 1,
+        "is_draw": true,
+        "draw_type": "on_cast"
+    },
+
+    
+    {
+        "name": "0-Drop Spells",
+        "quantity": 1,
+        "cmc": 0
+    },
+    {
+        "name": "1-Drop Spells",
+        "quantity": 2,
+        "cmc": 1
+    },
+    {
+        "name": "2-Drop Spells",
+        "quantity": 5,
+        "cmc": 2
+    },
+    {
+        "name": "3-Drop Spells",
+        "quantity": 3,
+        "cmc": 3
+    },
+    {
+        "name": "4-Drop Spells",
+        "quantity": 1,
+        "cmc": 4
+    },
+    {
+        "name": "5-Drop Spells",
+        "quantity": 3,
+        "cmc": 5
+    },
+    {
+        "name": "6-Drop Spells",
+        "quantity": 5,
+        "cmc": 6
+    },
+    {
+        "name": "7-Drop Spells",
+        "quantity": 4,
+        "cmc": 7
+    },
+    {
+        "name": "8-Drop Spells",
+        "quantity": 1,
+        "cmc": 8
+    },
+    {
+        "name": "9-Drop Spells",
+        "quantity": 2,
+        "cmc": 9
+    },
+    {
+        "name": "10-Drop Spells",
+        "quantity": 3,
+        "cmc": 10
+    },
+    {
+        "name": "11-Drop Spells",
+        "quantity": 2,
+        "cmc": 11
+    },
+    {
+        "name": "12-Drop Spells",
+        "quantity": 2,
+        "cmc": 12
+    },
+    {
+        "name": "13-Drop Spells",
+        "quantity": 1,
+        "cmc": 11
+    },
+
+    {
+        "name": "Flex (2/6) 7-Drop Spells",
+        "quantity": 0,
+        "cmc": 7
+    },
+    {
+        "name": "Flex (4/38) Basic Land",
+        "cmc": 0,
+        "quantity": 0,
+        "is_land": true
+    },
+    {
+        "name": "Flex (2/3) 10-Drop Spells",
+        "quantity": 0,
+        "cmc": 10
+    }
+    
+]

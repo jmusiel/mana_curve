@@ -154,7 +154,7 @@ class GameState:
         if not card.is_ramp and not card.is_draw:
             self.mana_spent_nonramp_nondraw += card.cmc
 
-        if card.cmc > 5:
+        if card.cmc > 6:
             self.mana_spent_high_cmc += card.cmc
         
         # Handle any on_cast triggers from other permanents
