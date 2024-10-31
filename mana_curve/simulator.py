@@ -22,7 +22,9 @@ class GameState:
         self.turn = 0
         self.mana_spent_total = 0
         self.mana_spent_ramp = 0
-        self.mana_spent_nonramp = 0
+        self.mana_spent_draw = 0
+        self.mana_spent_nonramp_nondraw = 0
+        self.mana_spent_high_cmc = 0
         self.draw_per_turn = 0
         self.draw_on_cast = 0
         self.mana_threshold = mana_threshold
@@ -138,8 +140,6 @@ class GameState:
             else:  # mana rocks
                 # Mana rocks can be used immediately, so we increase available_mana
                 self.available_mana += card.ramp_amount
-        else:
-            self.mana_spent_nonramp += card.cmc
         
         # Handle card draw effects
         if card.is_draw:
@@ -149,6 +149,13 @@ class GameState:
                 self.draw_per_turn += card.draw_amount
             elif card.draw_type == "on_cast":
                 self.draw_on_cast += card.draw_amount
+            self.mana_spent_draw += card.cmc
+
+        if not card.is_ramp and not card.is_draw:
+            self.mana_spent_nonramp_nondraw += card.cmc
+
+        if card.cmc > 5:
+            self.mana_spent_high_cmc += card.cmc
         
         # Handle any on_cast triggers from other permanents
         self.draw(self.draw_on_cast)
@@ -212,7 +219,9 @@ def simulate_game(deck: List[Card], turns: int, mana_threshold: int) -> Dict:
         'cards_played': [c.name for c in game.played],
         'mana_spent_total': game.mana_spent_total,
         'mana_spent_ramp': game.mana_spent_ramp,
-        'mana_spent_nonramp': game.mana_spent_nonramp
+        'mana_spent_draw': game.mana_spent_draw,  # Calculate draw mana spent
+        'nonramp_nondraw_mana_spent': game.mana_spent_nonramp_nondraw,  # Update this line
+        'mana_spent_high_cmc': game.mana_spent_high_cmc  # High CMC spells
     }
 
 def calculate_statistics(values: List[float]) -> Dict:
@@ -295,13 +304,17 @@ def calculate_summary_stats(all_stats: List[Dict]) -> Dict:
     # Extract values from all simulations
     total_mana_spent = [s['mana_spent_total'] for s in all_stats]
     ramp_mana_spent = [s['mana_spent_ramp'] for s in all_stats]
-    nonramp_mana_spent = [s['mana_spent_nonramp'] for s in all_stats]
+    draw_mana_spent = [s['mana_spent_draw'] for s in all_stats]
+    nonramp_nondraw_mana_spent = [s['nonramp_nondraw_mana_spent'] for s in all_stats]
+    high_cmc_mana_spent = [s['mana_spent_high_cmc'] for s in all_stats]
     
     # Calculate averages only (for sweep.py compatibility)
     return {
         'total_mana_spent': statistics.mean(total_mana_spent),
         'ramp_mana_spent': statistics.mean(ramp_mana_spent),
-        'nonramp_mana_spent': statistics.mean(nonramp_mana_spent)
+        'draw_mana_spent': statistics.mean(draw_mana_spent),
+        'nonramp_nondraw_mana_spent': statistics.mean(nonramp_nondraw_mana_spent),
+        'high_cmc_mana_spent': statistics.mean(high_cmc_mana_spent)
     }
 
 def main(config):

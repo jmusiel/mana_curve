@@ -99,8 +99,8 @@ def generate_draw_package(num_immediate: int, num_per_turn: int, num_on_cast: in
     ]
     
     on_cast_draw = [
-        {"name": "Cast Draw 1", "cmc": 2, "draw_amount": 1},  # Glimpse of Nature style
-        {"name": "Cast Draw 2", "cmc": 3, "draw_amount": 1},  # Rhystic Study style
+        # {"name": "Cast Draw 1", "cmc": 2, "draw_amount": 1},  # Glimpse of Nature style
+        # {"name": "Cast Draw 2", "cmc": 3, "draw_amount": 1},  # Rhystic Study style
         {"name": "Cast Draw 3", "cmc": 4, "draw_amount": 1},  # Beast Whisperer style
         {"name": "Cast Draw 3", "cmc": 4, "draw_amount": 1},  # Beast Whisperer style
         {"name": "Cast Draw 3", "cmc": 4, "draw_amount": 1},  # Beast Whisperer style

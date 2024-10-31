@@ -19,7 +19,7 @@ def generate_parameter_combinations(num_samples):
         'land_ramp': range(2, 20, 2),       # 2-8 land ramp
         'immediate_draw': range(0, 15, 2),   # 2-6 immediate draw
         'per_turn_draw': range(0, 4, 1),    # 2-6 per turn draw
-        'on_cast_draw': range(0, 4, 1),     # 2-6 on cast draw
+        'on_cast_draw': range(0, 2, 1),     # 2-6 on cast draw
         'curve': [2.5, 3.0, 3.5]      # Average mana value
     }
     
@@ -70,7 +70,7 @@ def calculate_deck_stats(deck_file: str) -> dict:
     
     return stats
 
-def run_simulation(params, num_simulations):
+def run_simulation(params, num_simulations, mana_threshold):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Create a unique temp file name using process ID and timestamp
@@ -113,6 +113,7 @@ def run_simulation(params, num_simulations):
             '--deck', temp_deck_file,
             '--turns', '14',
             '--simulations', str(num_simulations),
+            '--mana_threshold', str(mana_threshold),
             '--verbose', 'false'
         ]
         
@@ -137,7 +138,9 @@ def run_simulation(params, num_simulations):
             'actual_curve': deck_stats['actual_curve'],
             'total_mana_spent': simulation_results['total_mana_spent'],
             'ramp_mana_spent': simulation_results['ramp_mana_spent'],
-            'nonramp_mana_spent': simulation_results['nonramp_mana_spent'],
+            'draw_mana_spent': simulation_results['draw_mana_spent'],
+            'nonramp_nondraw_mana_spent': simulation_results['nonramp_nondraw_mana_spent'],
+            'high_cmc_mana_spent': simulation_results['high_cmc_mana_spent'],
             **{f'cmc_{i}': deck_stats[f'cmc_{i}'] for i in range(8)},
             'cmc_8plus': deck_stats['cmc_8plus']
         }
@@ -160,6 +163,8 @@ def main():
                        help='Number of random parameter combinations to test')
     parser.add_argument('--simulations', type=int, default=1000,
                        help='Number of simulations to run for each parameter combination')
+    parser.add_argument('--mana_threshold', type=int, default=7,
+                       help='Threshold at which to just start prioritizing big spells')
     parser.add_argument('--processes', type=int, default=None,
                        help='Number of parallel processes to use (default: CPU count)')
     parser.add_argument('--sequential', action='store_true',
@@ -186,7 +191,7 @@ def main():
         with Pool(processes=num_processes) as pool:
             # Use partial to include simulations parameter
             from functools import partial
-            run_sim_with_count = partial(run_simulation, num_simulations=args.simulations)
+            run_sim_with_count = partial(run_simulation, num_simulations=args.simulations, mana_threshold=args.mana_threshold)
             
             # Use tqdm to show progress bar
             results = list(tqdm(
@@ -230,7 +235,7 @@ def main():
         'lands', 'mana_rocks', 'land_ramp', 'immediate_draw', 
         'per_turn_draw', 'on_cast_draw', 'curve', 
         'actual_curve', 'total_mana_spent', 
-        'ramp_mana_spent', 'nonramp_mana_spent'
+        'ramp_mana_spent', 'draw_mana_spent', 'nonramp_nondraw_mana_spent', 'high_cmc_mana_spent'
     ]
     print(top_10[selected_columns])
     
