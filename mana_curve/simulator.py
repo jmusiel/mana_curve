@@ -6,6 +6,7 @@ from collections import Counter
 from typing import List, Dict
 import json
 import sys
+import os
 
 from deck_loader import Card, load_deck, validate_deck_size
 
@@ -120,19 +121,23 @@ class GameState:
         if card.is_ramp:
             self.mana_spent_ramp += card.cmc
             if card.ramp_type == "land":
-                # Add lands from deck to battlefield
+                # Add lands from deck to battlefield (but they can't tap this turn)
                 for _ in range(card.ramp_amount):
                     land = next((card for card in self.deck if card.is_land), None)
                     if land:
                         self.deck.remove(land)
+                        # Add to played list but don't count for available_mana this turn
                         self.played.append(land)
-                
+                        
                 # Add lands to hand if it's a Cultivate-style effect
                 for _ in range(getattr(card, 'land_to_hand', 0)):
                     land = next((card for card in self.deck if card.is_land), None)
                     if land:
                         self.deck.remove(land)
                         self.hand.append(land)
+            else:  # mana rocks
+                # Mana rocks can be used immediately, so we increase available_mana
+                self.available_mana += card.ramp_amount
         else:
             self.mana_spent_nonramp += card.cmc
         
@@ -282,12 +287,36 @@ def plot_distribution(values: List[float], title: str, width: int = 60, height: 
     
     return '\n'.join(plot)
 
+def calculate_summary_stats(all_stats: List[Dict]) -> Dict:
+    """Calculate summary statistics from all simulation runs."""
+    if not all_stats:
+        raise ValueError("No simulation data to analyze")
+    
+    # Extract values from all simulations
+    total_mana_spent = [s['mana_spent_total'] for s in all_stats]
+    ramp_mana_spent = [s['mana_spent_ramp'] for s in all_stats]
+    nonramp_mana_spent = [s['mana_spent_nonramp'] for s in all_stats]
+    
+    # Calculate averages only (for sweep.py compatibility)
+    return {
+        'total_mana_spent': statistics.mean(total_mana_spent),
+        'ramp_mana_spent': statistics.mean(ramp_mana_spent),
+        'nonramp_mana_spent': statistics.mean(nonramp_mana_spent)
+    }
+
 def main(config):
     try:
         # Load and validate deck
+        if not os.path.exists(config['deck_file']):
+            raise FileNotFoundError(f"Deck file not found: {config['deck_file']}")
+            
         deck = load_deck(config['deck_file'])
         validate_deck_size(deck, expected_size=100)
         
+        # Validate deck contents
+        if not any(card.is_land for card in deck):
+            raise ValueError("Deck contains no lands")
+            
         all_stats = []
         for i in range(config['simulations']):
             stats = simulate_game(
@@ -297,66 +326,18 @@ def main(config):
             )
             all_stats.append(stats)
             
-            # Optional: Print progress to stderr
             if config['verbose'] and (i + 1) % 100 == 0:
                 print(f"Completed {i + 1} simulations...", file=sys.stderr)
         
-        # Calculate mana statistics
-        total_mana_spent = [s['mana_spent_total'] for s in all_stats]
-        ramp_mana_spent = [s['mana_spent_ramp'] for s in all_stats]
-        nonramp_mana_spent = [s['mana_spent_nonramp'] for s in all_stats]
-        
-        stats_summary = {
-            'total_mana_spent': calculate_statistics(total_mana_spent)['average'],
-            'ramp_mana_spent': calculate_statistics(ramp_mana_spent)['average'],
-            'nonramp_mana_spent': calculate_statistics(nonramp_mana_spent)['average']
-        }
-        
-        # Always print the JSON output first for sweep.py to parse
+        # Calculate statistics and output JSON
+        stats_summary = calculate_summary_stats(all_stats)
         print(json.dumps(stats_summary))
+        return True
         
-        # Print detailed statistics only in verbose mode
-        if config['verbose']:
-            print("\nDetailed Statistics:", file=sys.stderr)
-            detailed_stats = {
-                'total_mana_spent': calculate_statistics(total_mana_spent),
-                'ramp_mana_spent': calculate_statistics(ramp_mana_spent),
-                'nonramp_mana_spent': calculate_statistics(nonramp_mana_spent)
-            }
-            
-            print("\nMana Usage Statistics and Distributions:", file=sys.stderr)
-            print("=" * 50, file=sys.stderr)
-            
-            print("\nTotal Mana Spent:", file=sys.stderr)
-            print(detailed_stats['total_mana_spent'], file=sys.stderr)
-            print(plot_distribution(total_mana_spent, "Distribution of Total Mana Spent"), file=sys.stderr)
-            
-            print("\nMana Spent on Ramp:", file=sys.stderr)
-            print(detailed_stats['ramp_mana_spent'], file=sys.stderr)
-            print(plot_distribution(ramp_mana_spent, "Distribution of Ramp Mana Spent"), file=sys.stderr)
-            
-            print("\nMana Spent on Non-Ramp Spells:", file=sys.stderr)
-            print(detailed_stats['nonramp_mana_spent'], file=sys.stderr)
-            print(plot_distribution(nonramp_mana_spent, "Distribution of Non-Ramp Mana Spent"), file=sys.stderr)
-            
-            # Calculate and print average mana available per turn
-            avg_mana = {}
-            for turn in range(config['turns']):
-                avg_mana[turn + 1] = sum(s['turn_stats'][turn]['available_mana'] 
-                                       for s in all_stats) / len(all_stats)
-            
-            print("\nAverage available mana per turn:", file=sys.stderr)
-            print(avg_mana, file=sys.stderr)
-        
-    except FileNotFoundError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return
-    except Exception as e:
-        print(f"Unexpected error: {e}", file=sys.stderr)
-        return
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as e:
+        print(f"Error: {str(e)}", file=sys.stderr)
+        return False
+    
 
 if __name__ == "__main__":
     parser = get_parser()

@@ -2,6 +2,8 @@ import json
 from typing import List, Dict, Tuple
 import argparse
 import random
+import os
+import sys
 
 def generate_ramp_package(num_rocks: int, num_land_ramp: int) -> List[Dict]:
     """Generate a mix of mana rocks and land ramp spells."""
@@ -194,50 +196,70 @@ def generate_deck(num_lands: int,
                  num_immediate: int, num_per_turn: int, num_on_cast: int,
                  curve_center: float, output_file: str):
     """Generate a complete deck configuration and save to JSON."""
-    deck = []
-    
-    # Add lands
-    deck.append({
-        "name": "Basic Land",
-        "cmc": 0,
-        "quantity": num_lands,
-        "is_land": True
-    })
-    
-    # Add ramp package
-    ramp_spells = generate_ramp_package(num_rocks, num_land_ramp)
-    deck.extend(ramp_spells)
-    
-    # Add draw package
-    draw_spells = generate_draw_package(num_immediate, num_per_turn, num_on_cast)
-    deck.extend(draw_spells)
-    
-    # Calculate remaining cards
-    total_utility = num_lands + len(ramp_spells) + len(draw_spells)
-    remaining_cards = 100 - total_utility
-    
-    if remaining_cards < 0:
-        raise ValueError(f"Too many utility cards specified. Need {-remaining_cards} fewer cards.")
-    
-    # Add regular spells following the curve
-    curve_spells = generate_curve(remaining_cards, curve_center)
-    deck.extend(curve_spells)
-    
-    # Save to JSON
-    with open(output_file, 'w') as f:
-        json.dump(deck, f, indent=4)
-    
-    print(f"\nGenerated deck with:")
-    print(f"- {num_lands} lands")
-    print(f"- Ramp package: {len(ramp_spells)} spells")
-    print(f"  - {num_rocks} mana rocks")
-    print(f"  - {num_land_ramp} land ramp spells")
-    print(f"- Draw package: {len(draw_spells)} spells")
-    print(f"  - {num_immediate} immediate draw")
-    print(f"  - {num_per_turn} per-turn draw")
-    print(f"  - {num_on_cast} on-cast draw")
-    print(f"- {remaining_cards} other spells (curve centered at {curve_center})")
-    print(f"Saved to {output_file}")
+    try:
+        deck = []
+        
+        # Validate total utility cards
+        total_utility = (num_lands + num_rocks + num_land_ramp + 
+                        num_immediate + num_per_turn + num_on_cast)
+        if total_utility >= 100:
+            raise ValueError(
+                f"Too many utility cards specified: {total_utility} total "
+                f"({num_lands} lands + {num_rocks + num_land_ramp} ramp + "
+                f"{num_immediate + num_per_turn + num_on_cast} draw). "
+                f"Need at least 1 card for the regular curve."
+            )
+        
+        # Add lands
+        deck.append({
+            "name": "Basic Land",
+            "cmc": 0,
+            "quantity": num_lands,
+            "is_land": True
+        })
+        
+        # Add ramp package
+        ramp_spells = generate_ramp_package(num_rocks, num_land_ramp)
+        deck.extend(ramp_spells)
+        
+        # Add draw package
+        draw_spells = generate_draw_package(num_immediate, num_per_turn, num_on_cast)
+        deck.extend(draw_spells)
+        
+        # Calculate remaining cards
+        total_utility = num_lands + len(ramp_spells) + len(draw_spells)
+        remaining_cards = 100 - total_utility
+        
+        if remaining_cards < 0:
+            raise ValueError(
+                f"Too many utility cards specified: {total_utility} total "
+                f"({num_lands} lands + {len(ramp_spells)} ramp + {len(draw_spells)} draw). "
+                f"Need {-remaining_cards} fewer cards."
+            )
+        
+        # Add regular spells following the curve
+        curve_spells = generate_curve(remaining_cards, curve_center)
+        deck.extend(curve_spells)
+        
+        # Ensure the output directory exists
+        output_dir = os.path.dirname(os.path.abspath(output_file))
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Save to JSON with explicit flush
+        with open(output_file, 'w') as f:
+            json.dump(deck, f, indent=4)
+            f.flush()
+            os.fsync(f.fileno())  # Force write to disk
+            
+        # Verify the file was created
+        if not os.path.exists(output_file):
+            raise ValueError(f"Failed to create deck file: {output_file}")
+            
+        return True
+        
+    except Exception as e:
+        print(f"Error generating deck: {str(e)}", file=sys.stderr)
+        return False
 
 def get_parser():
     parser = argparse.ArgumentParser(description='Generate a Magic deck configuration')
