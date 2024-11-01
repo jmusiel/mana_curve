@@ -2,6 +2,7 @@ import argparse
 import pprint
 from pyrchidekt.api import getDeckById
 import json
+import os
 pp = pprint.PrettyPrinter(indent=4)
 
 def get_parser():
@@ -9,12 +10,20 @@ def get_parser():
     parser.add_argument(
         "--deck_url",
         type=str, 
-        default="https://archidekt.com/decks/9883018/kozilek_mana_curve_template",
+        default="https://archidekt.com/decks/9887623/kess_mana_curve_template",
+    )
+    parser.add_argument(
+        "--deck_name",
+        type=str,
+        default="kess"
     )
     return parser
 
 def main(config):
     pp.pprint(config)
+
+    os.makedirs(config['deck_name'], exist_ok=True)
+    save_path = os.path.join(config['deck_name'],f"{config['deck_name']}_template.json")
 
     deck_list = []
     counts = {
@@ -90,7 +99,7 @@ def main(config):
             total += value
     print(f"total: {total}")
 
-    with open("kozilek_template.json", 'w') as f:
+    with open(save_path, 'w') as f:
         json.dump(deck_list, f)
 
     

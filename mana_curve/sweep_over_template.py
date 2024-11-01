@@ -96,7 +96,7 @@ def categorize_deck(deck: list) -> dict:
     }
     return stats
 
-def run_simulation(deck_combo: tuple[list, list], num_simulations: int, mana_threshold: int) -> dict:
+def run_simulation(deck_combo: tuple[list, list], num_simulations: int, mana_threshold: int, force_commander:bool) -> dict:
     """Run simulation for a given deck combination."""
     fixed_cards, flex_cards = deck_combo
     
@@ -124,6 +124,8 @@ def run_simulation(deck_combo: tuple[list, list], num_simulations: int, mana_thr
             '--mana_threshold', str(mana_threshold),
             '--verbose', 'false'
         ]
+        if force_commander:
+            sim_cmd.append('--force_commander')
         
         sim_result = subprocess.run(sim_cmd, capture_output=True, text=True)
         
@@ -166,16 +168,25 @@ def run_simulation(deck_combo: tuple[list, list], num_simulations: int, mana_thr
 def main():
     parser = argparse.ArgumentParser(description='Run deck simulations with template-based combinations')
     parser.add_argument('--template', type=str, required=False,
-                       help='Path to template JSON file', default='kozilek_template.json')
-    parser.add_argument('--samples', type=int, default=1000,
+                       help='Path to template JSON file', default='kess/kess_template.json')
+    parser.add_argument('--samples', type=int, default=100,
                        help='Number of random combinations to test')
-    parser.add_argument('--simulations', type=int, default=1000,
+    parser.add_argument('--simulations', type=int, default=100,
                        help='Number of simulations to run for each combination')
     parser.add_argument('--mana_threshold', type=int, default=7,
                        help='Threshold at which to prioritize big spells')
     parser.add_argument('--processes', type=int, default=None,
                        help='Number of parallel processes to use (default: CPU count)')
+    parser.add_argument('--deck_name', type=str, required=False,
+                       help='Folder to save outputs', default='kess')
+    parser.add_argument("--force_commander", action='store_true', 
+                       help="Prioritize casting commander when mana is available")
+    parser.set_defaults(force_commander=False)
     args = parser.parse_args()
+
+    csv_save_path = os.path.join(args.deck_name,'template_simulation_results.csv')
+    top_decklists_save_path = os.path.join(args.deck_name, 'top_decklists')
+    os.makedirs(top_decklists_save_path, exist_ok=True)
     
     # Load template
     fixed_cards, flex_cards = load_template(args.template)
@@ -199,7 +210,8 @@ def main():
         from functools import partial
         run_sim_with_params = partial(run_simulation, 
                                     num_simulations=args.simulations,
-                                    mana_threshold=args.mana_threshold)
+                                    mana_threshold=args.mana_threshold,
+                                    force_commander=args.force_commander)
         
         # Create progress bar
         pbar = tqdm(pool.imap(run_sim_with_params, combinations), total=len(combinations))
@@ -232,13 +244,12 @@ def main():
     # Convert stats to DataFrame and save
     df = pd.DataFrame(results)
     df_sorted = df.sort_values('nonramp_nondraw_mana_spent', ascending=False)
-    df_sorted.to_csv('template_simulation_results.csv', index=False)
-    
-    # Save top 10 decklists
-    os.makedirs('top_decklists', exist_ok=True)
+    df_sorted.to_csv(csv_save_path, index=False)
     
     # Sort top_decks by score (highest first)
     sorted_top_decks = sorted(top_decks, key=lambda x: -x.score)
+
+    os.makedirs(top_decklists_save_path, exist_ok=True)
     
     for idx, deck_result in enumerate(sorted_top_decks, 1):
         output = {
@@ -254,7 +265,7 @@ def main():
             'decklist': deck_result.decklist
         }
         
-        filename = f'top_decklists/deck_{idx}_score_{int(deck_result.score)}.json'
+        filename = f'{top_decklists_save_path}/deck_{idx}_score_{int(deck_result.score)}.json'
         with open(filename, 'w') as f:
             json.dump(output, f, indent=2)
     

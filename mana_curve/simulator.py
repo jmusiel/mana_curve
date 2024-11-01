@@ -242,10 +242,10 @@ def get_parser():
     )
     parser.add_argument(
         "--force_commander",
-        type=bool,
-        default=False,
+        action='store_true',
         help="Prioritize casting commander when mana is available"
     )
+    parser.set_defaults(force_commander=False)
     return parser
 
 def simulate_game(deck: List[Card], turns: int, mana_threshold: int, force_commander: bool) -> Dict:
