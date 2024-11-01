@@ -45,6 +45,10 @@ class GameState:
         self.draw(self.draw_turn)
         self.lands_played = 0
         
+        # Calculate available mana from lands and rocks
+        self.available_mana = len([c for c in self.played if c.is_land]) + \
+                             sum(c.ramp_amount for c in self.played if c.is_ramp and c.ramp_type == "rock")
+        
         # If commander priority is enabled and we can cast it
         if self.force_commander and self.commander and self.commander in self.hand:
             if self.commander.cmc <= self.available_mana:
@@ -55,9 +59,6 @@ class GameState:
         if lands and self.lands_played == 0:
             self.play_land(lands[0])
             
-        # Calculate available mana
-        self.available_mana = len([c for c in self.played if c.is_land])
-        
         # If we're above the mana threshold, change play priority
         if self.available_mana >= self.mana_threshold:
             self.play_high_cmc_priority()
