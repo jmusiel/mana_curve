@@ -47,8 +47,8 @@ class GameState:
         self.lands_played = 0
         
         # Calculate available mana from lands and rocks
-        self.available_mana = len([c for c in self.played if c.is_land]) + \
-                             sum(c.ramp_amount for c in self.played if c.is_ramp and c.ramp_type == "rock")
+        self.available_mana = len([card for card in self.played if card.is_land]) + \
+                             sum(card.ramp_amount for card in self.played if card.is_ramp and card.ramp_type == "rock")
         
         # Play land if possible
         lands = [c for c in self.hand if c.is_land]
@@ -128,6 +128,7 @@ class GameState:
     
     def play_spell(self, card: Card):
         self.hand.remove(card)
+        card.played_on_turn = self.turn
         self.played.append(card)
         self.available_mana -= card.cmc
         self.mana_spent_total += card.cmc
@@ -144,7 +145,7 @@ class GameState:
                     land = next((card for card in self.deck if card.is_land), None)
                     if land:
                         self.deck.remove(land)
-                        # Add to played list but don't count for available_mana this turn
+                        land.played_on_turn = self.turn
                         self.played.append(land)
                         
                 # Add lands to hand if it's a Cultivate-style effect
@@ -178,6 +179,7 @@ class GameState:
     
     def play_land(self, land: Card):
         self.hand.remove(land)
+        land.played_on_turn = self.turn
         self.played.append(land)
         self.lands_played += 1
         self.available_mana += 1
@@ -218,7 +220,7 @@ def get_parser():
     parser.add_argument(
         "--deck_file",
         type=str, 
-        default="deck.json",
+        default="kess/top_decklists/deck_1_score_65.json",
         help="JSON file containing deck information"
     )
     parser.add_argument(
@@ -241,10 +243,10 @@ def get_parser():
     )
     parser.add_argument(
         "--verbose",
-        type=bool,
-        default=False,
+        action='store_true',
         help="Print detailed statistics"
     )
+    parser.set_defaults(verbose=False)
     parser.add_argument(
         "--force_commander",
         action='store_true',
@@ -264,20 +266,23 @@ def simulate_game(deck: List[Card], turns: int, mana_threshold: int, force_comma
         game.play_turn()
         turn_stats.append({
             'turn': turn + 1,
+            'land_mana': len([card for card in game.played if card.is_land]),
+            'rock_mana': sum(card.ramp_amount for card in game.played if card.is_ramp and card.ramp_type == "rock"),
             'available_mana': game.available_mana,
             'cards_played': len(game.played),
-            'cards_in_hand': len(game.hand)
+            'cards_in_hand': len(game.hand),
+            'plays': [(card.name, card.played_on_turn) for card in game.played if card.played_on_turn == turn + 1]
         })
     
     return {
         'turn_stats': turn_stats,
-        'cards_played': [c.name for c in game.played],
+        'cards_played': [(card.name, card.played_on_turn) for card in game.played],
         'mana_spent_total': game.mana_spent_total,
         'mana_spent_ramp': game.mana_spent_ramp,
-        'mana_spent_draw': game.mana_spent_draw,  # Calculate draw mana spent
-        'nonramp_nondraw_mana_spent': game.mana_spent_nonramp_nondraw,  # Update this line
-        'mana_spent_high_cmc': game.mana_spent_high_cmc,  # High CMC spells
-        'commander_cast_turn': game.commander_cast_turn  # Add this line
+        'mana_spent_draw': game.mana_spent_draw,
+        'nonramp_nondraw_mana_spent': game.mana_spent_nonramp_nondraw,
+        'mana_spent_high_cmc': game.mana_spent_high_cmc,
+        'commander_cast_turn': game.commander_cast_turn
     }
 
 def calculate_statistics(values: List[float]) -> Dict:
@@ -394,6 +399,7 @@ class Card:
     is_draw: bool = False
     draw_type: str = ""  # "immediate", "turn", or "cast"
     draw_amount: int = 0
+    played_on_turn: int = None  # Add this field
 
 def load_deck(deck_file: str) -> List[Card]:
     """
@@ -420,6 +426,9 @@ def load_deck(deck_file: str) -> List[Card]:
     try:
         with open(deck_file, 'r') as f:
             deck_data = json.load(f)
+
+        if "decklist" in deck_data:
+            deck_data = deck_data["decklist"]
         
         deck = []
         for card_data in deck_data:
@@ -470,7 +479,22 @@ def main(config):
             all_stats.append(stats)
             
             if config['verbose'] and (i + 1) % 100 == 0:
-                print(f"Completed {i + 1} simulations...", file=sys.stderr)
+                print(f"\nCompleted {i + 1} simulations...", file=sys.stderr)
+                print("\nExample game sequence:", file=sys.stderr)
+                for turn_stat in stats['turn_stats']:
+                    turn_num = turn_stat['turn']
+                    plays = turn_stat['plays']
+                    
+                    print(f"\nTurn {turn_num}:", file=sys.stderr)
+                    print(f"  Available Mana: {turn_stat['available_mana']}", file=sys.stderr)
+                    print(f"  Land Mana: {turn_stat['land_mana']}", file=sys.stderr)
+                    print(f"  Rock Mana: {turn_stat['rock_mana']}", file=sys.stderr)
+                    print(f"  Cards in Hand: {turn_stat['cards_in_hand']}", file=sys.stderr)
+                    
+                    if plays:
+                        print("  Played:", file=sys.stderr)
+                        for card_name, _ in plays:
+                            print(f"    - {card_name}", file=sys.stderr)
         
         # Calculate statistics and output JSON
         stats_summary = calculate_summary_stats(all_stats)
