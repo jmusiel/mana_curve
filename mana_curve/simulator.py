@@ -49,15 +49,15 @@ class GameState:
         self.available_mana = len([c for c in self.played if c.is_land]) + \
                              sum(c.ramp_amount for c in self.played if c.is_ramp and c.ramp_type == "rock")
         
-        # If commander priority is enabled and we can cast it
-        if self.force_commander and self.commander and self.commander in self.hand:
-            if self.commander.cmc <= self.available_mana:
-                self.play_spell(self.commander)
-                
         # Play land if possible
         lands = [c for c in self.hand if c.is_land]
         if lands and self.lands_played == 0:
             self.play_land(lands[0])
+        
+        # If commander priority is enabled and we can cast it
+        if self.force_commander and self.commander and self.commander in self.hand:
+            if self.commander.cmc <= self.available_mana:
+                self.play_spell(self.commander)  
             
         # If we're above the mana threshold, change play priority
         if self.available_mana >= self.mana_threshold:
@@ -175,6 +175,7 @@ class GameState:
         self.hand.remove(land)
         self.played.append(land)
         self.lands_played += 1
+        self.available_mana += 1
 
     def check_opening_hand(self) -> bool:
         land_count = len([c for c in self.hand if c.is_land])
