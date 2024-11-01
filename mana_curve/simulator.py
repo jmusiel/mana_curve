@@ -7,6 +7,7 @@ from typing import List, Dict
 import json
 import sys
 import os
+from dataclasses import dataclass
 
 from deck_loader import Card, load_deck, validate_deck_size
 
@@ -25,8 +26,8 @@ class GameState:
         self.mana_spent_draw = 0
         self.mana_spent_nonramp_nondraw = 0
         self.mana_spent_high_cmc = 0
-        self.draw_per_turn = 0
-        self.draw_on_cast = 0
+        self.draw_turn = 0
+        self.draw_cast = 0
         self.mana_threshold = mana_threshold
     
     def draw(self, count: int = 1):
@@ -37,7 +38,7 @@ class GameState:
     def play_turn(self):
         self.turn += 1
         self.draw()
-        self.draw(self.draw_per_turn)
+        self.draw(self.draw_turn)
         self.lands_played = 0
         
         # Play land if possible
@@ -94,7 +95,7 @@ class GameState:
         # Mana rocks
         while True:
             rocks = [c for c in self.hand 
-                    if c.is_ramp and c.ramp_type == "mana" 
+                    if c.is_ramp and c.ramp_type == "rock" 
                     and c.cmc <= self.available_mana]
             if not rocks:
                 break
@@ -107,7 +108,7 @@ class GameState:
                           if c.is_draw and c.cmc <= self.available_mana]
             if not draw_spells:
                 break
-            draw_priority = {"immediate": 3, "per_turn": 2, "on_cast": 1}
+            draw_priority = {"immediate": 3, "turn": 2, "cast": 1}
             draw_spells.sort(
                 key=lambda x: (draw_priority[x.draw_type], x.draw_amount / max(x.cmc, 1)),
                 reverse=True
@@ -145,10 +146,10 @@ class GameState:
         if card.is_draw:
             if card.draw_type == "immediate":
                 self.draw(card.draw_amount)
-            elif card.draw_type == "per_turn":
-                self.draw_per_turn += card.draw_amount
-            elif card.draw_type == "on_cast":
-                self.draw_on_cast += card.draw_amount
+            elif card.draw_type == "turn":
+                self.draw_turn += card.draw_amount
+            elif card.draw_type == "cast":
+                self.draw_cast += card.draw_amount
             self.mana_spent_draw += card.cmc
 
         if not card.is_ramp and not card.is_draw:
@@ -157,8 +158,8 @@ class GameState:
         if card.cmc > 6:
             self.mana_spent_high_cmc += card.cmc
         
-        # Handle any on_cast triggers from other permanents
-        self.draw(self.draw_on_cast)
+        # Handle any cast triggers from other permanents
+        self.draw(self.draw_cast)
     
     def play_land(self, land: Card):
         self.hand.remove(land)
@@ -316,6 +317,74 @@ def calculate_summary_stats(all_stats: List[Dict]) -> Dict:
         'nonramp_nondraw_mana_spent': statistics.mean(nonramp_nondraw_mana_spent),
         'high_cmc_mana_spent': statistics.mean(high_cmc_mana_spent)
     }
+
+@dataclass
+class Card:
+    name: str
+    cmc: int
+    quantity: int = 1
+    flex: bool = False
+    is_land: bool = False
+    is_ramp: bool = False
+    is_value: bool = False
+    is_commander: bool = False
+    ramp_type: str = ""  # "land" or "rock"
+    ramp_amount: int = 0
+    land_to_hand: int = 0  # For Cultivate-style effects
+    is_draw: bool = False
+    draw_type: str = ""  # "immediate", "turn", or "cast"
+    draw_amount: int = 0
+
+def load_deck(deck_file: str) -> List[Card]:
+    """
+    Load a deck from a JSON file and convert it to Card objects.
+    
+    Example JSON format:
+    [
+        {
+            "name": "Forest",
+            "cmc": 0,
+            "quantity": 37,
+            "is_land": true
+        },
+        {
+            "name": "Cultivate",
+            "cmc": 3,
+            "is_ramp": true,
+            "ramp_type": "land",
+            "ramp_amount": 1,
+            "land_to_hand": 1
+        }
+    ]
+    """
+    try:
+        with open(deck_file, 'r') as f:
+            deck_data = json.load(f)
+        
+        deck = []
+        for card_data in deck_data:
+            # Get quantity and remove it from the data if present
+            quantity = card_data.pop('quantity', 1)
+            
+            # Create Card object
+            card = Card(**card_data)
+            
+            # Add the specified number of copies
+            deck.extend([card for _ in range(quantity)])
+        
+        return deck
+    
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Deck file not found: {deck_file}")
+    except json.JSONDecodeError:
+        raise ValueError(f"Invalid JSON format in deck file: {deck_file}")
+    except TypeError as e:
+        raise TypeError(f"Invalid card data format: {str(e)}")
+
+def validate_deck_size(deck: List[Card], expected_size: int = 100):
+    """Validates that the deck contains the expected number of cards."""
+    if len(deck) != expected_size:
+        raise ValueError(f"Deck contains {len(deck)} cards. Expected {expected_size} cards.")
 
 def main(config):
     try:
