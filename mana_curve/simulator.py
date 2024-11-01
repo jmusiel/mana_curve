@@ -33,6 +33,7 @@ class GameState:
         self.draw_cast = 0
         self.mana_threshold = mana_threshold
         self.force_commander = force_commander
+        self.commander_cast_turn = None
     
     def draw(self, count: int = 1):
         for _ in range(count):
@@ -130,6 +131,10 @@ class GameState:
         self.played.append(card)
         self.available_mana -= card.cmc
         self.mana_spent_total += card.cmc
+        
+        # Track when commander is cast
+        if card.is_commander and self.commander_cast_turn is None:
+            self.commander_cast_turn = self.turn
         
         if card.is_ramp:
             self.mana_spent_ramp += card.cmc
@@ -271,7 +276,8 @@ def simulate_game(deck: List[Card], turns: int, mana_threshold: int, force_comma
         'mana_spent_ramp': game.mana_spent_ramp,
         'mana_spent_draw': game.mana_spent_draw,  # Calculate draw mana spent
         'nonramp_nondraw_mana_spent': game.mana_spent_nonramp_nondraw,  # Update this line
-        'mana_spent_high_cmc': game.mana_spent_high_cmc  # High CMC spells
+        'mana_spent_high_cmc': game.mana_spent_high_cmc,  # High CMC spells
+        'commander_cast_turn': game.commander_cast_turn  # Add this line
     }
 
 def calculate_statistics(values: List[float]) -> Dict:
@@ -359,12 +365,17 @@ def calculate_summary_stats(all_stats: List[Dict]) -> Dict:
     high_cmc_mana_spent = [s['mana_spent_high_cmc'] for s in all_stats]
     
     # Calculate averages only (for sweep.py compatibility)
+    avg_commander_turn = statistics.mean([s['commander_cast_turn'] for s in all_stats if s['commander_cast_turn'] is not None]) if [s['commander_cast_turn'] for s in all_stats if s['commander_cast_turn'] is not None] else None
+    commander_cast_rate = len([s['commander_cast_turn'] for s in all_stats if s['commander_cast_turn'] is not None]) / len(all_stats) if all_stats else 0
+    
     return {
         'total_mana_spent': statistics.mean(total_mana_spent),
         'ramp_mana_spent': statistics.mean(ramp_mana_spent),
         'draw_mana_spent': statistics.mean(draw_mana_spent),
         'nonramp_nondraw_mana_spent': statistics.mean(nonramp_nondraw_mana_spent),
-        'high_cmc_mana_spent': statistics.mean(high_cmc_mana_spent)
+        'high_cmc_mana_spent': statistics.mean(high_cmc_mana_spent),
+        'avg_commander_cast_turn': avg_commander_turn,
+        'commander_cast_rate': commander_cast_rate  # Percentage of games where commander was cast
     }
 
 @dataclass

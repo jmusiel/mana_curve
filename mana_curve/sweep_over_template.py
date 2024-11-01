@@ -149,6 +149,8 @@ def run_simulation(deck_combo: tuple[list, list], num_simulations: int, mana_thr
             'draw_mana_spent': simulation_results['draw_mana_spent'],
             'nonramp_nondraw_mana_spent': simulation_results['nonramp_nondraw_mana_spent'],
             'high_cmc_mana_spent': simulation_results['high_cmc_mana_spent'],
+            'avg_commander_cast_turn': simulation_results['avg_commander_cast_turn'],
+            'commander_cast_rate': simulation_results['commander_cast_rate']
         }
         
         return stats, full_deck
@@ -283,7 +285,7 @@ def main():
     comparison_stats = pd.DataFrame({
         'Metric': ['Lands', 'Ramp', 'Rock Ramp', 'Land Ramp', 'Ramp 1', 'Ramp 2', 'Ramp 3', 'Draw', 'Immediate Draw', 
                    'Turn Draw', 'Cast Draw', 'Draw 1', 'Draw 2', 'Draw 3', 'Value Cards', 'Average Value CMC', 'Average Curve',
-                   'Total Mana Spent', 'Nonramp Nondraw Mana Spent'],
+                   'Total Mana Spent', 'Nonramp Nondraw Mana Spent', 'Avg Commander Cast Turn', 'Commander Cast Rate'],
         'Top 10%': [
             top_10_percent['lands'].mean(),
             top_10_percent['ramp'].mean(),
@@ -303,7 +305,9 @@ def main():
             top_10_percent['value_cmc'].mean(),
             top_10_percent['curve'].mean(),
             top_10_percent['total_mana_spent'].mean(),
-            top_10_percent['nonramp_nondraw_mana_spent'].mean()
+            top_10_percent['nonramp_nondraw_mana_spent'].mean(),
+            top_10_percent['avg_commander_cast_turn'].mean(),
+            top_10_percent['commander_cast_rate'].mean()
         ],
         'Second 10%': [
             second_10_percent['lands'].mean(),
@@ -324,7 +328,9 @@ def main():
             second_10_percent['value_cmc'].mean(),
             second_10_percent['curve'].mean(),
             second_10_percent['total_mana_spent'].mean(),
-            second_10_percent['nonramp_nondraw_mana_spent'].mean()
+            second_10_percent['nonramp_nondraw_mana_spent'].mean(),
+            second_10_percent['avg_commander_cast_turn'].mean(),
+            second_10_percent['commander_cast_rate'].mean()
         ],
         'Third 10%': [
             third_10_percent['lands'].mean(),
@@ -345,7 +351,9 @@ def main():
             third_10_percent['value_cmc'].mean(),
             third_10_percent['curve'].mean(),
             third_10_percent['total_mana_spent'].mean(),
-            third_10_percent['nonramp_nondraw_mana_spent'].mean()
+            third_10_percent['nonramp_nondraw_mana_spent'].mean(),
+            third_10_percent['avg_commander_cast_turn'].mean(),
+            third_10_percent['commander_cast_rate'].mean()
         ],
         'Bottom 90%': [
             bottom_90_percent['lands'].mean(),
@@ -366,7 +374,9 @@ def main():
             bottom_90_percent['value_cmc'].mean(),
             bottom_90_percent['curve'].mean(),
             bottom_90_percent['total_mana_spent'].mean(),
-            bottom_90_percent['nonramp_nondraw_mana_spent'].mean()
+            bottom_90_percent['nonramp_nondraw_mana_spent'].mean(),
+            bottom_90_percent['avg_commander_cast_turn'].mean(),
+            bottom_90_percent['commander_cast_rate'].mean()
         ]
     })
     
