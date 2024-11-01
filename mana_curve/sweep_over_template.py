@@ -21,8 +21,7 @@ class DeckResult:
         self.decklist = decklist
     
     def __lt__(self, other):
-        # For min heap, we use negative score so highest scores stay
-        return -self.score < -other.score
+        return self.score < other.score
 
 def load_template(template_path: str) -> tuple[list, list]:
     """Load and separate fixed and flex cards from template."""
@@ -78,12 +77,12 @@ def categorize_deck(deck: list) -> dict:
         'ramp_2': sum(1 for card in deck if card.get('is_ramp') and card.get('ramp_amount') == 2),
         'ramp_3': sum(1 for card in deck if card.get('is_ramp') and card.get('ramp_amount') == 3),
         'draw': sum(1 for card in deck if card['is_draw']),
-        'immediate_draw': sum(1 for card in deck if card.get('is_draw') and card.get('kind') == 'immediate'),
-        'turn_draw': sum(1 for card in deck if card.get('is_draw') and card.get('kind') == 'turn'),
-        'cast_draw': sum(1 for card in deck if card.get('is_draw') and card.get('kind') == 'cast'),
-        'draw_1': sum(1 for card in deck if card.get('is_draw') and card.get('kind') == 'immediate' and card.get('draw_amount') == 1),
-        'draw_2': sum(1 for card in deck if card.get('is_draw') and card.get('kind') == 'immediate' and card.get('draw_amount') == 2),
-        'draw_3': sum(1 for card in deck if card.get('is_draw') and card.get('kind') == 'immediate' and card.get('draw_amount') == 3),
+        'immediate_draw': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate'),
+        'turn_draw': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'turn'),
+        'cast_draw': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'cast'),
+        'draw_1': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate' and card.get('draw_amount') == 1),
+        'draw_2': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate' and card.get('draw_amount') == 2),
+        'draw_3': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate' and card.get('draw_amount') == 3),
         'value': sum(1 for card in deck if card['is_value']),
         'value_cmc': statistics.mean([card['cmc'] for card in deck if card['is_value']]),
         'curve': statistics.mean([card['cmc'] for card in deck if not card['is_land']]),
@@ -273,7 +272,7 @@ def main():
     comparison_stats = pd.DataFrame({
         'Metric': ['Lands', 'Ramp', 'Rock Ramp', 'Land Ramp', 'Ramp 1', 'Ramp 2', 'Ramp 3', 'Draw', 'Immediate Draw', 
                    'Turn Draw', 'Cast Draw', 'Draw 1', 'Draw 2', 'Draw 3', 'Value Cards', 'Average Value CMC', 'Average Curve',
-                   'Total Mana Spent'],
+                   'Total Mana Spent', 'Nonramp Nondraw Mana Spent'],
         'Top 10%': [
             top_10_percent['lands'].mean(),
             top_10_percent['ramp'].mean(),
@@ -292,7 +291,8 @@ def main():
             top_10_percent['value'].mean(),
             top_10_percent['value_cmc'].mean(),
             top_10_percent['curve'].mean(),
-            top_10_percent['total_mana_spent'].mean()
+            top_10_percent['total_mana_spent'].mean(),
+            top_10_percent['nonramp_nondraw_mana_spent'].mean()
         ],
         'Second 10%': [
             second_10_percent['lands'].mean(),
@@ -312,7 +312,8 @@ def main():
             second_10_percent['value'].mean(),
             second_10_percent['value_cmc'].mean(),
             second_10_percent['curve'].mean(),
-            second_10_percent['total_mana_spent'].mean()
+            second_10_percent['total_mana_spent'].mean(),
+            second_10_percent['nonramp_nondraw_mana_spent'].mean()
         ],
         'Third 10%': [
             third_10_percent['lands'].mean(),
@@ -332,7 +333,8 @@ def main():
             third_10_percent['value'].mean(),
             third_10_percent['value_cmc'].mean(),
             third_10_percent['curve'].mean(),
-            third_10_percent['total_mana_spent'].mean()
+            third_10_percent['total_mana_spent'].mean(),
+            third_10_percent['nonramp_nondraw_mana_spent'].mean()
         ],
         'Bottom 90%': [
             bottom_90_percent['lands'].mean(),
@@ -352,7 +354,8 @@ def main():
             bottom_90_percent['value'].mean(),
             bottom_90_percent['value_cmc'].mean(),
             bottom_90_percent['curve'].mean(),
-            bottom_90_percent['total_mana_spent'].mean()
+            bottom_90_percent['total_mana_spent'].mean(),
+            bottom_90_percent['nonramp_nondraw_mana_spent'].mean()
         ]
     })
     
