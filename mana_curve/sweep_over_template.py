@@ -69,34 +69,34 @@ def generate_deck_combinations(fixed_cards: list, flex_cards: list, num_samples:
 def categorize_deck(deck: list) -> dict:
     """Analyze deck composition by card types."""
     stats = {
-        'lands': sum(1 for card in deck if card['is_land']),
-        'ramp': sum(1 for card in deck if card['is_ramp']),
-        'rock_ramp': sum(1 for card in deck if card.get('is_ramp') and card.get('ramp_type') == 'rock'),
-        'land_ramp': sum(1 for card in deck if card.get('is_ramp') and card.get('ramp_type') == 'land'),
-        'ramp_1': sum(1 for card in deck if card.get('is_ramp') and card.get('ramp_amount') == 1),
-        'ramp_2': sum(1 for card in deck if card.get('is_ramp') and card.get('ramp_amount') == 2),
-        'ramp_3': sum(1 for card in deck if card.get('is_ramp') and card.get('ramp_amount') == 3),
-        'draw': sum(1 for card in deck if card['is_draw']),
-        'immediate_draw': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate'),
-        'turn_draw': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'turn'),
-        'cast_draw': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'cast'),
-        'draw_1': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate' and card.get('draw_amount') == 1),
-        'draw_2': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate' and card.get('draw_amount') == 2),
-        'draw_3': sum(1 for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate' and card.get('draw_amount') == 3),
-        'value': sum(1 for card in deck if card['is_value']),
+        'lands': sum(card['quantity'] for card in deck if card['is_land']),
+        'ramp': sum(card['quantity'] for card in deck if card['is_ramp']),
+        'rock_ramp': sum(card['quantity'] for card in deck if card.get('is_ramp') and card.get('ramp_type') == 'rock'),
+        'land_ramp': sum(card['quantity'] for card in deck if card.get('is_ramp') and card.get('ramp_type') == 'land'),
+        'ramp_1': sum(card['quantity'] for card in deck if card.get('is_ramp') and card.get('ramp_amount') == 1),
+        'ramp_2': sum(card['quantity'] for card in deck if card.get('is_ramp') and card.get('ramp_amount') == 2),
+        'ramp_3': sum(card['quantity'] for card in deck if card.get('is_ramp') and card.get('ramp_amount') == 3),
+        'draw': sum(card['quantity'] for card in deck if card['is_draw']),
+        'immediate_draw': sum(card['quantity'] for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate'),
+        'turn_draw': sum(card['quantity'] for card in deck if card.get('is_draw') and card.get('draw_type') == 'turn'),
+        'cast_draw': sum(card['quantity'] for card in deck if card.get('is_draw') and card.get('draw_type') == 'cast'),
+        'draw_1': sum(card['quantity'] for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate' and card.get('draw_amount') == 1),
+        'draw_2': sum(card['quantity'] for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate' and card.get('draw_amount') == 2),
+        'draw_3': sum(card['quantity'] for card in deck if card.get('is_draw') and card.get('draw_type') == 'immediate' and card.get('draw_amount') == 3),
+        'value': sum(card['quantity'] for card in deck if card['is_value']),
         'value_cmc': statistics.mean([card['cmc'] for card in deck if card['is_value']]),
         'curve': statistics.mean([card['cmc'] for card in deck if not card['is_land']]),
-        'cmc_1': sum(1 for card in deck if card['cmc'] == 1),
-        'cmc_2': sum(1 for card in deck if card['cmc'] == 2),
-        'cmc_3': sum(1 for card in deck if card['cmc'] == 3),
-        'cmc_4': sum(1 for card in deck if card['cmc'] == 4),
-        'cmc_5': sum(1 for card in deck if card['cmc'] == 5),
-        'cmc_6': sum(1 for card in deck if card['cmc'] == 6),
-        'cmc_7+': sum(1 for card in deck if card['cmc'] >= 7),
+        'cmc_1': sum(card['quantity'] for card in deck if card['cmc'] == 1),
+        'cmc_2': sum(card['quantity'] for card in deck if card['cmc'] == 2),
+        'cmc_3': sum(card['quantity'] for card in deck if card['cmc'] == 3),
+        'cmc_4': sum(card['quantity'] for card in deck if card['cmc'] == 4),
+        'cmc_5': sum(card['quantity'] for card in deck if card['cmc'] == 5),
+        'cmc_6': sum(card['quantity'] for card in deck if card['cmc'] == 6),
+        'cmc_7+': sum(card['quantity'] for card in deck if card['cmc'] >= 7),
     }
     return stats
 
-def run_simulation(deck_combo: tuple[list, list], num_simulations: int, mana_threshold: int, force_commander:bool) -> dict:
+def run_simulation(deck_combo: tuple[list, list], num_simulations: int, mana_threshold: int, num_turns: int, force_commander:bool) -> dict:
     """Run simulation for a given deck combination."""
     fixed_cards, flex_cards = deck_combo
     
@@ -119,10 +119,9 @@ def run_simulation(deck_combo: tuple[list, list], num_simulations: int, mana_thr
             'python',
             os.path.join(current_dir, 'simulator.py'),
             '--deck', temp_deck_file,
-            '--turns', '14',
+            '--turns', str(num_turns),
             '--simulations', str(num_simulations),
             '--mana_threshold', str(mana_threshold),
-            '--verbose', 'false'
         ]
         if force_commander:
             sim_cmd.append('--force_commander')
@@ -177,6 +176,8 @@ def main():
                        help='Number of simulations to run for each combination')
     parser.add_argument('--mana_threshold', type=int, default=7,
                        help='Threshold at which to prioritize big spells')
+    parser.add_argument('--num_turns', type=int, default=8,
+                       help='number of turns to simulate')
     parser.add_argument('--processes', type=int, default=None,
                        help='Number of parallel processes to use (default: CPU count)')
     parser.add_argument('--deck_name', type=str, required=False,
@@ -213,6 +214,7 @@ def main():
         run_sim_with_params = partial(run_simulation, 
                                     num_simulations=args.simulations,
                                     mana_threshold=args.mana_threshold,
+                                    num_turns=args.num_turns,
                                     force_commander=args.force_commander)
         
         # Create progress bar

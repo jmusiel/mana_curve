@@ -499,6 +499,8 @@ def main(config):
         # Calculate statistics and output JSON
         stats_summary = calculate_summary_stats(all_stats)
         print(json.dumps(stats_summary))
+        for key, value in stats_summary.items():
+            print(f"{key}: {value}")
         return True
         
     except (FileNotFoundError, ValueError, json.JSONDecodeError) as e:
