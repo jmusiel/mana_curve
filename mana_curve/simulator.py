@@ -14,9 +14,12 @@ from deck_loader import Card, load_deck, validate_deck_size
 pp = pprint.PrettyPrinter(indent=4)
 
 class GameState:
-    def __init__(self, deck: List[Card], mana_threshold: int):
+    def __init__(self, deck: List[Card], mana_threshold: int, force_commander: bool):
         self.deck = deck.copy()
         self.hand: List[Card] = []
+        self.commander = next((card for card in deck if card.is_commander), None)
+        if self.commander:
+            self.deck.remove(self.commander)
         self.played: List[Card] = []
         self.lands_played = 0
         self.available_mana = 0
@@ -29,6 +32,7 @@ class GameState:
         self.draw_turn = 0
         self.draw_cast = 0
         self.mana_threshold = mana_threshold
+        self.force_commander = force_commander
     
     def draw(self, count: int = 1):
         for _ in range(count):
@@ -41,6 +45,11 @@ class GameState:
         self.draw(self.draw_turn)
         self.lands_played = 0
         
+        # If commander priority is enabled and we can cast it
+        if self.force_commander and self.commander and self.commander in self.hand:
+            if self.commander.cmc <= self.available_mana:
+                self.play_spell(self.commander)
+                
         # Play land if possible
         lands = [c for c in self.hand if c.is_land]
         if lands and self.lands_played == 0:
@@ -166,6 +175,37 @@ class GameState:
         self.played.append(land)
         self.lands_played += 1
 
+    def check_opening_hand(self) -> bool:
+        land_count = len([c for c in self.hand if c.is_land])
+        cheap_spells = any(c for c in self.hand if not c.is_land and c.cmc <= 3)
+        return 3 <= land_count <= 5 and cheap_spells
+
+    def mulligan(self):
+        attempts = 0
+        while attempts < 2:
+            # Shuffle current hand back
+            self.deck.extend(self.hand)
+            self.hand.clear()
+            random.shuffle(self.deck)
+            self.draw(7)
+            
+            if self.check_opening_hand():
+                break
+            attempts += 1
+
+        # Final mulligan - must put highest CMC card back
+        if attempts == 2:
+            non_lands = [c for c in self.hand if not c.is_land]
+            if non_lands:
+                highest_cmc = max(non_lands, key=lambda x: x.cmc)
+                self.hand.remove(highest_cmc)
+                self.deck.append(highest_cmc)
+                random.shuffle(self.deck)
+
+        # Always add commander to hand after mulligan
+        if self.commander:
+            self.hand.append(self.commander)
+
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -198,12 +238,19 @@ def get_parser():
         default=False,
         help="Print detailed statistics"
     )
+    parser.add_argument(
+        "--force_commander",
+        type=bool,
+        default=False,
+        help="Prioritize casting commander when mana is available"
+    )
     return parser
 
-def simulate_game(deck: List[Card], turns: int, mana_threshold: int) -> Dict:
+def simulate_game(deck: List[Card], turns: int, mana_threshold: int, force_commander: bool) -> Dict:
     random.shuffle(deck)
-    game = GameState(deck, mana_threshold)
+    game = GameState(deck, mana_threshold, force_commander)
     game.draw(7)  # Initial hand
+    game.mulligan()  # Handle mulligan decisions
     
     turn_stats = []
     for turn in range(turns):
@@ -404,7 +451,8 @@ def main(config):
             stats = simulate_game(
                 deck, 
                 config['turns'], 
-                config['mana_threshold']
+                config['mana_threshold'],
+                config['force_commander']
             )
             all_stats.append(stats)
             

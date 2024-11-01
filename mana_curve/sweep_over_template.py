@@ -12,6 +12,17 @@ import statistics
 import time
 import sys
 from collections import Counter
+import heapq
+
+class DeckResult:
+    def __init__(self, score, stats, decklist):
+        self.score = score  # nonramp_nondraw_mana_spent
+        self.stats = stats
+        self.decklist = decklist
+    
+    def __lt__(self, other):
+        # For min heap, we use negative score so highest scores stay
+        return -self.score < -other.score
 
 def load_template(template_path: str) -> tuple[list, list]:
     """Load and separate fixed and flex cards from template."""
@@ -130,14 +141,16 @@ def run_simulation(deck_combo: tuple[list, list], num_simulations: int, mana_thr
         # Categorize deck
         deck_stats = categorize_deck(full_deck)
         
-        return {
+        stats = {
             **deck_stats,
             'total_mana_spent': simulation_results['total_mana_spent'],
             'ramp_mana_spent': simulation_results['ramp_mana_spent'],
             'draw_mana_spent': simulation_results['draw_mana_spent'],
             'nonramp_nondraw_mana_spent': simulation_results['nonramp_nondraw_mana_spent'],
-            'high_cmc_mana_spent': simulation_results['high_cmc_mana_spent']
+            'high_cmc_mana_spent': simulation_results['high_cmc_mana_spent'],
         }
+        
+        return stats, full_deck
         
     except Exception as e:
         print(f"Error in simulation: {str(e)}", file=sys.stderr)
@@ -177,30 +190,74 @@ def main():
     num_processes = args.processes if args.processes else cpu_count()
     print(f"Testing {len(combinations)} combinations using {num_processes} processes...")
     
+    # Initialize heap for top 10 decks and list for results
+    top_decks = []
+    heapq.heapify(top_decks)
+    results = []  # Initialize results list
+    
+    # Modify the parallel processing section
     with Pool(processes=num_processes) as pool:
         from functools import partial
         run_sim_with_params = partial(run_simulation, 
                                     num_simulations=args.simulations,
                                     mana_threshold=args.mana_threshold)
         
-        results = list(tqdm(
-            pool.imap(run_sim_with_params, combinations),
-            total=len(combinations)
-        ))
+        # Create progress bar
+        pbar = tqdm(pool.imap(run_sim_with_params, combinations), total=len(combinations))
+        for result in pbar:
+            if result is None:
+                continue
+                
+            stats, decklist = result
+            
+            # Add stats to list for DataFrame (without decklist)
+            results.append(stats)
+            
+            # Update top decks heap
+            deck_result = DeckResult(
+                score=stats['nonramp_nondraw_mana_spent'],
+                stats=stats,
+                decklist=decklist
+            )
+            
+            if len(top_decks) < 10:
+                heapq.heappush(top_decks, deck_result)
+            else:
+                heapq.heappushpop(top_decks, deck_result)
+            
+            # Update progress bar description with current best score
+            if top_decks:
+                best_score = max(deck.score for deck in top_decks)
+                pbar.set_description(f"Best score: {best_score:.1f}")
     
-    # Filter out None results
-    results = [r for r in results if r is not None]
-    
-    if not results:
-        print("No valid simulation results obtained!")
-        return
-    
-    # Convert to DataFrame and sort by total mana spent
+    # Convert stats to DataFrame and save
     df = pd.DataFrame(results)
     df_sorted = df.sort_values('nonramp_nondraw_mana_spent', ascending=False)
-    
-    # Save results
     df_sorted.to_csv('template_simulation_results.csv', index=False)
+    
+    # Save top 10 decklists
+    os.makedirs('top_decklists', exist_ok=True)
+    
+    # Sort top_decks by score (highest first)
+    sorted_top_decks = sorted(top_decks, key=lambda x: -x.score)
+    
+    for idx, deck_result in enumerate(sorted_top_decks, 1):
+        output = {
+            'performance_stats': {
+                'total_mana_spent': deck_result.stats['total_mana_spent'],
+                'nonramp_nondraw_mana_spent': deck_result.stats['nonramp_nondraw_mana_spent'],
+                'lands': deck_result.stats['lands'],
+                'ramp': deck_result.stats['ramp'],
+                'draw': deck_result.stats['draw'],
+                'value': deck_result.stats['value'],
+                'curve': deck_result.stats['curve']
+            },
+            'decklist': deck_result.decklist
+        }
+        
+        filename = f'top_decklists/deck_{idx}_score_{int(deck_result.score)}.json'
+        with open(filename, 'w') as f:
+            json.dump(output, f, indent=2)
     
     # Print top 10 configurations
     print("\nTop 10 Configurations:")
@@ -208,6 +265,8 @@ def main():
     
     # Calculate and print average stats for top 10% vs bottom 90%
     top_10_percent = df_sorted.head(int(len(df_sorted) * 0.1))
+    second_10_percent = df_sorted.iloc[int(len(df_sorted) * 0.1):int(len(df_sorted) * 0.2)]
+    third_10_percent = df_sorted.iloc[int(len(df_sorted) * 0.2):int(len(df_sorted) * 0.3)]
     bottom_90_percent = df_sorted.tail(int(len(df_sorted) * 0.9))
     
     print("\nAverage Stats Comparison (Top 10% vs Bottom 90%):")
@@ -234,6 +293,46 @@ def main():
             top_10_percent['value_cmc'].mean(),
             top_10_percent['curve'].mean(),
             top_10_percent['total_mana_spent'].mean()
+        ],
+        'Second 10%': [
+            second_10_percent['lands'].mean(),
+            second_10_percent['ramp'].mean(),
+            second_10_percent['rock_ramp'].mean(),
+            second_10_percent['land_ramp'].mean(),
+            second_10_percent['ramp_1'].mean(),
+            second_10_percent['ramp_2'].mean(),
+            second_10_percent['ramp_3'].mean(),
+            second_10_percent['draw'].mean(),
+            second_10_percent['immediate_draw'].mean(),
+            second_10_percent['turn_draw'].mean(),
+            second_10_percent['cast_draw'].mean(),
+            second_10_percent['draw_1'].mean(),
+            second_10_percent['draw_2'].mean(),
+            second_10_percent['draw_3'].mean(),
+            second_10_percent['value'].mean(),
+            second_10_percent['value_cmc'].mean(),
+            second_10_percent['curve'].mean(),
+            second_10_percent['total_mana_spent'].mean()
+        ],
+        'Third 10%': [
+            third_10_percent['lands'].mean(),
+            third_10_percent['ramp'].mean(),
+            third_10_percent['rock_ramp'].mean(),
+            third_10_percent['land_ramp'].mean(),
+            third_10_percent['ramp_1'].mean(),
+            third_10_percent['ramp_2'].mean(),
+            third_10_percent['ramp_3'].mean(),
+            third_10_percent['draw'].mean(),
+            third_10_percent['immediate_draw'].mean(),
+            third_10_percent['turn_draw'].mean(),
+            third_10_percent['cast_draw'].mean(),
+            third_10_percent['draw_1'].mean(),
+            third_10_percent['draw_2'].mean(),
+            third_10_percent['draw_3'].mean(),
+            third_10_percent['value'].mean(),
+            third_10_percent['value_cmc'].mean(),
+            third_10_percent['curve'].mean(),
+            third_10_percent['total_mana_spent'].mean()
         ],
         'Bottom 90%': [
             bottom_90_percent['lands'].mean(),
