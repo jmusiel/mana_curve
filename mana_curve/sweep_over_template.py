@@ -181,7 +181,7 @@ def main():
     parser.add_argument('--processes', type=int, default=None,
                        help='Number of parallel processes to use (default: CPU count)')
     parser.add_argument('--deck_name', type=str, required=False,
-                       help='Folder to save outputs', default='kess')
+                       help='Folder to save outputs', default='default')
     parser.add_argument("--force_commander", action='store_true', 
                        help="Prioritize casting commander when mana is available")
     parser.set_defaults(force_commander=False)
