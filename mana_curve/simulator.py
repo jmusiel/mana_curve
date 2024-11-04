@@ -9,9 +9,25 @@ import sys
 import os
 from dataclasses import dataclass
 
-from deck_loader import Card, load_deck, validate_deck_size
-
 pp = pprint.PrettyPrinter(indent=4)
+
+@dataclass
+class Card:
+    name: str
+    cmc: int
+    quantity: int = 1
+    flex: bool = False
+    is_land: bool = False
+    is_ramp: bool = False
+    is_value: bool = False
+    is_commander: bool = False
+    ramp_type: str = ""  # "land" or "rock"
+    ramp_amount: int = 0
+    land_to_hand: int = 0  # For Cultivate-style effects
+    is_draw: bool = False
+    draw_type: str = ""  # "immediate", "turn", or "cast"
+    draw_amount: int = 0
+    played_on_turn: int = None  # Add this field
 
 class GameState:
     def __init__(self, deck: List[Card], mana_threshold: int, force_commander: bool):
@@ -382,24 +398,6 @@ def calculate_summary_stats(all_stats: List[Dict]) -> Dict:
         'avg_commander_cast_turn': avg_commander_turn,
         'commander_cast_rate': commander_cast_rate  # Percentage of games where commander was cast
     }
-
-@dataclass
-class Card:
-    name: str
-    cmc: int
-    quantity: int = 1
-    flex: bool = False
-    is_land: bool = False
-    is_ramp: bool = False
-    is_value: bool = False
-    is_commander: bool = False
-    ramp_type: str = ""  # "land" or "rock"
-    ramp_amount: int = 0
-    land_to_hand: int = 0  # For Cultivate-style effects
-    is_draw: bool = False
-    draw_type: str = ""  # "immediate", "turn", or "cast"
-    draw_amount: int = 0
-    played_on_turn: int = None  # Add this field
 
 def load_deck(deck_file: str) -> List[Card]:
     """
