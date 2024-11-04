@@ -1,3 +1,6 @@
 .DS_Store
 **/__pycache__/**
 **/temp*.json
+*.csv
+**/top_decklists/**
+*_template.json
