@@ -7,4 +7,4 @@ python sweep_over_template.py \
 --simulations 1000 \
 --num_turns 8 \
 --mana_threshold 7 \
-
+--force_commander \
