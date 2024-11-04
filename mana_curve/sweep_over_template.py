@@ -258,6 +258,7 @@ def main():
     for idx, deck_result in enumerate(sorted_top_decks, 1):
         output = {
             'performance_stats': {
+                'num_turns_objective': args.num_turns,
                 'total_mana_spent': deck_result.stats['total_mana_spent'],
                 'nonramp_nondraw_mana_spent': deck_result.stats['nonramp_nondraw_mana_spent'],
                 'lands': deck_result.stats['lands'],
@@ -269,7 +270,7 @@ def main():
             'decklist': deck_result.decklist
         }
         
-        filename = f'{top_decklists_save_path}/deck_{idx}_score_{int(deck_result.score)}.json'
+        filename = f'{top_decklists_save_path}/deck_{idx}.json'
         with open(filename, 'w') as f:
             json.dump(output, f, indent=2)
     
