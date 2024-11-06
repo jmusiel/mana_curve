@@ -50,11 +50,14 @@ class GameState:
         self.mana_threshold = mana_threshold
         self.force_commander = force_commander
         self.commander_cast_turn = None
+        self.cards_drawn: List[Card] = []  # Track all cards drawn this game
     
     def draw(self, count: int = 1):
         for _ in range(count):
             if self.deck:
-                self.hand.append(self.deck.pop(0))
+                card = self.deck.pop(0)
+                self.hand.append(card)
+                self.cards_drawn.append(card)  # Track drawn cards
     
     def play_turn(self):
         self.turn += 1
@@ -293,6 +296,7 @@ def simulate_game(deck: List[Card], turns: int, mana_threshold: int, force_comma
     return {
         'turn_stats': turn_stats,
         'cards_played': [(card.name, card.played_on_turn) for card in game.played],
+        'cards_drawn': [card.name for card in game.cards_drawn],  # Add drawn cards
         'mana_spent_total': game.mana_spent_total,
         'mana_spent_ramp': game.mana_spent_ramp,
         'mana_spent_draw': game.mana_spent_draw,
@@ -453,6 +457,88 @@ def validate_deck_size(deck: List[Card], expected_size: int = 100):
     if len(deck) != expected_size:
         raise ValueError(f"Deck contains {len(deck)} cards. Expected {expected_size} cards.")
 
+def analyze_card_correlations(all_stats: List[Dict], deck: List[Card]) -> Dict:
+    """Analyze which cards correlate with top and bottom performance."""
+    # Sort stats by total mana spent
+    sorted_stats = sorted(all_stats, key=lambda x: x['mana_spent_total'], reverse=True)
+    
+    # Get top and bottom 10%
+    num_games = len(sorted_stats)
+    top_10_percent = sorted_stats[:num_games//10]
+    bottom_10_percent = sorted_stats[-num_games//10:]
+    
+    # Initialize counters for each unique card
+    unique_cards = {card.name for card in deck if not card.is_commander}
+    card_stats = {name: {
+        'top_10_drawn': 0,
+        'top_10_played': 0,
+        'bottom_10_drawn': 0,
+        'bottom_10_played': 0,
+        'total_games_drawn': 0,
+        'total_games_played': 0
+    } for name in unique_cards}
+    
+    # Count occurrences in all games
+    for stat in all_stats:
+        drawn_cards = set(stat['cards_drawn'])
+        played_cards = {card for card, _ in stat['cards_played']}
+        
+        for card_name in unique_cards:
+            if card_name in drawn_cards:
+                card_stats[card_name]['total_games_drawn'] += 1
+            if card_name in played_cards:
+                card_stats[card_name]['total_games_played'] += 1
+    
+    # Count occurrences in top 10%
+    for stat in top_10_percent:
+        drawn_cards = set(stat['cards_drawn'])
+        played_cards = {card for card, _ in stat['cards_played']}
+        
+        for card_name in unique_cards:
+            if card_name in drawn_cards:
+                card_stats[card_name]['top_10_drawn'] += 1
+            if card_name in played_cards:
+                card_stats[card_name]['top_10_played'] += 1
+    
+    # Count occurrences in bottom 10%
+    for stat in bottom_10_percent:
+        drawn_cards = set(stat['cards_drawn'])
+        played_cards = {card for card, _ in stat['cards_played']}
+        
+        for card_name in unique_cards:
+            if card_name in drawn_cards:
+                card_stats[card_name]['bottom_10_drawn'] += 1
+            if card_name in played_cards:
+                card_stats[card_name]['bottom_10_played'] += 1
+    
+    # Calculate correlations
+    for card_name in unique_cards:
+        stats = card_stats[card_name]
+        total_top = len(top_10_percent)
+        total_bottom = len(bottom_10_percent)
+        
+        # Calculate percentages when drawn
+        if stats['total_games_drawn'] > 0:
+            stats['top_10_drawn_pct'] = (stats['top_10_drawn'] / total_top) * 100
+            stats['bottom_10_drawn_pct'] = (stats['bottom_10_drawn'] / total_bottom) * 100
+            stats['draw_correlation'] = stats['top_10_drawn_pct'] - stats['bottom_10_drawn_pct']
+        else:
+            stats['top_10_drawn_pct'] = None
+            stats['bottom_10_drawn_pct'] = None
+            stats['draw_correlation'] = None
+        
+        # Calculate percentages when played
+        if stats['total_games_played'] > 0:
+            stats['top_10_played_pct'] = (stats['top_10_played'] / total_top) * 100
+            stats['bottom_10_played_pct'] = (stats['bottom_10_played'] / total_bottom) * 100
+            stats['play_correlation'] = stats['top_10_played_pct'] - stats['bottom_10_played_pct']
+        else:
+            stats['top_10_played_pct'] = None
+            stats['bottom_10_played_pct'] = None
+            stats['play_correlation'] = None
+    
+    return card_stats
+
 def main(config):
     try:
         # Load and validate deck
@@ -493,6 +579,45 @@ def main(config):
                         print("  Played:", file=sys.stderr)
                         for card_name, _ in plays:
                             print(f"    - {card_name}", file=sys.stderr)
+        
+        # Calculate card correlations
+        card_correlations = analyze_card_correlations(all_stats, deck)
+        
+        # Sort and print top correlations
+        if config['verbose']:
+            print("\nCard Correlation Analysis:", file=sys.stderr)
+            
+            # Sort by draw correlation
+            draw_correlations = sorted(
+                [(name, stats['draw_correlation']) for name, stats in card_correlations.items()],
+                key=lambda x: x[1],
+                reverse=True
+            )
+            
+            print("\nTop 10 Cards by Draw Impact:", file=sys.stderr)
+            for card, correlation in draw_correlations[:10]:
+                print(f"  {card}: {correlation:+.1f}%", file=sys.stderr)
+                
+            print("\nBottom 10 Cards by Draw Impact:", file=sys.stderr)
+            for card, correlation in draw_correlations[-10:]:
+                print(f"  {card}: {correlation:+.1f}%", file=sys.stderr)
+            
+            # Sort by play correlation
+            play_correlations = sorted(
+                [(name, stats['play_correlation']) for name, stats in card_correlations.items()],
+                key=lambda x: x[1],
+                reverse=True
+            )
+            
+            print("\nTop 10 Cards by Play Impact:", file=sys.stderr)
+            for card, correlation in play_correlations[:10]:
+                print(f"  {card}: {correlation:+.1f}%", file=sys.stderr)
+                
+            print("\nBottom 10 Cards by Play Impact:", file=sys.stderr)
+            for card, correlation in play_correlations[-10:]:
+                print(f"  {card}: {correlation:+.1f}%", file=sys.stderr)
+
+        print("\n")
         
         # Calculate statistics and output JSON
         stats_summary = calculate_summary_stats(all_stats)
