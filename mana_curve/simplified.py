@@ -5,6 +5,7 @@ pp = pprint.PrettyPrinter(indent=4)
 import numpy as np
 from collections import Counter
 from tqdm import tqdm
+import termplotlib as tpl
 
 
 def get_parser():
@@ -36,6 +37,11 @@ def get_parser():
         "--land_range",
         type=int,
         default=10,
+    )
+    parser.add_argument(
+        "--step_size",
+        type=int,
+        default=1,
     )
     parser.add_argument(
         "--mulligan_max_lands",
@@ -72,36 +78,56 @@ def get_parser():
         type=int,
         default=2,
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+    )
     return parser
 
 def main(config):
     pp.pprint(config)
     lands_dict = {}
 
-    total_mana_possible = sum([i for i in range(config['num_turns'])])
+    total_mana_possible = sum([i+1 for i in range(config['num_turns'])])
     mana_values = [i for i in range(len(config["mana_curve"]))] + [-1]
     mana_curve = config["mana_curve"]
     for commander_mc in config["commanders"]:
         mana_curve[commander_mc] -= 1
 
-    land_counts = [config['num_lands'] + i for i in range(config['land_range'])]
+    land_counts = [config['num_lands'] + i for i in range(0 , config['land_range'], config['step_size'])]
     for land_count in tqdm(land_counts):
         lands_dict[land_count] = {}
         nonland_count = config["num_cards"] - land_count - len(config["commanders"])
 
         mana_curve_total = sum(mana_curve)
-        weights = [mc * (nonland_count/ mana_curve_total) for mc in mana_curve] + [land_count]  
+        weights = [mc * (nonland_count / mana_curve_total) for mc in mana_curve] + [land_count]  
+        # get the non int remainders
+        remainders = [weight % 1 for weight in weights]
+        remainders_args = np.argsort(remainders)
+        int_weights = [round(weight) for weight in weights]
+        a = 0
+        while config["num_cards"] - len(config["commanders"]) < sum(int_weights):
+            if not remainders[remainders_args[a]] == 0:
+                int_weights[remainders_args[a]] -= 1
+            a += 1
+        a = -1
+        while config["num_cards"] - len(config["commanders"]) > sum(int_weights):
+            if not remainders[remainders_args[a]] == 0:
+                int_weights[remainders_args[a]] += 1
+            a -= 1
 
         curvout_turn = []
         screwed_turn = []
         mana_expenditure = []
+        mulligan_list = []
         turns_mana_spent_list = []
         for sim in tqdm(range(config["num_simulations"]), leave=False):
             # create deck
             deck = []
-            for i, weight in enumerate(weights):
-                deck += [mana_values[i]] * round(weight)
+            for i, weight in enumerate(int_weights):
+                deck += [mana_values[i]] * weight
             commanders = [c for c in config["commanders"]]
+            cards_in_deck = len(deck)
 
             # draw initial hand
             turn = 0
@@ -118,6 +144,7 @@ def main(config):
                     initial_hand_size -= 1
                 mulligans += 1
 
+            mulligan_list.append(mulligans)
             hand = list(hand)
             # play game
             total_mana_spent = 0
@@ -161,10 +188,22 @@ def main(config):
             turns_mana_spent_list.append(turns_mana_spent)
             # print(f"total_mana_spent: {total_mana_spent}/{total_mana_possible}, curved_out_until: {curved_out_until}, mulligans: {mulligans}")
     
+        lands_dict[land_count]["!mana_expenditure"] = np.mean(mana_expenditure)
+        lands_dict[land_count]["!mana_stdev"] = np.std(mana_expenditure)
+        lands_dict[land_count]["!mana_IDR"] = f"{np.percentile(mana_expenditure, 10)} - {np.percentile(mana_expenditure, 90)}"
         lands_dict[land_count]["curved_out_until"] = np.mean(curvout_turn)
         lands_dict[land_count]["screwed"] = np.mean(screwed_turn)
-        lands_dict[land_count]["mana_expenditure"] = np.mean(mana_expenditure)
         lands_dict[land_count]["turns_mana_spent"] = np.round(np.mean(turns_mana_spent_list, axis=0),2)
+        lands_dict[land_count]["mulligans"] = np.mean(mulligan_list)
+        lands_dict[land_count]["cards_in_deck"] = cards_in_deck
+
+        if config['verbose']:
+            print(f'\nmana expenditure for {land_count} lands: {lands_dict[land_count]["!mana_expenditure"]} +/- {lands_dict[land_count]["!mana_stdev"]} (IDR: {lands_dict[land_count]["!mana_IDR"]})')
+            fig = tpl.figure()
+            counts, bin_edges = np.histogram(mana_expenditure, bins=10, range=(0, total_mana_possible))
+            fig.hist(counts, bin_edges, orientation='horizontal', force_ascii=False)
+            fig.show()
+            print('\n')
     pp.pprint(lands_dict)
     print(f"possible expenditure: {total_mana_possible}")
 
