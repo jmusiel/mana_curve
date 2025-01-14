@@ -15,7 +15,8 @@ def get_parser():
         type=int,
         nargs="+", 
         # mv:   [0,  1,  2,  3,  4,  5,  6,  7,  8+]
-        default=[0,  7, 15, 21, 19,  4,  3,  2,  0],
+        # default=[0,  7, 15, 21, 19,  4,  3,  2,  0], # base R&R connection
+        default=[0,  6, 13, 19, 17,  4,  2,  1,  0], # with farseek and steve land cuts (38 lands)
     )
     parser.add_argument(
         "--num_cards",
@@ -31,12 +32,12 @@ def get_parser():
     parser.add_argument(
         "--num_lands",
         type=int,
-        default=35,
+        default=33,
     )
     parser.add_argument(
         "--land_range",
         type=int,
-        default=10,
+        default=11,
     )
     parser.add_argument(
         "--step_size",
@@ -196,6 +197,7 @@ def main(config):
         lands_dict[land_count]["turns_mana_spent"] = np.round(np.mean(turns_mana_spent_list, axis=0),2)
         lands_dict[land_count]["mulligans"] = np.mean(mulligan_list)
         lands_dict[land_count]["cards_in_deck"] = cards_in_deck
+        lands_dict[land_count]["deck_counts"] = int_weights
 
         if config['verbose']:
             print(f'\nmana expenditure for {land_count} lands: {lands_dict[land_count]["!mana_expenditure"]} +/- {lands_dict[land_count]["!mana_stdev"]} (IDR: {lands_dict[land_count]["!mana_IDR"]})')
