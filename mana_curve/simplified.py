@@ -90,15 +90,19 @@ def get_parser():
     )
     return parser
 
-def commander_effect(cards_to_play, cards_played, untapped_lands, name):
-    if name == "lurrus" and untapped_lands > 3:
-        cast_from_played = []
-        if 2 in cards_played:
-            cast_from_played = [2]
-        elif 1 in cards_played:
-            cast_from_played = [1]
-        cards_to_play = cast_from_played + cards_to_play
-    return cards_to_play
+def commander_effect(played_cards, mana_available, mana_spent, lands_available, name):
+    if name == "lurrus" and lands_available > 3:
+        to_play = None
+        if 2 in played_cards:
+            to_play = 2
+        elif 1 in played_cards:
+            to_play = 1
+        if to_play:
+            mana_available -= to_play
+            mana_spent += to_play
+            played_cards.append(to_play)
+        
+    return played_cards, mana_available, mana_spent
 
 def main(config):
     pp.pprint(config)
@@ -191,7 +195,7 @@ def main(config):
                     mana_available = 0
                 else:
                     playable_cards = sorted([card for card in hand if card <= lands_available and card != -1])
-                    playable_cards = commander_effect(playable_cards, played_cards, lands_available, config["commander_effect"])
+                    played_cards, mana_available, mana_spent = commander_effect(played_cards, mana_available, mana_spent, lands_available, config["commander_effect"])
                     while playable_cards:
                         played_card = playable_cards.pop()
                         if played_card <= mana_available:
