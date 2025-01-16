@@ -188,11 +188,10 @@ def main(config):
             # play game
             total_mana_spent = 0
             lands_available = 0
-            curved_out_until = 0
+            curved_out_until = config["num_turns"]
             turns_mana_spent = []
             played_cards = []
             screwed = config["num_turns"]
-            curving_out = True
             for i in range(config["num_turns"]):
                 turn += 1
                 card_drawn = np.random.choice(deck)
@@ -223,9 +222,8 @@ def main(config):
                 total_mana_spent += mana_spent
                 turns_mana_spent.append(mana_spent)
                 if mana_spent < turn and turn > config["curve_after"]:
-                    if curving_out:
+                    if curved_out_until == config["num_turns"]:
                         curved_out_until = turn - 1
-                    curving_out = False
 
             curvout_turn.append(curved_out_until)
             screwed_turn.append(screwed)
