@@ -92,13 +92,23 @@ def get_parser():
 
 def commander_effect(played_cards, mana_available, mana_spent, deck, hand, lands_available, name):
     if name == "lurrus":
-        # draw cards from baubles
+        # cantrip with bauble
         if 0 in hand:
             hand.remove(0)
             played_cards.append(0)
             card_drawn = np.random.choice(deck)
             hand.append(card_drawn)
             deck.remove(card_drawn)
+        # cantrip with any 2 drop
+        if 2 in hand and lands_available == 2:
+            if 0 == np.random.choice([0,1]):
+                mana_available -= 2
+                mana_spent += 2
+                hand.remove(2)
+                played_cards.append(2)
+                card_drawn = np.random.choice(deck)
+                hand.append(card_drawn)
+                deck.remove(card_drawn)
         if lands_available > 3:
             # recur cards with lurrus
             to_play = None
@@ -113,9 +123,10 @@ def commander_effect(played_cards, mana_available, mana_spent, deck, hand, lands
 
             # draw an extra card if played a 2 drop (approximates draw spell)
             if to_play == 2 or 2 in hand:
-                card_drawn = np.random.choice(deck)
-                hand.append(card_drawn)
-                deck.remove(card_drawn)
+                if 0 == np.random.choice([0,1]):
+                    card_drawn = np.random.choice(deck)
+                    hand.append(card_drawn)
+                    deck.remove(card_drawn)
         
     return played_cards, mana_available, mana_spent, deck, hand
 
@@ -242,7 +253,7 @@ def main(config):
         lands_dict[land_count]["mulligans"] = np.mean(mulligan_list)
         lands_dict[land_count]["cards_in_deck"] = cards_in_deck
         lands_dict[land_count]["deck_counts"] = int_weights
-        lands_dict[land_count]["end:total_cards_played"] = cards_in_deck - np.mean(cards_remaining)
+        lands_dict[land_count]["end:total_cards_drawn"] = cards_in_deck - np.mean(cards_remaining)
         lands_dict[land_count]["end:total_lands_played"] = np.mean(total_lands_played)
 
         if config['verbose']:
