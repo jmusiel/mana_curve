@@ -90,19 +90,34 @@ def get_parser():
     )
     return parser
 
-def commander_effect(played_cards, mana_available, mana_spent, lands_available, name):
-    if name == "lurrus" and lands_available > 3:
-        to_play = None
-        if 2 in played_cards:
-            to_play = 2
-        elif 1 in played_cards:
-            to_play = 1
-        if to_play:
-            mana_available -= to_play
-            mana_spent += to_play
-            played_cards.append(to_play)
+def commander_effect(played_cards, mana_available, mana_spent, deck, hand, lands_available, name):
+    if name == "lurrus":
+        # draw cards from baubles
+        if 0 in hand:
+            hand.remove(0)
+            played_cards.append(0)
+            card_drawn = np.random.choice(deck)
+            hand.append(card_drawn)
+            deck.remove(card_drawn)
+        if lands_available > 3:
+            # recur cards with lurrus
+            to_play = None
+            if 2 in played_cards:
+                to_play = 2
+            elif 1 in played_cards:
+                to_play = 1
+            if to_play:
+                mana_available -= to_play
+                mana_spent += to_play
+                played_cards.append(to_play)
+
+            # draw an extra card if played a 2 drop (approximates draw spell)
+            if to_play == 2 or 2 in hand:
+                card_drawn = np.random.choice(deck)
+                hand.append(card_drawn)
+                deck.remove(card_drawn)
         
-    return played_cards, mana_available, mana_spent
+    return played_cards, mana_available, mana_spent, deck, hand
 
 def main(config):
     pp.pprint(config)
@@ -141,6 +156,8 @@ def main(config):
         mana_expenditure = []
         mulligan_list = []
         turns_mana_spent_list = []
+        cards_remaining = []
+        total_lands_played = []
         for sim in tqdm(range(config["num_simulations"]), leave=False):
             # create deck
             deck = []
@@ -174,7 +191,7 @@ def main(config):
             curved_out_until = 0
             turns_mana_spent = []
             played_cards = []
-            screwed = 0
+            screwed = config["num_turns"]
             curving_out = True
             for i in range(config["num_turns"]):
                 turn += 1
@@ -185,7 +202,7 @@ def main(config):
                     lands_available += 1
                     hand.remove(-1)
                     played_cards.append(-1)
-                elif screwed == 0:
+                elif screwed == config["num_turns"]:
                     screwed = turn
                 mana_available = lands_available
                 mana_spent = 0
@@ -194,8 +211,8 @@ def main(config):
                     commanders.remove(mana_available)
                     mana_available = 0
                 else:
+                    played_cards, mana_available, mana_spent, deck, hand = commander_effect(played_cards, mana_available, mana_spent, deck, hand, lands_available, config["commander_effect"])
                     playable_cards = sorted([card for card in hand if card <= lands_available and card != -1])
-                    played_cards, mana_available, mana_spent = commander_effect(played_cards, mana_available, mana_spent, lands_available, config["commander_effect"])
                     while playable_cards:
                         played_card = playable_cards.pop()
                         if played_card <= mana_available:
@@ -214,6 +231,8 @@ def main(config):
             screwed_turn.append(screwed)
             mana_expenditure.append(total_mana_spent)
             turns_mana_spent_list.append(turns_mana_spent)
+            cards_remaining.append(len(deck))
+            total_lands_played.append(lands_available)
             # print(f"total_mana_spent: {total_mana_spent}/{total_mana_possible}, curved_out_until: {curved_out_until}, mulligans: {mulligans}")
     
         lands_dict[land_count]["!mana_expenditure"] = np.mean(mana_expenditure)
@@ -225,6 +244,8 @@ def main(config):
         lands_dict[land_count]["mulligans"] = np.mean(mulligan_list)
         lands_dict[land_count]["cards_in_deck"] = cards_in_deck
         lands_dict[land_count]["deck_counts"] = int_weights
+        lands_dict[land_count]["end:total_cards_played"] = cards_in_deck - np.mean(cards_remaining)
+        lands_dict[land_count]["end:total_lands_played"] = np.mean(total_lands_played)
 
         if config['verbose']:
             print(f'\nmana expenditure for {land_count} lands: {lands_dict[land_count]["!mana_expenditure"]} +/- {lands_dict[land_count]["!mana_stdev"]} (IDR: {lands_dict[land_count]["!mana_IDR"]})')
