@@ -83,7 +83,22 @@ def get_parser():
         "--verbose",
         action="store_true",
     )
+    parser.add_argument(
+        "--commander_effect",
+        type=str,
+        default="none",
+    )
     return parser
+
+def commander_effect(cards_to_play, cards_played, untapped_lands, name):
+    if name == "lurrus" and untapped_lands > 3:
+        cast_from_played = []
+        if 2 in cards_played:
+            cast_from_played = [2]
+        elif 1 in cards_played:
+            cast_from_played = [1]
+        cards_to_play = cast_from_played + cards_to_play
+    return cards_to_play
 
 def main(config):
     pp.pprint(config)
@@ -154,6 +169,7 @@ def main(config):
             lands_available = 0
             curved_out_until = 0
             turns_mana_spent = []
+            played_cards = []
             screwed = 0
             curving_out = True
             for i in range(config["num_turns"]):
@@ -164,6 +180,7 @@ def main(config):
                 if -1 in hand:
                     lands_available += 1
                     hand.remove(-1)
+                    played_cards.append(-1)
                 elif screwed == 0:
                     screwed = turn
                 mana_available = lands_available
@@ -174,11 +191,13 @@ def main(config):
                     mana_available = 0
                 else:
                     playable_cards = sorted([card for card in hand if card <= lands_available and card != -1])
+                    playable_cards = commander_effect(playable_cards, played_cards, lands_available, config["commander_effect"])
                     while playable_cards:
                         played_card = playable_cards.pop()
                         if played_card <= mana_available:
                             mana_spent += played_card
                             hand.remove(played_card)
+                            played_cards.append(played_card)
                             mana_available -= played_card
                 total_mana_spent += mana_spent
                 turns_mana_spent.append(mana_spent)
