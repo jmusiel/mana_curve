@@ -147,6 +147,8 @@ def main(config):
 
             mulligan_list.append(mulligans)
             hand = list(hand)
+            for card in hand:
+                deck.remove(card)
             # play game
             total_mana_spent = 0
             lands_available = 0
@@ -156,7 +158,9 @@ def main(config):
             curving_out = True
             for i in range(config["num_turns"]):
                 turn += 1
-                hand.append(np.random.choice(deck))
+                card_drawn = np.random.choice(deck)
+                hand.append(card_drawn)
+                deck.remove(card_drawn)
                 if -1 in hand:
                     lands_available += 1
                     hand.remove(-1)
