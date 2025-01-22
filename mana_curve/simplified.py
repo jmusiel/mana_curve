@@ -143,20 +143,20 @@ def commander_effect(played_cards, mana_available, mana_spent, deck, hand, lands
             card_drawn = np.random.choice(deck)
             hand.append(card_drawn)
             deck.remove(card_drawn)
-        if lands_available > 4 and len(played_cards)>=2*lands_available:
-            # recur cards with kess
-            to_play = min(played_cards)
-            if to_play == 0:
-                played_cards.remove(to_play)
-                to_play = min(played_cards)
-            if to_play <= mana_available:
-                mana_available -= to_play
-                mana_spent += to_play
-                played_cards.remove(to_play)
-                if to_play == 1:
-                    card_drawn = np.random.choice(deck)
-                    hand.append(card_drawn)
-                    deck.remove(card_drawn)
+        # if lands_available > 4 and len(played_cards)>=2*lands_available:
+        #     # recur cards with kess
+        #     to_play = min(played_cards)
+        #     if to_play == 0:
+        #         played_cards.remove(to_play)
+        #         to_play = min(played_cards)
+        #     if to_play <= mana_available:
+        #         mana_available -= to_play
+        #         mana_spent += to_play
+        #         played_cards.remove(to_play)
+        #         if to_play == 1:
+        #             card_drawn = np.random.choice(deck)
+        #             hand.append(card_drawn)
+        #             deck.remove(card_drawn)
 
         
     return played_cards, mana_available, mana_spent, deck, hand
@@ -192,6 +192,12 @@ def main(config):
             if not remainders[remainders_args[a]] == 0:
                 int_weights[remainders_args[a]] += 1
             a -= 1
+
+        deck_cmc = []
+        for i, weight in enumerate(int_weights):
+            if mana_values[i] != -1:
+                deck_cmc += [mana_values[i]] * weight
+        avg_cmc = np.mean([c for c in deck_cmc])
 
         curvout_turn = []
         screwed_turn = []
@@ -289,6 +295,7 @@ def main(config):
         lands_dict[land_count]["turns_mana_spent"] = np.round(np.mean(turns_mana_spent_list, axis=0),2)
         lands_dict[land_count]["mulligans"] = np.mean(mulligan_list)
         lands_dict[land_count]["deck_counts"] = int_weights
+        lands_dict[land_count]["avg_cmc"] = avg_cmc
         lands_dict[land_count]["cards_drawn"] = cards_in_deck - np.mean(cards_remaining)
         lands_dict[land_count]["lands_played"] = np.mean(total_lands_played)
 
