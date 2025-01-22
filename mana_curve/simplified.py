@@ -55,6 +55,12 @@ def get_parser():
         default=3,
     )
     parser.add_argument(
+        "--mulligan_at_least_one_spell",
+        type=int, 
+        nargs="+",
+        default=None,
+    )
+    parser.add_argument(
         "--starting_hand_size",
         type=int, 
         default=7,
@@ -119,7 +125,7 @@ def commander_effect(played_cards, mana_available, mana_spent, deck, hand, lands
             if to_play:
                 mana_available -= to_play
                 mana_spent += to_play
-                played_cards.append(to_play)
+                played_cards.remove(to_play)
 
             # draw an extra card if played a 2 drop (approximates draw spell)
             if to_play == 2 or 2 in hand:
@@ -127,6 +133,31 @@ def commander_effect(played_cards, mana_available, mana_spent, deck, hand, lands
                     card_drawn = np.random.choice(deck)
                     hand.append(card_drawn)
                     deck.remove(card_drawn)
+    
+    if name == "kess":
+        if 1 in hand:
+            mana_available -= 1
+            mana_spent += 1
+            hand.remove(1)
+            played_cards.append(1)
+            card_drawn = np.random.choice(deck)
+            hand.append(card_drawn)
+            deck.remove(card_drawn)
+        if lands_available > 4 and len(played_cards)>=2*lands_available:
+            # recur cards with kess
+            to_play = min(played_cards)
+            if to_play == 0:
+                played_cards.remove(to_play)
+                to_play = min(played_cards)
+            if to_play <= mana_available:
+                mana_available -= to_play
+                mana_spent += to_play
+                played_cards.remove(to_play)
+                if to_play == 1:
+                    card_drawn = np.random.choice(deck)
+                    hand.append(card_drawn)
+                    deck.remove(card_drawn)
+
         
     return played_cards, mana_available, mana_spent, deck, hand
 
@@ -185,7 +216,12 @@ def main(config):
                 hand = np.random.choice(deck, initial_hand_size, replace=False)
                 hand_count = Counter(hand)
                 if hand_count[-1] <= config["mulligan_max_lands"] and hand_count[-1] >= config["mulligan_min_lands"]:
-                    break
+                    if config["mulligan_at_least_one_spell"]:
+                        for spell in config["mulligan_at_least_one_spell"]:
+                            if hand_count[spell] > 0:
+                                break
+                    else:
+                        break
                 if initial_hand_size <= config["mulligan_to_hand_size"]:
                     break
                 if mulligans >= 1:
@@ -244,26 +280,57 @@ def main(config):
             total_lands_played.append(lands_available)
             # print(f"total_mana_spent: {total_mana_spent}/{total_mana_possible}, curved_out_until: {curved_out_until}, mulligans: {mulligans}")
     
-        lands_dict[land_count]["!mana_expenditure"] = np.mean(mana_expenditure)
+        lands_dict[land_count]["lands"] = land_count
+        lands_dict[land_count]["!mana_expent"] = np.mean(mana_expenditure)
         lands_dict[land_count]["!mana_stdev"] = np.std(mana_expenditure)
-        lands_dict[land_count]["!mana_IDR"] = f"{np.percentile(mana_expenditure, 10)} - {np.percentile(mana_expenditure, 90)}"
+        lands_dict[land_count]["!mana_IDR"] = f"{np.percentile(mana_expenditure, 10):.1f} - {np.percentile(mana_expenditure, 90):.1f}"
         lands_dict[land_count]["curved_out_until"] = np.mean(curvout_turn)
         lands_dict[land_count]["screwed"] = np.mean(screwed_turn)
         lands_dict[land_count]["turns_mana_spent"] = np.round(np.mean(turns_mana_spent_list, axis=0),2)
         lands_dict[land_count]["mulligans"] = np.mean(mulligan_list)
-        lands_dict[land_count]["cards_in_deck"] = cards_in_deck
         lands_dict[land_count]["deck_counts"] = int_weights
-        lands_dict[land_count]["end:total_cards_drawn"] = cards_in_deck - np.mean(cards_remaining)
-        lands_dict[land_count]["end:total_lands_played"] = np.mean(total_lands_played)
+        lands_dict[land_count]["cards_drawn"] = cards_in_deck - np.mean(cards_remaining)
+        lands_dict[land_count]["lands_played"] = np.mean(total_lands_played)
 
         if config['verbose']:
-            print(f'\nmana expenditure for {land_count} lands: {lands_dict[land_count]["!mana_expenditure"]} +/- {lands_dict[land_count]["!mana_stdev"]} (IDR: {lands_dict[land_count]["!mana_IDR"]})')
+            print(f'\nmana expenditure for {land_count} lands: {lands_dict[land_count]["!mana_expent"]} +/- {lands_dict[land_count]["!mana_stdev"]} (IDR: {lands_dict[land_count]["!mana_IDR"]})')
             fig = tpl.figure()
             counts, bin_edges = np.histogram(mana_expenditure, bins=10, range=(0, total_mana_possible))
             fig.hist(counts, bin_edges, orientation='horizontal', force_ascii=False)
             fig.show()
             print('\n')
-    pp.pprint(lands_dict)
+    # pp.pprint(lands_dict)
+    columns = ""
+    lengths = []
+    for key, val in lands_dict[land_count].items():
+        colstring = f"{key} "
+        if isinstance(val, float):
+            rowstring = f"{val:.2f} "
+        else:
+            rowstring = f"{val} "
+
+        length = max(len(colstring), len(rowstring))
+        lengths.append(length)
+        blankstring = ""
+        if length > len(colstring):
+            blankstring = " " * (length - len(colstring))
+        colstring += blankstring
+        columns += colstring
+    print(columns)
+    for land_count in land_counts:
+        row = ""
+        for length, key in zip(lengths,lands_dict[land_count].keys()):
+            val = lands_dict[land_count][key]
+            if isinstance(val, float):
+                rowstring = f"{val:.2f} "
+            else:
+                rowstring = f"{val} "
+            blankstring = ""
+            if length > len(rowstring):
+                blankstring = " " * (length - len(rowstring))
+            rowstring += blankstring
+            row += rowstring
+        print(row)
     print(f"possible expenditure: {total_mana_possible}")
 
     
