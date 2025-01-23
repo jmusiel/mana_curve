@@ -140,9 +140,10 @@ def commander_effect(played_cards, mana_available, mana_spent, deck, hand, lands
             mana_spent += 1
             hand.remove(1)
             played_cards.append(1)
-            card_drawn = np.random.choice(deck)
-            hand.append(card_drawn)
-            deck.remove(card_drawn)
+            if 0 == np.random.choice([0,1]):
+                card_drawn = np.random.choice(deck)
+                hand.append(card_drawn)
+                deck.remove(card_drawn)
         # if lands_available > 4 and len(played_cards)>=2*lands_available:
         #     # recur cards with kess
         #     to_play = min(played_cards)
