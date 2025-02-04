@@ -15,6 +15,7 @@ class Card:
             identity: List[str] = None,
             default_category: Optional[str] = None,
             user_category: Optional[str] = None,
+            **kwargs,
         ):
         self.name = name
         self.quantity = quantity
@@ -29,12 +30,15 @@ class Card:
         self.default_category = default_category
         self.user_category = user_category
 
+        self.card_class = 'Card'
+
     def __str__(self):
         return f"{self.name}: {self.cost}"
 
 class Cantrip(Card):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.card_class = 'Cantrip'
 
     def draw_card_effect(self):
         return f"{self.name} has a draw card effect."
@@ -45,7 +49,7 @@ def card_factory(**kwargs) -> Card:
     card = Card(**kwargs)
 
     if 'draw a card' in card.text.lower():
-        return Cantrip(vars(card))
+        return Cantrip(**vars(card))
     # Add other conditions for different subclasses here
 
     return Card(**kwargs)
