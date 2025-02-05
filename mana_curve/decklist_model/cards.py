@@ -1,6 +1,8 @@
 from typing import List, Optional
 
 class Card:
+    card_class = 'Card'
+    card_names = []
     def __init__(
             self,
             name: Optional[str] = None,
@@ -35,12 +37,12 @@ class Card:
         self.commander = commander
         self.goldfisher = goldfisher
         self.index = index
+        self.printable = name
 
         self.sub_types = [t.lower() for t in self.sub_types]
         self.types = [t.lower() for t in self.types]
         self.super_types = [t.lower() for t in self.super_types]
 
-        self.card_class = 'Card'
         self.zone = None
         self.spell = False
         self.permanent = False
@@ -67,35 +69,23 @@ class Card:
     def __str__(self):
         return f"{self.name}: {self.cost}"
     
+    def __repr__(self) -> str:
+        return f"({self.card_class}) {self.name}: {self.cmc}"
+    
     def change_zone(self, new_zone):
         self.zone.remove(self.index)
         self.zone = new_zone
         new_zone.append(self.index)
 
     def when_played(self):
+        if self.goldfisher.verbose:
+            print(f"Played {self.printable}")
         return self
 
 
 class Cantrip(Card):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.card_class = 'Cantrip'
-
-    def when_played(self):
-        # self.goldfisher.draw()
-        return self
-    
-class Land(Card):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.card_class = 'Land'
-
-# Add other subclasses as needed
-
-def card_factory(**kwargs) -> Card:
-    card = Card(**kwargs)
-
-    if card.name in [
+    card_class = 'Cantrip'
+    card_names = [
         "Picklock Prankster // Free the Fae",
         "Frantic Search",
         "Brainstorm",
@@ -106,9 +96,42 @@ def card_factory(**kwargs) -> Card:
         "Gamble",
         "Visions of Beyond",
         "Mystical Tutor",
-    ]:
-        print(f"Creating Cantrip: {card.name}")
-        return Cantrip(**vars(card))
+    ]
+
+    def when_played(self):
+        super().when_played()
+        self.goldfisher.draw()
+        return self
+    
+# class New(Card):
+#     card_class = ''
+#     card_names = [
+        
+#     ]
+
+#     def when_played(self):
+#         super().when_played()
+#         return self
+    
+class Land(Card):
+    card_class = 'Land'
+    card_names = []
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.printable = f"(Land) {self.name}"
+
+# Add other subclasses as needed
+
+CARD_CLASS_LOOKUP = {}
+for subclass in Card.__subclasses__():
+    for card_name in subclass.card_names:
+        CARD_CLASS_LOOKUP[card_name] = subclass
+
+def card_factory(**kwargs) -> Card:
+    card = Card(**kwargs)
+
+    if card.name in CARD_CLASS_LOOKUP:
+        return CARD_CLASS_LOOKUP[card.name](**vars(card))
     
     if card.land:
         return Land(**vars(card))
@@ -137,3 +160,9 @@ if __name__ == "__main__":
     print(card)
     if isinstance(card, Cantrip):
         print(card.draw_card_effect())
+
+    subclasses = Card.__subclasses__()
+    print(subclasses)
+    for subclass in subclasses:
+        print(subclass.__name__)
+        print(subclass.card_names)

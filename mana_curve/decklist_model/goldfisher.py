@@ -17,6 +17,11 @@ def get_parser():
         default="kess",
     )
     parser.add_argument(
+        "--deck_url",
+        type=str, 
+        default=None,
+    )
+    parser.add_argument(
         "--turns",
         type=int, 
         default=10,
@@ -24,12 +29,16 @@ def get_parser():
     parser.add_argument(
         "--sims",
         type=int, 
-        default=10000,
+        default=1000,
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
     )
     return parser
 
 class Goldfisher:
-    def __init__(self, decklist_dict, turns, sims):
+    def __init__(self, decklist_dict, turns, sims, verbose, **kwargs):
         self.commanders = []
         commander_index = 0
         to_pop = []
@@ -46,6 +55,7 @@ class Goldfisher:
         self.turns = turns
         self.sims = sims
         self.mulligans = -1
+        self.verbose = verbose
 
         self.reset()
         
@@ -73,9 +83,16 @@ class Goldfisher:
         drawn.zone = self.hand
         self.hand.append(drawn_i)
         self.draws += 1
+        if self.verbose: print(f"Draw {drawn.printable}")
 
     def mulligan(self):
         while True:
+            if self.verbose:
+                if self.mulligans == -1:
+                    print("### Opening hand:")
+                else:
+                    print(f"### Mulligan #{self.mulligans+1}")
+                
             self.reset()
             cards = 7
             if self.mulligans > 0:
@@ -92,9 +109,13 @@ class Goldfisher:
                 break
             if len(self.hand) < 7:
                 break
+        if self.verbose: print(f"### Kept {lands_in_hand}/{len(self.hand)} lands/cards")
 
     def get_mana(self):
         return len(self.lands)
+    
+    def get_hand_strings(self):
+        return [self.decklist[i].printable for i in self.hand]
     
     def get_playables(self):
         playables = []
@@ -104,13 +125,23 @@ class Goldfisher:
             if card.cmc < available_mana and card.spell:
                 playables.append(card)
         playables = sorted(playables)
-        for card in self.commanders:
+        for i in self.command_zone:
+            card = self.commanders[i]
             if card.cmc < available_mana and card.spell:
                 playables.append(card)
+
+        if self.verbose: 
+            playables_string = []
+            for card in playables:
+                if card.commander:
+                    playables_string.append(f"{card.cmc}(c)")
+                else:
+                    playables_string.append(f"{card.cmc}")
+            print(f"Playables: {playables_string}")
         return playables
     
     def play_land(self):
-        played = False
+        played_effects = []
         mdfc = None
         land = None
         for i in self.hand:
@@ -125,8 +156,9 @@ class Goldfisher:
             land = mdfc
         if land is not None:
             land.change_zone(self.lands)
-            played = True
-        return land
+            played_effects.append(land.when_played())
+
+        return played_effects
     
     def play_spells(self, playables):
         mana_available = self.get_mana()
@@ -144,12 +176,13 @@ class Goldfisher:
         return played_effects
     
     def take_turn(self):
+        if self.verbose: print(f"### Turn {self.turn+1} (Lands: {len(self.lands)})")
         self.draw()
         played_land = self.play_land()
         playables = self.get_playables()
         played_effects = self.play_spells(playables)
         if played_land is not None:
-            played_effects.append(played_land)
+            played_effects.extend(played_land)
         self.turn += 1
         return played_effects
     
@@ -180,8 +213,10 @@ class Goldfisher:
 
 def main(config):
     pp.pprint(config)
+    if config['deck_url'] is not None:
+        deck_list = get_decklist(config)
     deck_list = load_decklist(config['deck_name'])
-    goldfisher = Goldfisher(deck_list, config['turns'], config['sims'])
+    goldfisher = Goldfisher(deck_list, **config)
     goldfisher.simulate()
 
 

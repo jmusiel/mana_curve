@@ -20,6 +20,10 @@ def get_parser():
         type=str,
         default="kess"
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+    )
     return parser
 
 def main(config):
@@ -78,7 +82,7 @@ def get_decklist(config):
 
             # scrycard = scrython.cards.Named(fuzzy=card_dict['name'])
             # time.sleep(0.05)
-            print(f"\t{card_dict['quantity']} {card_dict['name']} cmc:{card_dict['oracle_cmc']} custom_cmc:{card_dict['cmc']}")
+            if config['verbose']: print(f"\t{card_dict['quantity']} {card_dict['name']} cmc:{card_dict['oracle_cmc']} custom_cmc:{card_dict['cmc']}")
 
             deck_list.append(card_dict)
 
