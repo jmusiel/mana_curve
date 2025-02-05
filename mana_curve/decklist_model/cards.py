@@ -50,6 +50,7 @@ class Card:
         self.land = False
         for t in ['instant', 'sorcery']:
             if t in self.types:
+                self.spell = True
                 self.nonpermanent = True
         for t in ['creature', 'artifact', 'enchantment',  'planeswalker', 'battle']:
             if t in self.types:
@@ -81,7 +82,85 @@ class Card:
         if self.goldfisher.verbose:
             print(f"Played {self.printable}")
         return self
+    
+    
+class Land(Card):
+    card_class = 'Land'
+    card_names = []
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.printable = f"(Land) {self.name}"
 
+class ManaProducer(Card):
+    card_class = 'ManaProducer'
+    card_names = [
+        "Sol Ring",
+        "Relic of Sauron",
+        "Arcane Signet",
+        "Fellwar Stone",
+    ]
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.name in [
+            "Arcane Signet",
+            "Fellwar Stone",
+        ]:
+            self.mana = 1
+        elif self.name in [
+            "Sol Ring",
+            "Relic of Sauron",
+        ]:
+            self.mana = 2
+        else:
+            raise ValueError(f"Unknown mana producer {self.name}")
+    
+    def when_played(self):
+        super().when_played()
+        self.goldfisher.mana_production += self.mana
+        return self
+    
+class ScalingManaProducer(Card):
+    card_class = 'ScalingManaProducer'
+    card_names = [
+        "As Foretold",
+        "Séance Board",
+    ]
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # initial mana production
+        if self.name in [
+            "Séance Board",
+            "As Foretold",
+        ]:
+            self.mana = 0
+        else:
+            raise ValueError(f"Unknown scaling mana producer {self.name}")
+        
+        # mana scaling rate
+        if self.name in [
+            "Séance Board",
+            "As Foretold",
+        ]:
+            self.scaling_mana = 1
+        else:
+            raise ValueError(f"Unknown scaling mana producer {self.name}")
+    
+    def when_played(self):
+        super().when_played()
+        self.goldfisher.mana_production += self.mana
+        return self
+    
+    def per_turn(self):
+        self.goldfisher.mana_production += self.scaling_mana
+        return self
+
+
+class CostReducer_IS(Card):
+    card_class = 'CostReducer_IS'
+    card_names = []
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
 
 class Cantrip(Card):
     card_class = 'Cantrip'
@@ -96,6 +175,7 @@ class Cantrip(Card):
         "Gamble",
         "Visions of Beyond",
         "Mystical Tutor",
+        "See the Truth",
     ]
 
     def when_played(self):
@@ -103,6 +183,122 @@ class Cantrip(Card):
         self.goldfisher.draw()
         return self
     
+class Draw(Card):
+    card_class = 'Draw'
+    card_names = [
+        "Manifold Insights",
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.name in [
+            "Manifold Insights",
+        ]:
+            self.draw = 3
+        else:
+            raise ValueError(f"Unknown draw {self.name}")
+
+    def when_played(self):
+        super().when_played()
+        for i in range(self.draw):
+            self.goldfisher.draw()
+        return self
+    
+class DrawDiscard(Card):
+    card_class = 'DrawDiscard'
+    card_names = [
+        "Windfall",
+        "Unexpected Windfall",
+        "Big Score",
+        "Fact or Fiction",
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.firstdraw = 0
+        self.discard = 0
+        self.seconddraw = 0
+        self.make_treasures = 0
+
+        if self.name in [
+            "Fact or Fiction",
+        ]:
+            self.firstdraw = 5
+            self.discard = 2
+            self.seconddraw = 0
+            self.make_treasures = 0
+        elif self.name in [
+            "Windfall",
+        ]:
+            self.firstdraw = 0
+            self.discard = 100
+            self.seconddraw = 6
+            self.make_treasures = 0
+        elif self.name in [
+            "Unexpected Windfall",
+            "Big Score",
+        ]:
+            self.firstdraw = 0
+            self.discard = 1
+            self.seconddraw = 2
+            self.make_treasures = 2
+        else:
+            raise ValueError(f"Unknown draw/discard {self.name}")
+        
+    def when_played(self):
+        super().when_played()
+        for i in range(self.firstdraw):
+            self.goldfisher.draw()
+        for i in range(self.discard):
+            if len(self.goldfisher.hand) > 0:
+                self.goldfisher.randomdiscard()
+            else:
+                break
+        for i in range(self.seconddraw):
+            self.goldfisher.draw()
+        return self
+    
+class PerTurnDraw(Card):
+    card_class = 'PerTurnDraw'
+    card_names = [
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.name in [
+
+        ]:
+            self.draw = 3
+        else:
+            raise ValueError(f"Unknown draw {self.name}")
+
+    def when_played(self):
+        super().when_played()
+        for i in range(self.draw):
+            self.goldfisher.draw()
+        return self
+    
+class PerCastDraw(Card):
+    card_class = 'PerCastDraw'
+    card_names = [
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.name in [
+
+        ]:
+            self.draw = 3
+        else:
+            raise ValueError(f"Unknown draw {self.name}")
+
+    def when_played(self):
+        super().when_played()
+        for i in range(self.draw):
+            self.goldfisher.draw()
+        return self
+
+
 # class New(Card):
 #     card_class = ''
 #     card_names = [
@@ -112,13 +308,6 @@ class Cantrip(Card):
 #     def when_played(self):
 #         super().when_played()
 #         return self
-    
-class Land(Card):
-    card_class = 'Land'
-    card_names = []
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.printable = f"(Land) {self.name}"
 
 # Add other subclasses as needed
 

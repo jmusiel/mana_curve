@@ -29,11 +29,11 @@ def get_parser():
     parser.add_argument(
         "--sims",
         type=int, 
-        default=1000,
+        default=1,
     )
     parser.add_argument(
         "--verbose",
-        action="store_true",
+        action="store_false",
     )
     return parser
 
@@ -69,6 +69,9 @@ class Goldfisher:
         self.battlefield = []
         self.exile = []
         self.lands = []
+        self.mana_production = 0
+        self.treasure = 0
+        self.per_turn_effects = []
         for card in self.commanders:
             card.zone = self.command_zone
             self.command_zone.append(card.index)
@@ -84,6 +87,12 @@ class Goldfisher:
         self.hand.append(drawn_i)
         self.draws += 1
         if self.verbose: print(f"Draw {drawn.printable}")
+
+    def randomdiscard(self):
+        discarded_i = random.choice(self.hand)
+        discarded = self.decklist[discarded_i]
+        discarded.change_zone(self.yard)
+        if self.verbose: print(f"Discarded {discarded.printable}")
 
     def mulligan(self):
         while True:
@@ -112,14 +121,14 @@ class Goldfisher:
         if self.verbose: print(f"### Kept {lands_in_hand}/{len(self.hand)} lands/cards")
 
     def get_mana(self):
-        return len(self.lands)
+        return len(self.lands) + self.mana_production
     
     def get_hand_strings(self):
         return [self.decklist[i].printable for i in self.hand]
     
     def get_playables(self):
         playables = []
-        available_mana = self.get_mana()
+        available_mana = self.get_mana() + self.treasure
         for i in self.hand:
             card = self.decklist[i]
             if card.cmc < available_mana and card.spell:
@@ -137,7 +146,7 @@ class Goldfisher:
                     playables_string.append(f"{card.cmc}(c)")
                 else:
                     playables_string.append(f"{card.cmc}")
-            print(f"Playables: {playables_string}")
+            print(f"--Playable Spells: {playables_string}")
         return playables
     
     def play_land(self):
@@ -161,7 +170,7 @@ class Goldfisher:
         return played_effects
     
     def play_spells(self, playables):
-        mana_available = self.get_mana()
+        mana_available = self.get_mana() + self.treasure
         played_effects = []
         for card in reversed(playables):
             if card.cmc <= mana_available:
@@ -173,16 +182,25 @@ class Goldfisher:
                 else:
                     raise ValueError(f"incompatible types {card.types} for card {card.name}")
                 played_effects.append(card.when_played())
+
+        if mana_available < self.treasure:
+            if self.verbose: print(f"Spent treasures: [{self.treasure}] -> [{self.mana_available}]")
+            self.treasure = mana_available
         return played_effects
     
     def take_turn(self):
-        if self.verbose: print(f"### Turn {self.turn+1} (Lands: {len(self.lands)})")
+        if self.verbose: print(f"### Turn {self.turn+1} (Lands: {len(self.lands)}, Mana: {self.get_mana()}[{self.treasure}], Hand: {len(self.hand)})")
         self.draw()
         played_land = self.play_land()
         playables = self.get_playables()
         played_effects = self.play_spells(playables)
         if played_land is not None:
             played_effects.extend(played_land)
+        for card in played_effects:
+            if hasattr(card, 'per_turn'):
+                self.per_turn_effects.append(card)
+        for card in self.per_turn_effects:
+            card.per_turn()
         self.turn += 1
         return played_effects
     
