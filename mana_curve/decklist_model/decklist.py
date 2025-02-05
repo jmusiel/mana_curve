@@ -55,6 +55,7 @@ def get_decklist(config):
             card_dict["identity"] = card.card.oracle_card.color_identity
             card_dict["default_category"] = card.card.oracle_card.default_category
             card_dict["user_category"] = card.categories[0]
+            card_dict["commander"] = card.categories[0] == 'Commander'
             if card.card.oracle_card.faces:
                 card_dict["cost"] = None
                 card_dict["text"] = None
