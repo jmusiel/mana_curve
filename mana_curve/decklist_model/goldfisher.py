@@ -41,12 +41,12 @@ def get_parser():
     parser.add_argument(
         "--min_lands",
         type=int,
-        default=25,
+        default=None,
     )
     parser.add_argument(
         "--max_lands",
         type=int,
-        default=42,
+        default=None,
     )
     parser.add_argument(
         "--cuts",
@@ -145,6 +145,7 @@ class Goldfisher:
         self.nonpermanent_cost_reduction = 0
         self.permanent_cost_reduction = 0
         self.spell_cost_reduction = 0
+        self.creature_cost_reduction = 0
 
     def draw(self):
         if len(self.deck) == 0:

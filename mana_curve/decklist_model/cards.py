@@ -47,6 +47,7 @@ class Card:
         self.spell = False
         self.permanent = False
         self.nonpermanent = False
+        self.creature = False
         self.land = False
         for t in ['instant', 'sorcery']:
             if t in self.types:
@@ -56,6 +57,8 @@ class Card:
             if t in self.types:
                 self.spell = True
                 self.permanent = True
+        if 'creature' in self.types:
+            self.creature = True
         if 'land' in self.types:
             self.permanent = True
             self.land = True
@@ -92,6 +95,8 @@ class Card:
             cost -= self.goldfisher.permanent_cost_reduction
         if self.spell:
             cost -= self.goldfisher.spell_cost_reduction
+        if self.creature:
+            cost -= self.goldfisher.creature_cost_reduction
         return cost
 
     def when_played(self):
@@ -119,19 +124,31 @@ class ManaProducer(Card):
         "Relic of Sauron",
         "Arcane Signet",
         "Fellwar Stone",
+        "Sakura-Tribe Elder",
+        "Incubation Druid",
+        "Rishkar, Peema Renegade",
+        "Katilda, Dawnhart Prime",
     ]
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.name in [
             "Arcane Signet",
             "Fellwar Stone",
+            "Sakura-Tribe Elder",
+            "Incubation Druid",
         ]:
             self.mana = 1
         elif self.name in [
             "Sol Ring",
             "Relic of Sauron",
+            "Rishkar, Peema Renegade",
+            "Katilda, Dawnhart Prime",
         ]:
             self.mana = 2
+        elif self.name in [
+            "Open the Way"
+        ]:
+            self.mana = 3
         else:
             raise ValueError(f"Unknown mana producer {self.name}")
     
@@ -145,22 +162,28 @@ class ScalingManaProducer(Card):
     card_names = [
         "As Foretold",
         "Séance Board",
+        "Smothering Tithe",
+        "Gyre Sage",
+        "Kami of Whispered Hopes",
+        "Heronblade Elite",
+        "Kodama of the West Tree",
     ]
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # initial mana production
-        if self.name in [
-            "Séance Board",
-            "As Foretold",
-        ]:
-            self.mana = 0
-        else:
-            raise ValueError(f"Unknown scaling mana producer {self.name}")
-        
+        self.mana = 0
+        if self.name in []:
+            self.mana = 1
+
         # mana scaling rate
         if self.name in [
             "Séance Board",
             "As Foretold",
+            "Smothering Tithe",
+            "Gyre Sage",
+            "Kami of Whispered Hopes",
+            "Heronblade Elite",
+            "Kodama of the West Tree",
         ]:
             self.scaling_mana = 1
         else:
@@ -185,17 +208,28 @@ class CostReducer(Card):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.nonpermanent_cost_reduction = 0
+        self.permanent_cost_reduction = 0
+        self.creature_cost_reduction = 0
+        self.spell_cost_reduction = 0
         if self.name in [
             "Thunderclap Drake",
             "Case of the Ransacked Lab",
         ]:
             self.nonpermanent_cost_reduction = 1
+        elif self.name in [
+            "Hamza, Guardian of Arashin",
+        ]:
+            self.creature_cost_reduction = 1
         else:
             raise ValueError(f"Unknown cost reducer {self.name}")
 
     def when_played(self):
         super().when_played()
         self.goldfisher.nonpermanent_cost_reduction += self.nonpermanent_cost_reduction
+        self.goldfisher.permanent_cost_reduction += self.permanent_cost_reduction
+        self.goldfisher.creature_cost_reduction += self.creature_cost_reduction
+        self.goldfisher.spell_cost_reduction += self.spell_cost_reduction
         return self
         
 
@@ -226,6 +260,9 @@ class Draw(Card):
         "Manifold Insights",
         "Mystic Confluence",
         "Flame of Anor",
+        "Armorcraft Judge",
+        "Inspiring Call",
+        "Rishkar's Expertise",
     ]
 
     def __init__(self, *args, **kwargs):
@@ -233,12 +270,18 @@ class Draw(Card):
         if self.name in [
             "Manifold Insights",
             "Mystic Confluence",
+            "Armorcraft Judge",
+            "Inspiring Call",
         ]:
             self.draw = 3
         elif self.name in [
             "Flame of Anor",
         ]:
             self.draw = 2
+        elif self.name in [
+            "Rishkar's Expertise",
+        ]:
+            self.draw = 4
         else:
             raise ValueError(f"Unknown draw {self.name}")
 
@@ -322,12 +365,20 @@ class PerTurnDraw(Card):
     card_class = 'PerTurnDraw'
     card_names = [
         "Black Market Connections",
+        "Esper Sentinel",
+        "Phyrexian Arena",
+        "Toski, Bearer of Secrets",
+        "Leinore, Autumn Sovereign",
     ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.name in [
             "Black Market Connections",
+            "Esper Sentinel",
+            "Phyrexian Arena",
+            "Toski, Bearer of Secrets",
+            "Leinore, Autumn Sovereign",
         ]:
             self.redraw = 1
         else:
@@ -344,33 +395,67 @@ class PerCastDraw(Card):
         "Archmage Emeritus",
         "Bolas's Citadel",
         "Archmage of Runes",
+        "Skullclamp",
+        "Beast Whisperer",
+        "The Great Henge",
+        "Guardian Project",
     ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.is_cast_draw = 0
+        self.nonpermanent_cast_draw = 0
         self.permanent_cast_draw = 0
         self.spell_cast_draw = 0
+        self.creature_cast_draw = 0
 
         if self.name in [
             "Archmage of Runes",
             "Archmage Emeritus",
         ]:
-            self.is_cast_draw = 1
+            self.nonpermanent_cast_draw = 1
         elif self.name in [
             "Bolas's Citadel",
         ]:
             self.spell_cast_draw = 1
+        elif self.name in [
+            "Skullclamp",
+            "Beast Whisperer",
+            "The Great Henge",
+            "Guardian Project",
+        ]:
+            self.creature_cast_draw = 1
         else:
             raise ValueError(f"Unknown draw {self.name}")
+        
+        # add mana production
+        self.mana_production = 0
+        if self.name in [
+            "The Great Henge",
+        ]:
+            self.mana_production = 2
+        # add cost reduction
+        self.nonpermanent_cost_reduction = 0
+        if self.name in [
+            "Archmage of Runes",
+        ]:
+            self.nonpermanent_cost_reduction = 1
     
     def cast_trigger(self, casted_card):
         if casted_card.nonpermanent:
-            for i in range(self.is_cast_draw):
+            for i in range(self.nonpermanent_cast_draw):
                 self.goldfisher.draw()
         if casted_card.spell:
             for i in range(self.spell_cast_draw):
                 self.goldfisher.draw()
+        if casted_card.creature:
+            for i in range(self.creature_cast_draw):
+                self.goldfisher.draw()
+        return self
+    
+    def when_played(self):
+        super().when_played()
+        self.goldfisher.mana_production += self.mana_production
+        self.goldfisher.nonpermanent_cost_reduction += self.nonpermanent_cost_reduction
         return self
     
 class LorienRevealed(Card):
