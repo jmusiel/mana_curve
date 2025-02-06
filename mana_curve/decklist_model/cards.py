@@ -372,6 +372,34 @@ class PerCastDraw(Card):
             for i in range(self.spell_cast_draw):
                 self.goldfisher.draw()
         return self
+    
+class LorienRevealed(Card):
+    card_class = 'LorienRevealed'
+    card_names = [
+        "Lórien Revealed",
+    ]
+
+    def __init__(self, *args, **kwargs):
+        kwargs['types'] += ['land']
+        super().__init__(*args, **kwargs)
+        self.draw = 3
+
+    def when_played(self):
+        super().when_played()
+        for i in range(self.draw):
+            self.goldfisher.draw()
+        return self
+    
+class CabalCoffers(Card):
+    card_class = 'CabalCoffers'
+    card_names = [
+        "Cabal Coffers",
+    ]
+
+    def __init__(self, *args, **kwargs):
+        kwargs['types'] = ['artifact']
+        super().__init__(*args, **kwargs)
+
 
 
 # class New(Card):

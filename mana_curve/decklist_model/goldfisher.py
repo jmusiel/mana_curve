@@ -1,10 +1,11 @@
-from mana_curve.decklist_model.decklist import get_decklist, load_decklist
+from mana_curve.decklist_model.decklist import get_decklist, load_decklist, get_basic_island
 from mana_curve.decklist_model.cards import card_factory
 import bisect
 import copy
 import random
 from tqdm import tqdm
 import numpy as np
+from tabulate import tabulate
 
 import argparse
 import pprint
@@ -36,6 +37,22 @@ def get_parser():
         "--verbose",
         action="store_true",
     )
+    parser.add_argument(
+        "--min_lands",
+        type=int,
+        default=25,
+    )
+    parser.add_argument(
+        "--max_lands",
+        type=int,
+        default=42,
+    )
+    parser.add_argument(
+        "--cuts",
+        nargs='+',
+        type=str,
+        default=[],
+    )
     return parser
 
 class Goldfisher:
@@ -57,8 +74,48 @@ class Goldfisher:
         self.sims = sims
         self.mulligans = -1
         self.verbose = verbose
+        self.land_count = len([card for card in self.decklist if card.land])
 
         self.reset()
+
+    def set_lands(self, land_count, cuts=[]):
+        cutted = []
+        spells_list = []
+        lands_list = []
+        for card in self.decklist:
+            if card.land:
+                lands_list.append(card)
+            else:
+                spells_list.append(card)
+        land_diff = land_count - len(lands_list)
+        while land_diff > 0:
+            lands_list.append(card_factory(**get_basic_island()))
+            land_diff -= 1
+        while land_diff < 0:
+            for card in lands_list:
+                if not card.spell:
+                    lands_list.remove(card)
+                    cutted.append(card.name)
+                    break
+            if cuts:
+                for card in spells_list:
+                    if card.name in cuts:
+                        spells_list.remove(card)
+                        cutted.append(card.name)
+                        break
+            land_diff += 1
+        updated_decklist = spells_list + lands_list
+        self.decklist = []
+        for i, card in enumerate(updated_decklist):
+            card_dict = vars(card)
+            card_dict['goldfisher'] = self
+            card_dict['index'] = i
+            self.decklist.append(card_factory(**card_dict))
+        print(f"Set land count to {land_count} prev {self.land_count} ({len(lands_list)} lands, {len(spells_list)} spells, total {len(self.decklist)})")
+        self.land_count = len([card for card in self.decklist if card.land])
+        if cutted:
+            print(f"Cutted: {cutted}")
+
         
     def reset(self):
         self.turn = 0
@@ -258,6 +315,11 @@ class Goldfisher:
                 for card in self.cast_triggers:
                     print(f"\t{card.name}")
 
+        mean_mana = np.mean(mana_spent_list)
+        mean_lands = np.mean(lands_played_list)
+        mean_mulls = np.mean(mulls_list)
+        mean_draws = np.mean(cards_drawn_list)
+
         percentile_25 = np.percentile(mana_spent_list, 25)
         percentile_50 = np.percentile(mana_spent_list, 50)
         percentile_75 = np.percentile(mana_spent_list, 75)
@@ -270,13 +332,16 @@ class Goldfisher:
         bottom_25_percent = bottom_25_index / len(mana_spent_list)
         bottom_25_mana = sorted_mana[bottom_25_index]
 
-        print(f"Average mana spent: {np.mean(mana_spent_list)}")
-        print(f"Average lands played: {np.mean(lands_played_list)}")
-        print(f"Average mulligans: {np.mean(mulls_list)}")
-        print(f"Average cards drawn: {np.mean(cards_drawn_list)}")
-        print(f"25th, 50th, 75th percentile mana: {percentile_25}, {percentile_50}, {percentile_75}")
-        print(f"Bottom 25% mana: ({bottom_25_percent*100:.2f}%)")
-        print(f"Bottom 25% game: {bottom_25_mana}")
+        if self.verbose:
+            print(f"Average mana spent: {np.mean(mana_spent_list)}")
+            print(f"Average lands played: {np.mean(lands_played_list)}")
+            print(f"Average mulligans: {np.mean(mulls_list)}")
+            print(f"Average cards drawn: {np.mean(cards_drawn_list)}")
+            print(f"25th, 50th, 75th percentile mana: {percentile_25}, {percentile_50}, {percentile_75}")
+            print(f"Bottom 25% mana: ({bottom_25_percent*100:.2f}%)")
+            print(f"Bottom 25% game: {bottom_25_mana}")
+        
+        return self.land_count, len(self.decklist), mean_mana, mean_lands, mean_mulls, mean_draws, percentile_25, percentile_50, percentile_75, bottom_25_percent, bottom_25_mana
 
 
 
@@ -286,7 +351,15 @@ def main(config):
         deck_list = get_decklist(config)
     deck_list = load_decklist(config['deck_name'])
     goldfisher = Goldfisher(deck_list, **config)
-    goldfisher.simulate()
+    min_lands = config['min_lands'] or goldfisher.land_count
+    max_lands = (config['max_lands'] or goldfisher.land_count) + 1
+    outcomes = []
+    for i in range(min_lands, max_lands):
+        goldfisher.set_lands(i, cuts=config['cuts'])
+        outcome = goldfisher.simulate()
+        outcomes.append(outcome)
+    print(tabulate(outcomes, headers=["Land Ct", "Card Ct", "Mana", "Lands", "Mulls", "Draws", "25th", "50th", "75th", "25th% Fraction", "25th% Game"]))
+    
 
 
 if __name__ == "__main__":

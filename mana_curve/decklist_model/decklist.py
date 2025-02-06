@@ -102,6 +102,30 @@ def load_decklist(deck_name):
         decklist = json.load(f)
     return decklist
     
+def get_basic_island():
+    return {
+        "name": "Island",
+        "quantity": 1,
+        "oracle_cmc": 0,
+        "cmc": 0,
+        "cost": "",
+        "text": "({T}: Add {U}.)",
+        "sub_types": [
+            "Island"
+        ],
+        "super_types": [
+            "Basic"
+        ],
+        "types": [
+            "Land"
+        ],
+        "identity": [
+            "Blue"
+        ],
+        "default_category": None,
+        "user_category": "Land",
+        "commander": False
+    }
 
 if __name__ == "__main__":
     parser = get_parser()
