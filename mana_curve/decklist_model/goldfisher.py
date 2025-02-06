@@ -290,22 +290,37 @@ class Goldfisher:
         mulls_list = []
         lands_played_list = []
         cards_drawn_list = []
+        bad_turns_list = []
+        mid_turns_list = []
         for j in tqdm(range(self.sims)):
-            mana_spent = 0
+            total_mana_spent = 0
             lands_played = 0
+            bad_turns = 0
+            mid_turns = 0
             self.mulligans = -1
             self.mulligan()
             for i in range(self.turns):
+                mana_spent = 0
+                spells_played = 0
                 played_effects = self.take_turn()
                 for card in played_effects:
                     if not card.ramp:
                         mana_spent += card.cmc
                     if card.land:
                         lands_played += 1
-            mana_spent_list.append(mana_spent)
+                    if card.spell:
+                        spells_played += 1
+                if spells_played == 0 and self.deck:
+                    bad_turns += 1
+                if spells_played < 2 and self.deck and mana_spent < i+1:
+                    mid_turns += 1
+                total_mana_spent += mana_spent
+            mana_spent_list.append(total_mana_spent)
             lands_played_list.append(lands_played)
             mulls_list.append(self.mulligans)
             cards_drawn_list.append(self.draws)
+            bad_turns_list.append(bad_turns)
+            mid_turns_list.append(mid_turns)
             if self.verbose: 
                 print(f"\n### Game {j+1} finished")
                 print(f"lands: {len(self.lands)}")
@@ -324,6 +339,8 @@ class Goldfisher:
         mean_lands = np.mean(lands_played_list)
         mean_mulls = np.mean(mulls_list)
         mean_draws = np.mean(cards_drawn_list)
+        mean_bad_turns = np.mean(bad_turns_list)
+        mean_mid_turns = np.mean(mid_turns_list)
 
         percentile_25 = np.percentile(mana_spent_list, 25)
         percentile_50 = np.percentile(mana_spent_list, 50)
@@ -354,7 +371,7 @@ class Goldfisher:
             print(f"Bottom 25% mana: ({bottom_25_percent*100:.2f}%)")
             print(f"Bottom 25% game: {bottom_25_mana}")
         
-        return self.land_count, mean_mana, consistency, mean_lands, mean_mulls, mean_draws, percentile_25, percentile_50, percentile_75, threshold_percent, threshold_mana, con_threshold
+        return self.land_count, mean_mana, consistency, mean_bad_turns, mean_mid_turns, mean_lands, mean_mulls, mean_draws, percentile_25, percentile_50, percentile_75, threshold_percent, threshold_mana, con_threshold
 
 
 
@@ -375,12 +392,14 @@ def main(config):
     outcomes_arr = np.array(outcomes)
     max_mana = outcomes_arr[:,0][np.argmax(outcomes_arr[:,1])]
     max_consistency = outcomes_arr[:,0][np.argmax(outcomes_arr[:,2])]
+    min_bad_turns = outcomes_arr[:,0][np.argmin(outcomes_arr[:,3])]
+    min_mid_turns = outcomes_arr[:,0][np.argmin(outcomes_arr[:,4])]
 
     con_threshold = outcome[-1]*100
     print(f"\n-----------------------------------")
-    print(f"{config['deck_name']} ({config['turns']} turns, {config['sims']} sims, {min_lands}-{max_lands-1} lands) - max mana @ {max_mana} lands, max consistency @ {max_consistency} lands")
+    print(f"{config['deck_name']} ({config['turns']} turns, {config['sims']} sims, {min_lands}-{max_lands-1} lands) - max mana @ {max_mana}, max consistency @ {max_consistency}, min bad turns @ {min_bad_turns}, min mid turns @ {min_mid_turns}")
     print(f"-----------------------------------")
-    print(tabulate(outcomes, headers=["Land Ct", "Mana (EV)", "Consistency", "Lands", "Mulls", "Draws", "25th", "50th", "75th", f"{con_threshold}th% Frac", f"{con_threshold}th% Game"]))
+    print(tabulate(outcomes, headers=["Land Ct", "Mana (EV)", "Consistency", "Bad Turns", "Mid Turns", "Lands", "Mulls", "Draws", "25th", "50th", "75th", f"{con_threshold}th% Frac", f"{con_threshold}th% Game"]))
     
 
 
