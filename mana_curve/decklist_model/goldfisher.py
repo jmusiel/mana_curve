@@ -4,6 +4,7 @@ import bisect
 import copy
 import random
 from tqdm import tqdm
+import numpy as np
 
 import argparse
 import pprint
@@ -29,11 +30,11 @@ def get_parser():
     parser.add_argument(
         "--sims",
         type=int, 
-        default=1,
+        default=1000,
     )
     parser.add_argument(
         "--verbose",
-        action="store_false",
+        action="store_true",
     )
     return parser
 
@@ -88,6 +89,10 @@ class Goldfisher:
         self.spell_cost_reduction = 0
 
     def draw(self):
+        if len(self.deck) == 0:
+            if self.verbose: print(f"Draw failed, deck is empty")
+            self.draws += 1
+            return
         drawn_i = self.deck.pop()
         drawn = self.decklist[drawn_i]
         drawn.zone = self.hand
@@ -220,12 +225,13 @@ class Goldfisher:
         return played_effects
     
     def simulate(self):
-        mana_spent = 0
-        mulls = 0
-        lands_played = 0
-        cards_drawn = 0
-        all_played_effects = []
+        mana_spent_list = []
+        mulls_list = []
+        lands_played_list = []
+        cards_drawn_list = []
         for j in tqdm(range(self.sims)):
+            mana_spent = 0
+            lands_played = 0
             self.mulligans = -1
             self.mulligan()
             for i in range(self.turns):
@@ -234,9 +240,10 @@ class Goldfisher:
                     mana_spent += card.cmc
                     if card.land:
                         lands_played += 1
-                    all_played_effects.append(card)
-            mulls += self.mulligans
-            cards_drawn += self.draws
+            mana_spent_list.append(mana_spent)
+            lands_played_list.append(lands_played)
+            mulls_list.append(self.mulligans)
+            cards_drawn_list.append(self.draws)
             if self.verbose: 
                 print(f"\n### Game {j+1} finished")
                 print(f"lands: {len(self.lands)}")
@@ -251,11 +258,26 @@ class Goldfisher:
                 for card in self.cast_triggers:
                     print(f"\t{card.name}")
 
+        percentile_25 = np.percentile(mana_spent_list, 25)
+        percentile_50 = np.percentile(mana_spent_list, 50)
+        percentile_75 = np.percentile(mana_spent_list, 75)
 
-        print(f"Average mana spent: {mana_spent/self.sims}")
-        print(f"Average lands played: {lands_played/self.sims}")
-        print(f"Average mulligans: {mulls/self.sims}")
-        print(f"Average cards drawn: {cards_drawn/self.sims}")
+        total_mana = np.sum(mana_spent_list)
+        quarter_mana = total_mana * 0.25
+        sorted_mana = sorted(mana_spent_list)
+        cumulative_mana = np.cumsum(sorted_mana)
+        bottom_25_index = bisect.bisect_left(cumulative_mana, quarter_mana)
+        bottom_25_percent = bottom_25_index / len(mana_spent_list)
+        bottom_25_mana = sorted_mana[bottom_25_index]
+
+        print(f"Average mana spent: {np.mean(mana_spent_list)}")
+        print(f"Average lands played: {np.mean(lands_played_list)}")
+        print(f"Average mulligans: {np.mean(mulls_list)}")
+        print(f"Average cards drawn: {np.mean(cards_drawn_list)}")
+        print(f"25th, 50th, 75th percentile mana: {percentile_25}, {percentile_50}, {percentile_75}")
+        print(f"Bottom 25% mana: ({bottom_25_percent*100:.2f}%)")
+        print(f"Bottom 25% game: {bottom_25_mana}")
+
 
 
 def main(config):
