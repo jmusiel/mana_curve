@@ -128,6 +128,13 @@ class ManaProducer(Card):
         "Incubation Druid",
         "Rishkar, Peema Renegade",
         "Katilda, Dawnhart Prime",
+        "Commander's Sphere",
+        "Orzhov Signet",
+        "Solemn Simulacrum",
+        "Claim Jumper",
+        "Talisman of Hierarchy",
+        "Deep Gnome Terramancer",
+
     ]
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -143,6 +150,12 @@ class ManaProducer(Card):
             "Relic of Sauron",
             "Rishkar, Peema Renegade",
             "Katilda, Dawnhart Prime",
+            "Commander's Sphere",
+            "Orzhov Signet",
+            "Solemn Simulacrum",
+            "Claim Jumper",
+            "Talisman of Hierarchy",
+            "Deep Gnome Terramancer",
         ]:
             self.mana = 2
         elif self.name in [
@@ -263,21 +276,32 @@ class Draw(Card):
         "Armorcraft Judge",
         "Inspiring Call",
         "Rishkar's Expertise",
+        "Krav, the Unredeemed",
+        "Archivist of Oghma",
+        "Body Count",
+        "Plumb the Forbidden",
     ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.name in [
+            "Archivist of Oghma",
+        ]:
+            self.draw = 1
+        elif self.name in [
+            "Flame of Anor",
+            "Plumb the Forbidden",
+        ]:
+            self.draw = 2
+        elif self.name in [
             "Manifold Insights",
             "Mystic Confluence",
             "Armorcraft Judge",
             "Inspiring Call",
+            "Krav, the Unredeemed",
+            "Body Count",
         ]:
             self.draw = 3
-        elif self.name in [
-            "Flame of Anor",
-        ]:
-            self.draw = 2
         elif self.name in [
             "Rishkar's Expertise",
         ]:
@@ -300,6 +324,7 @@ class DrawDiscard(Card):
         "Fact or Fiction",
         "Maestros Charm",
         "Prismari Command",
+        "Deadly Dispute",
     ]
 
     def __init__(self, *args, **kwargs):
@@ -343,6 +368,13 @@ class DrawDiscard(Card):
         ]:
             self.firstdraw = 2
             self.discard = 2
+            self.seconddraw = 0
+            self.make_treasures = 1
+        elif self.name in [
+            "Deadly Dispute",
+        ]:
+            self.firstdraw = 2
+            self.discard = 0
             self.seconddraw = 0
             self.make_treasures = 1
         else:
