@@ -1,4 +1,5 @@
 from mana_curve.decklist_model.decklist import get_decklist, load_decklist, get_basic_island
+from mana_curve.decklist_model.decklist import main as save_archidekt
 from mana_curve.decklist_model.cards import card_factory
 import bisect
 import copy
@@ -111,10 +112,10 @@ class Goldfisher:
             card_dict['goldfisher'] = self
             card_dict['index'] = i
             self.decklist.append(card_factory(**card_dict))
-        print(f"Set land count to {land_count} prev {self.land_count} ({len(lands_list)} lands, {len(spells_list)} spells, total {len(self.decklist)})")
-        self.land_count = len([card for card in self.decklist if card.land])
         if cutted:
             print(f"Cutted: {cutted}")
+        print(f"Set land count to {land_count} prev {self.land_count} ({len(lands_list)} lands, {len(spells_list)} spells, total {len(self.decklist)})")
+        self.land_count = len([card for card in self.decklist if card.land])
 
         
     def reset(self):
@@ -331,6 +332,14 @@ class Goldfisher:
         bottom_25_index = bisect.bisect_left(cumulative_mana, quarter_mana)
         bottom_25_percent = bottom_25_index / len(mana_spent_list)
         bottom_25_mana = sorted_mana[bottom_25_index]
+        # consistency = (1-bottom_25_percent)/0.75
+
+        con_threshold = 0.25
+        threshold_index = bisect.bisect_left(cumulative_mana, total_mana * con_threshold)
+        threshold_percent = threshold_index / len(mana_spent_list)
+        threshold_mana = sorted_mana[threshold_index]
+        consistency = (1 - threshold_percent)/(1 - con_threshold)
+        # consistency = con_threshold/threshold_percent
 
         if self.verbose:
             print(f"Average mana spent: {np.mean(mana_spent_list)}")
@@ -341,14 +350,14 @@ class Goldfisher:
             print(f"Bottom 25% mana: ({bottom_25_percent*100:.2f}%)")
             print(f"Bottom 25% game: {bottom_25_mana}")
         
-        return self.land_count, len(self.decklist), mean_mana, mean_lands, mean_mulls, mean_draws, percentile_25, percentile_50, percentile_75, bottom_25_percent, bottom_25_mana
+        return self.land_count, mean_mana, consistency, mean_lands, mean_mulls, mean_draws, percentile_25, percentile_50, percentile_75, threshold_percent, threshold_mana, con_threshold
 
 
 
 def main(config):
     pp.pprint(config)
     if config['deck_url'] is not None:
-        deck_list = get_decklist(config)
+        deck_list = save_archidekt(config)
     deck_list = load_decklist(config['deck_name'])
     goldfisher = Goldfisher(deck_list, **config)
     min_lands = config['min_lands'] or goldfisher.land_count
@@ -357,8 +366,9 @@ def main(config):
     for i in range(min_lands, max_lands):
         goldfisher.set_lands(i, cuts=config['cuts'])
         outcome = goldfisher.simulate()
-        outcomes.append(outcome)
-    print(tabulate(outcomes, headers=["Land Ct", "Card Ct", "Mana", "Lands", "Mulls", "Draws", "25th", "50th", "75th", "25th% Fraction", "25th% Game"]))
+        outcomes.append(outcome[:-1])
+    con_threshold = outcome[-1]*100
+    print(tabulate(outcomes, headers=["Land Ct", "Mana (EV)", "Consistency", "Lands", "Mulls", "Draws", "25th", "50th", "75th", f"{con_threshold}th% Frac", f"{con_threshold}th% Game"]))
     
 
 
