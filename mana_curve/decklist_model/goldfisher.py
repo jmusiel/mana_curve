@@ -62,6 +62,7 @@ class Goldfisher:
     def reset(self):
         self.turn = 0
         self.draws = 0
+        # reset zones
         self.command_zone = []
         self.deck = []
         self.yard = []
@@ -69,9 +70,7 @@ class Goldfisher:
         self.battlefield = []
         self.exile = []
         self.lands = []
-        self.mana_production = 0
-        self.treasure = 0
-        self.per_turn_effects = []
+        # reset commanders and deck
         for card in self.commanders:
             card.zone = self.command_zone
             self.command_zone.append(card.index)
@@ -79,6 +78,14 @@ class Goldfisher:
             card.zone = self.deck
             self.deck.append(card.index)
         random.shuffle(self.deck)
+        # reset effects
+        self.mana_production = 0
+        self.treasure = 0
+        self.per_turn_effects = []
+        self.cast_triggers = []
+        self.nonpermanent_cost_reduction = 0
+        self.permanent_cost_reduction = 0
+        self.spell_cost_reduction = 0
 
     def draw(self):
         drawn_i = self.deck.pop()
@@ -126,17 +133,16 @@ class Goldfisher:
     def get_hand_strings(self):
         return [self.decklist[i].printable for i in self.hand]
     
-    def get_playables(self):
+    def get_playables(self, available_mana):
         playables = []
-        available_mana = self.get_mana() + self.treasure
         for i in self.hand:
             card = self.decklist[i]
-            if card.cmc < available_mana and card.spell:
+            if card.get_current_cost() <= available_mana and card.spell:
                 playables.append(card)
         playables = sorted(playables)
         for i in self.command_zone:
             card = self.commanders[i]
-            if card.cmc < available_mana and card.spell:
+            if card.get_current_cost() <= available_mana and card.spell:
                 playables.append(card)
 
         if self.verbose: 
@@ -165,23 +171,36 @@ class Goldfisher:
             land = mdfc
         if land is not None:
             land.change_zone(self.lands)
-            played_effects.append(land.when_played())
+            played_effects.append(land.played_as_land())
 
         return played_effects
     
-    def play_spells(self, playables):
+    def play_spells(self):
         mana_available = self.get_mana() + self.treasure
+        playables = self.get_playables(mana_available)
         played_effects = []
-        for card in reversed(playables):
-            if card.cmc <= mana_available:
-                mana_available -= card.cmc
-                if card.spell and card.nonpermanent:
-                    card.change_zone(self.yard)
-                elif card.spell and card.permanent and not card.nonpermanent:
-                    card.change_zone(self.battlefield)
-                else:
-                    raise ValueError(f"incompatible types {card.types} for card {card.name}")
-                played_effects.append(card.when_played())
+        while playables:
+            for card in reversed(playables):
+                if card.get_current_cost() <= mana_available:
+                    mana_available -= card.get_current_cost()
+                    if card.spell and card.nonpermanent:
+                        card.change_zone(self.yard)
+                    elif card.spell and card.permanent and not card.nonpermanent:
+                        card.change_zone(self.battlefield)
+                    else:
+                        raise ValueError(f"incompatible types {card.types} for card {card.name}")
+                    # cast triggers
+                    for trigger in self.cast_triggers:
+                        trigger.cast_trigger(card)
+                    # add to cast triggers
+                    if hasattr(card, 'cast_trigger'):
+                        self.cast_triggers.append(card)
+                    # add to per turn effects
+                    if hasattr(card, 'per_turn'):
+                        self.per_turn_effects.append(card)
+                    # add to played cards
+                    played_effects.append(card.when_played())
+            playables = self.get_playables(mana_available)
 
         if mana_available < self.treasure:
             if self.verbose: print(f"Spent treasures: [{self.treasure}] -> [{self.mana_available}]")
@@ -191,16 +210,12 @@ class Goldfisher:
     def take_turn(self):
         if self.verbose: print(f"### Turn {self.turn+1} (Lands: {len(self.lands)}, Mana: {self.get_mana()}[{self.treasure}], Hand: {len(self.hand)})")
         self.draw()
-        played_land = self.play_land()
-        playables = self.get_playables()
-        played_effects = self.play_spells(playables)
-        if played_land is not None:
-            played_effects.extend(played_land)
-        for card in played_effects:
-            if hasattr(card, 'per_turn'):
-                self.per_turn_effects.append(card)
         for card in self.per_turn_effects:
             card.per_turn()
+        played_land = self.play_land()
+        played_effects = self.play_spells()
+        if played_land is not None:
+            played_effects.extend(played_land)
         self.turn += 1
         return played_effects
     
@@ -222,6 +237,20 @@ class Goldfisher:
                     all_played_effects.append(card)
             mulls += self.mulligans
             cards_drawn += self.draws
+            if self.verbose: 
+                print(f"\n### Game {j+1} finished")
+                print(f"lands: {len(self.lands)}")
+                print(f"surplus mana production: {self.mana_production}")
+                print(f"nonpermanent cost reduction: {self.nonpermanent_cost_reduction}")
+                print(f"permanent cost reduction: {self.permanent_cost_reduction}")
+                print(f"spell cost reduction: {self.spell_cost_reduction}")
+                print(f"per turn effects:")
+                for card in self.per_turn_effects:
+                    print(f"\t{card.name}")
+                print(f"cast triggers:")
+                for card in self.cast_triggers:
+                    print(f"\t{card.name}")
+
 
         print(f"Average mana spent: {mana_spent/self.sims}")
         print(f"Average lands played: {lands_played/self.sims}")

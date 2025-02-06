@@ -62,10 +62,16 @@ class Card:
         self.mdfc = '//' in self.name
 
     def __lt__(self, other):
-        return self.cmc < other.cmc
+        if ('Draw' not in self.card_class) and ('Draw' in other.card_class):
+            return True
+        elif ('Draw' in self.card_class) and ('Draw' not in other.card_class):
+            return False
+        else:
+            return self.cmc < other.cmc
+
 
     def __eq__(self, other):
-        return self.cmc == other.cmc
+        return self.cmc == other.cmc and (('Draw' in self.card_class) == ('Draw' in other.card_class))
 
     def __str__(self):
         return f"{self.name}: {self.cost}"
@@ -78,9 +84,24 @@ class Card:
         self.zone = new_zone
         new_zone.append(self.index)
 
+    def get_current_cost(self):
+        cost = self.cmc
+        if self.nonpermanent:
+            cost -= self.goldfisher.nonpermanent_cost_reduction
+        if self.permanent:
+            cost -= self.goldfisher.permanent_cost_reduction
+        if self.spell:
+            cost -= self.goldfisher.spell_cost_reduction
+        return cost
+
     def when_played(self):
         if self.goldfisher.verbose:
             print(f"Played {self.printable}")
+        return self
+    
+    def played_as_land(self):
+        if self.goldfisher.verbose:
+            print(f"Played as land {self.printable}")
         return self
     
     
@@ -155,15 +176,31 @@ class ScalingManaProducer(Card):
         return self
 
 
-class CostReducer_IS(Card):
-    card_class = 'CostReducer_IS'
-    card_names = []
+class CostReducer(Card):
+    card_class = 'CostReducer'
+    card_names = [
+        "Thunderclap Drake",
+        "Case of the Ransacked Lab",
+    ]
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.name in [
+            "Thunderclap Drake",
+            "Case of the Ransacked Lab",
+        ]:
+            self.nonpermanent_cost_reduction = 1
+        else:
+            raise ValueError(f"Unknown cost reducer {self.name}")
+
+    def when_played(self):
+        super().when_played()
+        self.goldfisher.nonpermanent_cost_reduction += self.nonpermanent_cost_reduction
+        return self
         
 
-class Cantrip(Card):
-    card_class = 'Cantrip'
+class CantripDraw(Card):
+    card_class = 'CantripDraw'
     card_names = [
         "Picklock Prankster // Free the Fae",
         "Frantic Search",
@@ -187,14 +224,21 @@ class Draw(Card):
     card_class = 'Draw'
     card_names = [
         "Manifold Insights",
+        "Mystic Confluence",
+        "Flame of Anor",
     ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.name in [
             "Manifold Insights",
+            "Mystic Confluence",
         ]:
             self.draw = 3
+        elif self.name in [
+            "Flame of Anor",
+        ]:
+            self.draw = 2
         else:
             raise ValueError(f"Unknown draw {self.name}")
 
@@ -211,6 +255,8 @@ class DrawDiscard(Card):
         "Unexpected Windfall",
         "Big Score",
         "Fact or Fiction",
+        "Maestros Charm",
+        "Prismari Command",
     ]
 
     def __init__(self, *args, **kwargs):
@@ -242,6 +288,20 @@ class DrawDiscard(Card):
             self.discard = 1
             self.seconddraw = 2
             self.make_treasures = 2
+        elif self.name in [
+            "Maestros Charm",
+        ]:
+            self.firstdraw = 5
+            self.discard = 4
+            self.seconddraw = 0
+            self.make_treasures = 0
+        elif self.name in [
+            "Prismari Command",
+        ]:
+            self.firstdraw = 2
+            self.discard = 2
+            self.seconddraw = 0
+            self.make_treasures = 1
         else:
             raise ValueError(f"Unknown draw/discard {self.name}")
         
@@ -261,41 +321,56 @@ class DrawDiscard(Card):
 class PerTurnDraw(Card):
     card_class = 'PerTurnDraw'
     card_names = [
+        "Black Market Connections",
     ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.name in [
-
+            "Black Market Connections",
         ]:
-            self.draw = 3
+            self.redraw = 1
         else:
             raise ValueError(f"Unknown draw {self.name}")
 
-    def when_played(self):
-        super().when_played()
-        for i in range(self.draw):
+    def per_turn(self):
+        for i in range(self.redraw):
             self.goldfisher.draw()
         return self
     
 class PerCastDraw(Card):
     card_class = 'PerCastDraw'
     card_names = [
+        "Archmage Emeritus",
+        "Bolas's Citadel",
+        "Archmage of Runes",
     ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.name in [
+        self.is_cast_draw = 0
+        self.permanent_cast_draw = 0
+        self.spell_cast_draw = 0
 
+        if self.name in [
+            "Archmage of Runes",
+            "Archmage Emeritus",
         ]:
-            self.draw = 3
+            self.is_cast_draw = 1
+        elif self.name in [
+            "Bolas's Citadel",
+        ]:
+            self.spell_cast_draw = 1
         else:
             raise ValueError(f"Unknown draw {self.name}")
-
-    def when_played(self):
-        super().when_played()
-        for i in range(self.draw):
-            self.goldfisher.draw()
+    
+    def cast_trigger(self, casted_card):
+        if casted_card.nonpermanent:
+            for i in range(self.is_cast_draw):
+                self.goldfisher.draw()
+        if casted_card.spell:
+            for i in range(self.spell_cast_draw):
+                self.goldfisher.draw()
         return self
 
 
@@ -347,7 +422,7 @@ if __name__ == "__main__":
 
     card = card_factory(**card_data)
     print(card)
-    if isinstance(card, Cantrip):
+    if isinstance(card, CantripDraw):
         print(card.draw_card_effect())
 
     subclasses = Card.__subclasses__()
