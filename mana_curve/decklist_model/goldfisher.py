@@ -52,7 +52,8 @@ def get_parser():
         "--cuts",
         nargs='+',
         type=str,
-        default=[],
+        default=[
+        ],
     )
     return parser
 
@@ -76,6 +77,7 @@ class Goldfisher:
         self.mulligans = -1
         self.verbose = verbose
         self.land_count = len([card for card in self.decklist if card.land])
+        self.original_card_count = len(self.decklist)
 
         self.reset()
 
@@ -92,18 +94,18 @@ class Goldfisher:
         while land_diff > 0:
             lands_list.append(card_factory(**get_basic_island()))
             land_diff -= 1
+            if cuts and len(spells_list) + len(lands_list) > self.original_card_count:
+                for j, card in enumerate(spells_list):
+                    if card.name in cuts:
+                        spells_list.remove(card)
+                        cutted.append(card.name)
+                        break
         while land_diff < 0:
             for card in lands_list:
                 if not card.spell:
                     lands_list.remove(card)
                     cutted.append(card.name)
                     break
-            if cuts:
-                for card in spells_list:
-                    if card.name in cuts:
-                        spells_list.remove(card)
-                        cutted.append(card.name)
-                        break
             land_diff += 1
         updated_decklist = spells_list + lands_list
         self.decklist = []
@@ -296,7 +298,8 @@ class Goldfisher:
             for i in range(self.turns):
                 played_effects = self.take_turn()
                 for card in played_effects:
-                    mana_spent += card.cmc
+                    if not card.ramp:
+                        mana_spent += card.cmc
                     if card.land:
                         lands_played += 1
             mana_spent_list.append(mana_spent)

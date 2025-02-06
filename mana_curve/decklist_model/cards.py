@@ -3,6 +3,7 @@ from typing import List, Optional
 class Card:
     card_class = 'Card'
     card_names = []
+    ramp = False
     def __init__(
             self,
             name: Optional[str] = None,
@@ -74,7 +75,7 @@ class Card:
 
 
     def __eq__(self, other):
-        return self.cmc == other.cmc and (('Draw' in self.card_class) == ('Draw' in other.card_class))
+        return self.name == other.name
 
     def __str__(self):
         return f"{self.name}: {self.cost}"
@@ -136,6 +137,7 @@ class ManaProducer(Card):
         "Deep Gnome Terramancer",
 
     ]
+    ramp = True
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.name in [
@@ -181,6 +183,7 @@ class ScalingManaProducer(Card):
         "Heronblade Elite",
         "Kodama of the West Tree",
     ]
+    ramp = True
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # initial mana production
