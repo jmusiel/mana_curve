@@ -41,12 +41,12 @@ def get_parser():
     parser.add_argument(
         "--min_lands",
         type=int,
-        default=None,
+        default=35,
     )
     parser.add_argument(
         "--max_lands",
         type=int,
-        default=None,
+        default=39,
     )
     parser.add_argument(
         "--cuts",
@@ -368,7 +368,15 @@ def main(config):
         goldfisher.set_lands(i, cuts=config['cuts'])
         outcome = goldfisher.simulate()
         outcomes.append(outcome[:-1])
+    # get land count at max consistency and at max mana ev
+    outcomes_arr = np.array(outcomes)
+    max_mana = outcomes_arr[:,0][np.argmax(outcomes_arr[:,1])]
+    max_consistency = outcomes_arr[:,0][np.argmax(outcomes_arr[:,2])]
+
     con_threshold = outcome[-1]*100
+    print(f"\n-----------------------------------")
+    print(f"{config['deck_name']} ({config['turns']} turns, {config['sims']} sims, {min_lands}-{max_lands-1} lands) - max mana @ {max_mana} lands, max consistency @ {max_consistency} lands")
+    print(f"-----------------------------------")
     print(tabulate(outcomes, headers=["Land Ct", "Mana (EV)", "Consistency", "Lands", "Mulls", "Draws", "25th", "50th", "75th", f"{con_threshold}th% Frac", f"{con_threshold}th% Game"]))
     
 
