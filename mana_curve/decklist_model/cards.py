@@ -103,11 +103,13 @@ class Card:
     def when_played(self):
         if self.goldfisher.verbose:
             print(f"Played {self.printable}")
+        self.mana_spent_when_played = self.cmc
         return self
     
     def played_as_land(self):
         if self.goldfisher.verbose:
             print(f"Played as land {self.printable}")
+        self.mana_spent_when_played  = 0
         return self
     
     

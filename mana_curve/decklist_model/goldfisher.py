@@ -305,7 +305,7 @@ class Goldfisher:
                 played_effects = self.take_turn()
                 for card in played_effects:
                     if not card.ramp:
-                        mana_spent += card.cmc
+                        mana_spent += card.mana_spent_when_played
                     if card.land:
                         lands_played += 1
                     if card.spell:
