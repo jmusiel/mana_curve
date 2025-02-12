@@ -137,6 +137,7 @@ class ManaProducer(Card):
         "Claim Jumper",
         "Talisman of Hierarchy",
         "Deep Gnome Terramancer",
+        "Cultivate", # tommy slimes
 
     ]
     ramp = True
@@ -147,6 +148,7 @@ class ManaProducer(Card):
             "Fellwar Stone",
             "Sakura-Tribe Elder",
             "Incubation Druid",
+            "Cultivate", # tommy slimes
         ]:
             self.mana = 1
         elif self.name in [
@@ -222,6 +224,8 @@ class CostReducer(Card):
     card_names = [
         "Thunderclap Drake",
         "Case of the Ransacked Lab",
+        "Hamza, Guardian of Arashin",
+        "Umori, the Collector", # tommy slimes
     ]
 
     def __init__(self, *args, **kwargs):
@@ -237,6 +241,7 @@ class CostReducer(Card):
             self.nonpermanent_cost_reduction = 1
         elif self.name in [
             "Hamza, Guardian of Arashin",
+            "Umori, the Collector", # tommy slimes
         ]:
             self.creature_cost_reduction = 1
         else:
@@ -285,12 +290,19 @@ class Draw(Card):
         "Archivist of Oghma",
         "Body Count",
         "Plumb the Forbidden",
+        "Growth Spiral", # tommy slimes
+        "Explore", # tommy slimes
+        "Mulch", # tommy slimes
+        "Urban Evolution", # tommy slimes
     ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.name in [
             "Archivist of Oghma",
+            "Growth Spiral", # tommy slimes
+            "Explore", # tommy slimes
+            "Mulch", # tommy slimes
         ]:
             self.draw = 1
         elif self.name in [
@@ -305,6 +317,7 @@ class Draw(Card):
             "Inspiring Call",
             "Krav, the Unredeemed",
             "Body Count",
+            "Urban Evolution", # tommy slimes
         ]:
             self.draw = 3
         elif self.name in [
@@ -406,6 +419,7 @@ class PerTurnDraw(Card):
         "Phyrexian Arena",
         "Toski, Bearer of Secrets",
         "Leinore, Autumn Sovereign",
+        "Compost", # tommy slimes
     ]
 
     def __init__(self, *args, **kwargs):
@@ -416,6 +430,7 @@ class PerTurnDraw(Card):
             "Phyrexian Arena",
             "Toski, Bearer of Secrets",
             "Leinore, Autumn Sovereign",
+            "Compost", # tommy slimes
         ]:
             self.redraw = 1
         else:
@@ -436,6 +451,8 @@ class PerCastDraw(Card):
         "Beast Whisperer",
         "The Great Henge",
         "Guardian Project",
+        "Vanquisher's Banner", # tommy slimes
+        "Tribute to the World Tree", # tommy slimes
     ]
 
     def __init__(self, *args, **kwargs):
@@ -459,6 +476,8 @@ class PerCastDraw(Card):
             "Beast Whisperer",
             "The Great Henge",
             "Guardian Project",
+            "Vanquisher's Banner", # tommy slimes
+            "Tribute to the World Tree", # tommy slimes
         ]:
             self.creature_cast_draw = 1
         else:
