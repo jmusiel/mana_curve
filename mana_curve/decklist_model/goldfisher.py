@@ -7,6 +7,10 @@ import random
 from tqdm import tqdm
 import numpy as np
 from tabulate import tabulate
+from mana_curve.decklist_model.mana_functions import (
+    land_mana,
+    mana_rocks,
+)
 
 import argparse
 import pprint
@@ -72,6 +76,7 @@ class Goldfisher:
             decklist_dict.pop(i)
 
         self.decklist = [card_factory(**card, goldfisher=self, index=i) for i, card in enumerate(decklist_dict)]
+        self.deckdict = {card.name:card for card in self.decklist}
         self.turns = turns
         self.sims = sims
         self.mulligans = -1
@@ -144,10 +149,17 @@ class Goldfisher:
         self.treasure = 0
         self.per_turn_effects = []
         self.cast_triggers = []
+        self.mana_functions = [land_mana, mana_rocks]
+        self.lands_per_turn = 1
+        # cost reduction
         self.nonpermanent_cost_reduction = 0
         self.permanent_cost_reduction = 0
         self.spell_cost_reduction = 0
         self.creature_cost_reduction = 0
+        # played spells
+        self.creatures_played = 0
+        self.enchantments_played = 0
+        self.artifacts_played = 0
 
     def draw(self):
         if len(self.deck) == 0:
@@ -194,7 +206,10 @@ class Goldfisher:
         if self.verbose: print(f"### Kept {lands_in_hand}/{len(self.hand)} lands/cards")
 
     def get_mana(self):
-        return len(self.lands) + self.mana_production
+        mana = 0
+        for func in self.mana_functions:
+            mana += func(self)
+        return mana
     
     def get_hand_strings(self):
         return [self.decklist[i].printable for i in self.hand]
@@ -223,28 +238,37 @@ class Goldfisher:
     
     def play_land(self):
         played_effects = []
-        mdfc = None
-        land = None
-        for i in self.hand:
-            card = self.decklist[i]
-            if card.land:
-                if card.mdfc:
-                    mdfc = card
-                else:
-                    land = card
-                    break
-        if land is None:
-            land = mdfc
-        if land is not None:
-            land.change_zone(self.lands)
-            played_effects.append(land.played_as_land())
+        while self.played_land_this_turn < self.lands_per_turn:
+            mdfc = None
+            land = None
+            for i in self.hand:
+                card = self.decklist[i]
+                if card.land:
+                    if card.mdfc:
+                        mdfc = card
+                    else:
+                        land = card
+                        break
+            if land is None:
+                land = mdfc
+            if land is not None:
+                land.change_zone(self.lands)
+                played_effects.append(land.played_as_land())
+                self.played_land_this_turn += 1
+                if not land.tapped:
+                    self.untapped_land_this_turn += 1
+            else:
+                break
 
         return played_effects
     
     def play_spells(self):
         mana_available = self.get_mana() + self.treasure
-        playables = self.get_playables(mana_available)
         played_effects = []
+        played_effects.extend(self.play_land())
+        mana_available += self.untapped_land_this_turn
+        self.untapped_land_this_turn = 0
+        playables = self.get_playables(mana_available)
         while playables:
             for card in reversed(playables):
                 if card.get_current_cost() <= mana_available:
@@ -266,6 +290,9 @@ class Goldfisher:
                         self.per_turn_effects.append(card)
                     # add to played cards
                     played_effects.append(card.when_played())
+            played_effects.extend(self.play_land())
+            mana_available += self.untapped_land_this_turn
+            self.untapped_land_this_turn = 0
             playables = self.get_playables(mana_available)
 
         if mana_available < self.treasure:
@@ -275,13 +302,13 @@ class Goldfisher:
     
     def take_turn(self):
         if self.verbose: print(f"### Turn {self.turn+1} (Lands: {len(self.lands)}, Mana: {self.get_mana()}[{self.treasure}], Hand: {len(self.hand)})")
+        self.played_land_this_turn = 0
+        self.untapped_land_this_turn = 0
+        self.tapped_creatures_this_turn = 0
         self.draw()
         for card in self.per_turn_effects:
             card.per_turn()
-        played_land = self.play_land()
         played_effects = self.play_spells()
-        if played_land is not None:
-            played_effects.extend(played_land)
         self.turn += 1
         return played_effects
     

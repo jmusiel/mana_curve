@@ -1,9 +1,14 @@
 from typing import List, Optional
+from mana_curve.decklist_model.mana_functions import (
+    cryptolith_rites,
+    enchantment_sanctums,
+)
 
 class Card:
     card_class = 'Card'
     card_names = []
     ramp = False
+    priority = 0
     def __init__(
             self,
             name: Optional[str] = None,
@@ -50,22 +55,51 @@ class Card:
         self.nonpermanent = False
         self.creature = False
         self.land = False
-        for t in ['instant', 'sorcery']:
-            if t in self.types:
-                self.spell = True
-                self.nonpermanent = True
-        for t in ['creature', 'artifact', 'enchantment',  'planeswalker', 'battle']:
-            if t in self.types:
-                self.spell = True
-                self.permanent = True
+        self.artifact = False
+        self.enchantment = False
+        self.planeswalker = False
+        self.battle = False
+        self.instant = False
+        self.sorcery = False
+        if "instant" in self.types:
+            self.instant = True
+            self.spell = True
+            self.nonpermanent = True
+        if "sorcery" in self.types:
+            self.sorcery = True
+            self.spell = True
+            self.nonpermanent = True
         if 'creature' in self.types:
             self.creature = True
+            self.spell = True
+            self.permanent = True
+        if 'artifact' in self.types:
+            self.artifact = True
+            self.spell = True
+            self.permanent = True
+        if 'enchantment' in self.types:
+            self.enchantment = True
+            self.spell = True
+            self.permanent = True
+        if 'planeswalker' in self.types:
+            self.planeswalker = True
+            self.spell = True
+            self.permanent = True
+        if 'battle' in self.types:
+            self.battle = True
+            self.spell = True
+            self.permanent = True
         if 'land' in self.types:
             self.permanent = True
             self.land = True
         self.mdfc = '//' in self.name
 
     def __lt__(self, other):
+        if self.priority == other.priority:
+            self.cmc < other.cmc
+        else:
+            return self.priority < other.priority
+
         if ('Draw' not in self.card_class) and ('Draw' in other.card_class):
             return True
         elif ('Draw' in self.card_class) and ('Draw' not in other.card_class):
@@ -104,6 +138,12 @@ class Card:
         if self.goldfisher.verbose:
             print(f"Played {self.printable}")
         self.mana_spent_when_played = self.cmc
+        if self.creature:
+            self.goldfisher.creatures_played += 1
+        if self.enchantment:
+            self.goldfisher.enchantments_played += 1
+        if self.artifact:
+            self.goldfisher.artifacts_played += 1
         return self
     
     def played_as_land(self):
@@ -119,6 +159,7 @@ class Land(Card):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.printable = f"(Land) {self.name}"
+        self.tapped = False
 
 class ManaProducer(Card):
     card_class = 'ManaProducer'
@@ -218,6 +259,20 @@ class ScalingManaProducer(Card):
         self.goldfisher.mana_production += self.scaling_mana
         return self
 
+class CryptolithRite(Card):
+    card_class = 'CryptolithRite'
+    card_names = [
+        "Gemhide Sliver",
+        "Enduring Vitality",
+        "Cryptolith Rite",
+        "Manaweft Sliver",
+    ]
+    ramp = True
+
+    def when_played(self):
+        super().when_played()
+        self.goldfisher.mana_functions.append(cryptolith_rites)
+        return self
 
 class CostReducer(Card):
     card_class = 'CostReducer'
@@ -227,6 +282,8 @@ class CostReducer(Card):
         "Hamza, Guardian of Arashin",
         "Umori, the Collector", # tommy slimes
     ]
+    ramp = True
+    priority = 2
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -254,6 +311,48 @@ class CostReducer(Card):
         self.goldfisher.creature_cost_reduction += self.creature_cost_reduction
         self.goldfisher.spell_cost_reduction += self.spell_cost_reduction
         return self
+    
+class Tutor(Card):
+    card_class = 'Tutor'
+    card_names = [
+        "Green Sun's Zenith",
+        "Finale of Devastation",
+    ]
+    ramp = True
+    priority = 3
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.name in [
+            "Green Sun's Zenith",
+            "Finale of Devastation",
+        ]:
+            self.tutor_targets = [
+                "Gemhide Sliver",
+                "Manaweft Sliver",
+                "Enduring Vitality",
+                "Argothian Enchantress,"
+                "Sythis, Harvest's Hand,"
+                "Setessan Champion,"
+                "Satyr Enchanter,"
+                "Verduran Enchantress,"
+                "Eidolon of Blossoms,"
+            ]
+        else:
+            raise ValueError(f"Unknown cost reducer {self.name}")
+
+    def when_played(self):
+        super().when_played()
+        for target in self.tutor_targets:
+            if target in self.goldfisher.deckdict:
+                card = self.goldfisher.deckdict[target]
+                if card.zone == self.goldfisher.deck:
+                    card.change_zone(self.goldfisher.hand)
+                    break
+        return self
+
+
         
 
 class CantripDraw(Card):
@@ -271,6 +370,7 @@ class CantripDraw(Card):
         "Mystical Tutor",
         "See the Truth",
     ]
+    priority = 1
 
     def when_played(self):
         super().when_played()
@@ -295,6 +395,7 @@ class Draw(Card):
         "Mulch", # tommy slimes
         "Urban Evolution", # tommy slimes
     ]
+    priority = 1
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -344,6 +445,7 @@ class DrawDiscard(Card):
         "Prismari Command",
         "Deadly Dispute",
     ]
+    priority = 1
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -421,6 +523,7 @@ class PerTurnDraw(Card):
         "Leinore, Autumn Sovereign",
         "Compost", # tommy slimes
     ]
+    priority = 1
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -454,6 +557,7 @@ class PerCastDraw(Card):
         "Vanquisher's Banner", # tommy slimes
         "Tribute to the World Tree", # tommy slimes
     ]
+    priority = 1
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
