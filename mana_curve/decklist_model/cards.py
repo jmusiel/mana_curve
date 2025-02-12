@@ -135,8 +135,7 @@ class Card:
         return cost
 
     def when_played(self):
-        if self.goldfisher.verbose:
-            print(f"Played {self.printable}")
+        self.goldfisher.log.append(f"Played {self.printable}")
         self.mana_spent_when_played = self.cmc
         if self.creature:
             self.goldfisher.creatures_played += 1
@@ -147,8 +146,7 @@ class Card:
         return self
     
     def played_as_land(self):
-        if self.goldfisher.verbose:
-            print(f"Played as land {self.printable}")
+        self.goldfisher.log.append(f"Played as land {self.printable}")
         self.mana_spent_when_played  = 0
         return self
     

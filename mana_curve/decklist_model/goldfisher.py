@@ -1,4 +1,4 @@
-from mana_curve.decklist_model.decklist import get_decklist, load_decklist, get_basic_island
+from mana_curve.decklist_model.decklist import get_decklist, load_decklist, get_basic_island, get_deckpath
 from mana_curve.decklist_model.decklist import main as save_archidekt
 from mana_curve.decklist_model.cards import card_factory
 import bisect
@@ -11,6 +11,8 @@ from mana_curve.decklist_model.mana_functions import (
     land_mana,
     mana_rocks,
 )
+from collections import defaultdict
+from mana_curve.decklist_model.record_games import save_game_records
 
 import argparse
 import pprint
@@ -59,6 +61,12 @@ def get_parser():
         default=[
         ],
     )
+    parser.add_argument(
+        "--record_results",
+        type=str,
+        default="quartile",
+    )
+
     return parser
 
 class Goldfisher:
@@ -75,6 +83,7 @@ class Goldfisher:
         for i in to_pop:
             decklist_dict.pop(i)
 
+        self.deck_name = kwargs.get('deck_name', "_-_".join([card.name for card in self.commanders]).replace(" ", "_").replace(",", ""))
         self.decklist = [card_factory(**card, goldfisher=self, index=i) for i, card in enumerate(decklist_dict)]
         self.deckdict = {card.name:card for card in self.decklist}
         self.turns = turns
@@ -84,7 +93,23 @@ class Goldfisher:
         self.land_count = len([card for card in self.decklist if card.land])
         self.original_card_count = len(self.decklist)
 
+        self.setup_record(kwargs)
+
         self.reset()
+
+    def setup_record(self, kwargs):
+        self.record_quartile = False
+        self.record_decile = False
+        self.record_centile = False
+        if kwargs["record_results"] == "quartile":
+            self.record_quartile = True
+            self.record_decile = True
+            self.record_centile = True
+        elif kwargs["record_results"] == "decile":
+            self.record_decile = True
+            self.record_centile = True
+        elif kwargs["record_results"] == "centile":
+            self.record_centile = True
 
     def set_lands(self, land_count, cuts=[]):
         cutted = []
@@ -136,6 +161,7 @@ class Goldfisher:
         self.battlefield = []
         self.exile = []
         self.lands = []
+        self.starting_hand = []
         # reset commanders and deck
         for card in self.commanders:
             card.zone = self.command_zone
@@ -160,10 +186,12 @@ class Goldfisher:
         self.creatures_played = 0
         self.enchantments_played = 0
         self.artifacts_played = 0
+        # reset record
+        self.log = []
 
     def draw(self):
         if len(self.deck) == 0:
-            if self.verbose: print(f"Draw failed, deck is empty")
+            self.log.append(f"Draw failed, deck is empty")
             self.draws += 1
             return
         drawn_i = self.deck.pop()
@@ -171,21 +199,20 @@ class Goldfisher:
         drawn.zone = self.hand
         self.hand.append(drawn_i)
         self.draws += 1
-        if self.verbose: print(f"Draw {drawn.printable}")
+        self.log.append(f"Draw {drawn.printable}")
 
     def randomdiscard(self):
         discarded_i = random.choice(self.hand)
         discarded = self.decklist[discarded_i]
         discarded.change_zone(self.yard)
-        if self.verbose: print(f"Discarded {discarded.printable}")
+        self.log.append(f"Discarded {discarded.printable}")
 
     def mulligan(self):
         while True:
-            if self.verbose:
-                if self.mulligans == -1:
-                    print("### Opening hand:")
-                else:
-                    print(f"### Mulligan #{self.mulligans+1}")
+            if self.mulligans == -1:
+                self.log.append("### Opening hand:")
+            else:
+                self.log.append(f"### Mulligan #{self.mulligans+1}")
                 
             self.reset()
             cards = 7
@@ -203,7 +230,8 @@ class Goldfisher:
                 break
             if len(self.hand) < 7:
                 break
-        if self.verbose: print(f"### Kept {lands_in_hand}/{len(self.hand)} lands/cards")
+        self.starting_hand = [f"{self.decklist[card_i].name}" for card_i in self.hand]
+        self.log.append(f"### Kept {lands_in_hand}/{len(self.hand)} lands/cards")
 
     def get_mana(self):
         mana = 0
@@ -226,14 +254,14 @@ class Goldfisher:
             if card.get_current_cost() <= available_mana and card.spell:
                 playables.append(card)
 
-        if self.verbose: 
-            playables_string = []
-            for card in playables:
-                if card.commander:
-                    playables_string.append(f"{card.cmc}(c)")
-                else:
-                    playables_string.append(f"{card.cmc}")
-            print(f"--Playable Spells: {playables_string}")
+        # log playables
+        playables_string = []
+        for card in playables:
+            if card.commander:
+                playables_string.append(f"{card.cmc}(c)")
+            else:
+                playables_string.append(f"{card.cmc}")
+        self.log.append(f"--Playable Spells: {playables_string}")
         return playables
     
     def play_land(self):
@@ -296,12 +324,12 @@ class Goldfisher:
             playables = self.get_playables(mana_available)
 
         if mana_available < self.treasure:
-            if self.verbose: print(f"Spent treasures: [{self.treasure}] -> [{self.mana_available}]")
+            self.log.append(f"Spent treasures: [{self.treasure}] -> [{self.mana_available}]")
             self.treasure = mana_available
         return played_effects
     
     def take_turn(self):
-        if self.verbose: print(f"### Turn {self.turn+1} (Lands: {len(self.lands)}, Mana: {self.get_mana()}[{self.treasure}], Hand: {len(self.hand)})")
+        self.log.append(f"### Turn {self.turn+1} (Lands: {len(self.lands)}, Mana: {self.get_mana()}[{self.treasure}], Hand: {len(self.hand)})")
         self.played_land_this_turn = 0
         self.untapped_land_this_turn = 0
         self.tapped_creatures_this_turn = 0
@@ -313,17 +341,30 @@ class Goldfisher:
         return played_effects
     
     def simulate(self):
+        # sample game stats:
+        sample_games = max(self.sims/10, 100)
+        top_centile_threshold = None
+        game_records = {
+            "top_centile": defaultdict(list),
+            "low_centile": defaultdict(list),
+            "top_decile": defaultdict(list),
+            "low_decile": defaultdict(list),
+            "top_quartile": defaultdict(list),
+            "low_quartile": defaultdict(list),
+        }
+
         mana_spent_list = []
         mulls_list = []
         lands_played_list = []
         cards_drawn_list = []
         bad_turns_list = []
         mid_turns_list = []
-        for j in tqdm(range(self.sims)):
+        for j in tqdm(range(self.sims), leave=False):
             total_mana_spent = 0
             lands_played = 0
             bad_turns = 0
             mid_turns = 0
+            all_cards_played = []
             self.mulligans = -1
             self.mulligan()
             for i in range(self.turns):
@@ -331,6 +372,7 @@ class Goldfisher:
                 spells_played = 0
                 played_effects = self.take_turn()
                 for card in played_effects:
+                    all_cards_played.append(card.name)
                     if not card.ramp:
                         mana_spent += card.mana_spent_when_played
                     if card.land:
@@ -348,19 +390,61 @@ class Goldfisher:
             cards_drawn_list.append(self.draws)
             bad_turns_list.append(bad_turns)
             mid_turns_list.append(mid_turns)
+
+            if j > sample_games:
+                if top_centile_threshold is None:
+                    top_centile_threshold = np.percentile(mana_spent_list, 99)
+                    low_centile_threshold = np.percentile(mana_spent_list, 1)
+                    top_decile_threshold = np.percentile(mana_spent_list, 90)
+                    low_decile_threshold = np.percentile(mana_spent_list, 10)
+                    top_quartile_threshold = np.percentile(mana_spent_list, 75)
+                    low_quartile_threshold = np.percentile(mana_spent_list, 25)
+                else:
+                    record_game = None
+                    if self.record_centile and total_mana_spent > top_centile_threshold:
+                        record_game = "top_centile"
+                    elif self.record_centile and total_mana_spent < low_centile_threshold:
+                        record_game = "low_centile"
+                    elif self.record_decile and total_mana_spent > top_decile_threshold:
+                        record_game = "top_decile"
+                    elif self.record_decile and total_mana_spent < low_decile_threshold:
+                        record_game = "low_decile"
+                    elif self.record_quartile and total_mana_spent > top_quartile_threshold:
+                        record_game = "top_quartile"
+                    elif self.record_quartile and total_mana_spent < low_quartile_threshold:
+                        record_game = "low_quartile"
+                    if record_game is not None:
+                        if len(game_records[record_game]["logs"]) < 10:
+                            game_records[record_game]["logs"].append(self.log)
+                        game_records[record_game]["mana"].append(total_mana_spent)
+                        game_records[record_game]["lands"].append(lands_played)
+                        game_records[record_game]["mulls"].append(self.mulligans)
+                        game_records[record_game]["draws"].append(self.draws)
+                        game_records[record_game]["bad_turns"].append(bad_turns)
+                        game_records[record_game]["mid_turns"].append(mid_turns)
+                        game_records[record_game]["surplus mana production"].append(self.mana_production)
+                        game_records[record_game]["nonpermanent cost reduction"].append(self.nonpermanent_cost_reduction)
+                        game_records[record_game]["permanent cost reduction"].append(self.permanent_cost_reduction)
+                        game_records[record_game]["spell cost reduction"].append(self.spell_cost_reduction)
+                        game_records[record_game]["per turn effects"].append([card.name for card in self.per_turn_effects])
+                        game_records[record_game]["cast triggers"].append([card.name for card in self.cast_triggers])
+                        game_records[record_game]["starting hand"].append(self.starting_hand)
+                        game_records[record_game]["played cards"].append(all_cards_played)
+                    
+
             if self.verbose: 
+                for line in self.log:
+                    print(line)
                 print(f"\n### Game {j+1} finished")
-                print(f"lands: {len(self.lands)}")
-                print(f"surplus mana production: {self.mana_production}")
-                print(f"nonpermanent cost reduction: {self.nonpermanent_cost_reduction}")
-                print(f"permanent cost reduction: {self.permanent_cost_reduction}")
-                print(f"spell cost reduction: {self.spell_cost_reduction}")
-                print(f"per turn effects:")
-                for card in self.per_turn_effects:
-                    print(f"\t{card.name}")
-                print(f"cast triggers:")
-                for card in self.cast_triggers:
-                    print(f"\t{card.name}")
+
+        save_game_records(
+            deck_name=self.deck_name, 
+            game_records=game_records, 
+            decklist=[card.name for card in self.decklist], 
+            commanders=[card.name for card in self.commanders], 
+            land_count=self.land_count, 
+            sims=self.sims
+        )
 
         mean_mana = np.mean(mana_spent_list)
         mean_lands = np.mean(lands_played_list)
@@ -411,7 +495,7 @@ def main(config):
     min_lands = config['min_lands'] or goldfisher.land_count
     max_lands = (config['max_lands'] or goldfisher.land_count) + 1
     outcomes = []
-    for i in range(min_lands, max_lands):
+    for i in tqdm(range(min_lands, max_lands), total=max_lands-min_lands):
         goldfisher.set_lands(i, cuts=config['cuts'])
         outcome = goldfisher.simulate()
         outcomes.append(outcome[:-1])
