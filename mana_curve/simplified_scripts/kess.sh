@@ -1,7 +1,7 @@
 #!/bin/bash
 python /Users/jmusiel/vscode_workspace/personal_projects/mana_curve/mana_curve/simplified.py \
 --num_lands 36 \
---land_range 7 \
+--land_range 10 \
 --step_size 1 \
 --num_simulations 100000 \
 --num_turns 10 \
@@ -12,7 +12,7 @@ python /Users/jmusiel/vscode_workspace/personal_projects/mana_curve/mana_curve/s
 --num_cards 100 \
 --mana_curve 1 13 12 16 11 4 5 1 0 \
 --verbose \
---commander_effect kess \
+# --commander_effect kess \
 # --mulligan_at_least_one_spell 1 \
 
 # --mana_curve 1 13 12 16 11 4 5 1 0 \ # (37 lands, excluding cabal, including lorien) (MDFCs excluded) (cabal=0, lorien=land, added bombardment)

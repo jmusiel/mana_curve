@@ -1,13 +1,13 @@
 {
   "performance_stats": {
     "num_turns_objective": 9,
-    "total_mana_spent": 43.666,
-    "nonramp_nondraw_mana_spent": 34.455,
-    "lands": 43,
+    "total_mana_spent": 44.121,
+    "nonramp_nondraw_mana_spent": 35.056,
+    "lands": 44,
     "ramp": 17,
     "draw": 2,
-    "value": 37,
-    "curve": 5.4035087719298245
+    "value": 36,
+    "curve": 5.071428571428571
   },
   "decklist": [
     {
@@ -896,6 +896,54 @@
       "cmc": 0
     },
     {
+      "name": "Wastes",
+      "quantity": 1,
+      "flex": true,
+      "is_land": true,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": false,
+      "is_commander": false,
+      "cmc": 0
+    },
+    {
+      "name": "Mystic Forge",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": true,
+      "is_value": false,
+      "is_commander": false,
+      "draw_type": "cast",
+      "draw_amount": 1,
+      "cmc": 4
+    },
+    {
+      "name": "Soul of New Phyrexia",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 6
+    },
+    {
+      "name": "Ugin, the Ineffable",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": true,
+      "is_draw": false,
+      "is_value": false,
+      "is_commander": false,
+      "ramp_type": "rock",
+      "ramp_amount": 2,
+      "cmc": 6
+    },
+    {
       "name": "Sol Talisman",
       "quantity": 1,
       "flex": true,
@@ -907,6 +955,19 @@
       "ramp_type": "rock",
       "ramp_amount": 2,
       "cmc": 0
+    },
+    {
+      "name": "Hedron Archive",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": true,
+      "is_draw": false,
+      "is_value": false,
+      "is_commander": false,
+      "ramp_type": "rock",
+      "ramp_amount": 2,
+      "cmc": 4
     },
     {
       "name": "Breaker of Creation",
@@ -931,7 +992,29 @@
       "cmc": 6
     },
     {
-      "name": "Sisay's Ring",
+      "name": "Eldrazi Conscription",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 8
+    },
+    {
+      "name": "Echoes of Eternity",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 6
+    },
+    {
+      "name": "Ur-Golem's Eye",
       "quantity": 1,
       "flex": true,
       "is_land": false,
@@ -944,17 +1027,102 @@
       "cmc": 4
     },
     {
-      "name": "Mystic Forge",
+      "name": "Moonsilver Key",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": true,
+      "is_draw": false,
+      "is_value": false,
+      "is_commander": false,
+      "ramp_type": "rock",
+      "ramp_amount": 3,
+      "cmc": 5
+    },
+    {
+      "name": "Plague Myr",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": true,
+      "is_draw": false,
+      "is_value": false,
+      "is_commander": false,
+      "ramp_type": "rock",
+      "ramp_amount": 1,
+      "cmc": 2
+    },
+    {
+      "name": "Hand of Emrakul",
       "quantity": 1,
       "flex": true,
       "is_land": false,
       "is_ramp": false,
-      "is_draw": true,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 9
+    },
+    {
+      "name": "Conduit of Ruin",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 6
+    },
+    {
+      "name": "Desecrate Reality",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 7
+    },
+    {
+      "name": "Stonespeaker Crystal",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": true,
+      "is_draw": false,
       "is_value": false,
       "is_commander": false,
-      "draw_type": "cast",
-      "draw_amount": 1,
+      "ramp_type": "rock",
+      "ramp_amount": 2,
       "cmc": 4
+    },
+    {
+      "name": "Manakin",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": true,
+      "is_draw": false,
+      "is_value": false,
+      "is_commander": false,
+      "ramp_type": "rock",
+      "ramp_amount": 1,
+      "cmc": 2
+    },
+    {
+      "name": "Hedron Crawler",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": true,
+      "is_draw": false,
+      "is_value": false,
+      "is_commander": false,
+      "ramp_type": "rock",
+      "ramp_amount": 1,
+      "cmc": 2
     },
     {
       "name": "Spawnbed Protector",
@@ -979,174 +1147,6 @@
       "draw_type": "turn",
       "draw_amount": 1,
       "cmc": 4
-    },
-    {
-      "name": "Ulamog, the Ceaseless Hunger",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 10
-    },
-    {
-      "name": "Ugin, the Ineffable",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": true,
-      "is_draw": false,
-      "is_value": false,
-      "is_commander": false,
-      "ramp_type": "rock",
-      "ramp_amount": 2,
-      "cmc": 6
-    },
-    {
-      "name": "Hand of Emrakul",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 9
-    },
-    {
-      "name": "Flayer of Loyalties",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 10
-    },
-    {
-      "name": "Skyclave Relic",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": true,
-      "is_draw": false,
-      "is_value": false,
-      "is_commander": false,
-      "ramp_type": "rock",
-      "ramp_amount": 3,
-      "cmc": 6
-    },
-    {
-      "name": "Blightsteel Colossus",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 12
-    },
-    {
-      "name": "Ulamog's Dreadsire",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 10
-    },
-    {
-      "name": "Everflowing Chalice",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": true,
-      "is_draw": false,
-      "is_value": false,
-      "is_commander": false,
-      "ramp_type": "rock",
-      "ramp_amount": 2,
-      "cmc": 4
-    },
-    {
-      "name": "Plague Myr",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": true,
-      "is_draw": false,
-      "is_value": false,
-      "is_commander": false,
-      "ramp_type": "rock",
-      "ramp_amount": 1,
-      "cmc": 2
-    },
-    {
-      "name": "Prismatic Lens",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": true,
-      "is_draw": false,
-      "is_value": false,
-      "is_commander": false,
-      "ramp_type": "rock",
-      "ramp_amount": 1,
-      "cmc": 2
-    },
-    {
-      "name": "Fractured Powerstone",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": true,
-      "is_draw": false,
-      "is_value": false,
-      "is_commander": false,
-      "ramp_type": "rock",
-      "ramp_amount": 1,
-      "cmc": 2
-    },
-    {
-      "name": "Stonespeaker Crystal",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": true,
-      "is_draw": false,
-      "is_value": false,
-      "is_commander": false,
-      "ramp_type": "rock",
-      "ramp_amount": 2,
-      "cmc": 4
-    },
-    {
-      "name": "Bane of Bala Ged",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 7
-    },
-    {
-      "name": "Deceiver of Form",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 7
     }
   ]
 }

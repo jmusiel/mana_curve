@@ -1,13 +1,13 @@
 {
   "performance_stats": {
     "num_turns_objective": 9,
-    "total_mana_spent": 43.858,
-    "nonramp_nondraw_mana_spent": 34.257,
+    "total_mana_spent": 45.793,
+    "nonramp_nondraw_mana_spent": 34.898,
     "lands": 42,
-    "ramp": 18,
+    "ramp": 20,
     "draw": 2,
-    "value": 37,
-    "curve": 5.155172413793103
+    "value": 35,
+    "curve": 4.982758620689655
   },
   "decklist": [
     {
@@ -885,7 +885,40 @@
       "cmc": 0
     },
     {
-      "name": "Ur-Golem's Eye",
+      "name": "Bane of Bala Ged",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 7
+    },
+    {
+      "name": "Conduit of Ruin",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 6
+    },
+    {
+      "name": "Soul of New Phyrexia",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 6
+    },
+    {
+      "name": "Hedron Archive",
       "quantity": 1,
       "flex": true,
       "is_land": false,
@@ -898,7 +931,7 @@
       "cmc": 4
     },
     {
-      "name": "Stonespeaker Crystal",
+      "name": "Hedron Crawler",
       "quantity": 1,
       "flex": true,
       "is_land": false,
@@ -907,11 +940,83 @@
       "is_value": false,
       "is_commander": false,
       "ramp_type": "rock",
-      "ramp_amount": 2,
-      "cmc": 4
+      "ramp_amount": 1,
+      "cmc": 2
+    },
+    {
+      "name": "Prismatic Lens",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": true,
+      "is_draw": false,
+      "is_value": false,
+      "is_commander": false,
+      "ramp_type": "rock",
+      "ramp_amount": 1,
+      "cmc": 2
+    },
+    {
+      "name": "Eldrazi Conscription",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 8
     },
     {
       "name": "Desecrate Reality",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 7
+    },
+    {
+      "name": "Spawnbed Protector",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": false,
+      "is_value": true,
+      "is_commander": false,
+      "cmc": 7
+    },
+    {
+      "name": "Karn, Living Legacy",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": false,
+      "is_draw": true,
+      "is_value": false,
+      "is_commander": false,
+      "draw_type": "turn",
+      "draw_amount": 1,
+      "cmc": 4
+    },
+    {
+      "name": "Manakin",
+      "quantity": 1,
+      "flex": true,
+      "is_land": false,
+      "is_ramp": true,
+      "is_draw": false,
+      "is_value": false,
+      "is_commander": false,
+      "ramp_type": "rock",
+      "ramp_amount": 1,
+      "cmc": 2
+    },
+    {
+      "name": "Meteor Golem",
       "quantity": 1,
       "flex": true,
       "is_land": false,
@@ -935,18 +1040,7 @@
       "cmc": 4
     },
     {
-      "name": "Endbringer",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 6
-    },
-    {
-      "name": "Hedron Crawler",
+      "name": "Skyclave Relic",
       "quantity": 1,
       "flex": true,
       "is_land": false,
@@ -955,8 +1049,8 @@
       "is_value": false,
       "is_commander": false,
       "ramp_type": "rock",
-      "ramp_amount": 1,
-      "cmc": 2
+      "ramp_amount": 3,
+      "cmc": 6
     },
     {
       "name": "Sol Talisman",
@@ -972,48 +1066,30 @@
       "cmc": 0
     },
     {
-      "name": "Calamity of the Titans",
+      "name": "Moonsilver Key",
       "quantity": 1,
       "flex": true,
       "is_land": false,
-      "is_ramp": false,
+      "is_ramp": true,
       "is_draw": false,
-      "is_value": true,
+      "is_value": false,
       "is_commander": false,
-      "cmc": 6
+      "ramp_type": "rock",
+      "ramp_amount": 3,
+      "cmc": 5
     },
     {
-      "name": "Bane of Bala Ged",
+      "name": "Everflowing Chalice",
       "quantity": 1,
       "flex": true,
       "is_land": false,
-      "is_ramp": false,
+      "is_ramp": true,
       "is_draw": false,
-      "is_value": true,
+      "is_value": false,
       "is_commander": false,
-      "cmc": 7
-    },
-    {
-      "name": "Echoes of Eternity",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 6
-    },
-    {
-      "name": "Flayer of Loyalties",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 10
+      "ramp_type": "rock",
+      "ramp_amount": 2,
+      "cmc": 4
     },
     {
       "name": "Sisay's Ring",
@@ -1029,7 +1105,7 @@
       "cmc": 4
     },
     {
-      "name": "Deceiver of Form",
+      "name": "Hand of Emrakul",
       "quantity": 1,
       "flex": true,
       "is_land": false,
@@ -1037,7 +1113,7 @@
       "is_draw": false,
       "is_value": true,
       "is_commander": false,
-      "cmc": 7
+      "cmc": 9
     },
     {
       "name": "Solemn Simulacrum",
@@ -1053,54 +1129,6 @@
       "cmc": 4
     },
     {
-      "name": "Plague Myr",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": true,
-      "is_draw": false,
-      "is_value": false,
-      "is_commander": false,
-      "ramp_type": "rock",
-      "ramp_amount": 1,
-      "cmc": 2
-    },
-    {
-      "name": "Thought Vessel",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": true,
-      "is_draw": false,
-      "is_value": false,
-      "is_commander": false,
-      "ramp_type": "rock",
-      "ramp_amount": 1,
-      "cmc": 2
-    },
-    {
-      "name": "Blightsteel Colossus",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 12
-    },
-    {
-      "name": "Breaker of Creation",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 8
-    },
-    {
       "name": "Wayfarer's Bauble",
       "quantity": 1,
       "flex": true,
@@ -1114,18 +1142,7 @@
       "cmc": 3
     },
     {
-      "name": "Spawnbed Protector",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": false,
-      "is_value": true,
-      "is_commander": false,
-      "cmc": 7
-    },
-    {
-      "name": "Ugin, the Ineffable",
+      "name": "Empowered Autogenerator",
       "quantity": 1,
       "flex": true,
       "is_land": false,
@@ -1135,19 +1152,6 @@
       "is_commander": false,
       "ramp_type": "rock",
       "ramp_amount": 2,
-      "cmc": 6
-    },
-    {
-      "name": "Karn, Living Legacy",
-      "quantity": 1,
-      "flex": true,
-      "is_land": false,
-      "is_ramp": false,
-      "is_draw": true,
-      "is_value": false,
-      "is_commander": false,
-      "draw_type": "turn",
-      "draw_amount": 1,
       "cmc": 4
     }
   ]

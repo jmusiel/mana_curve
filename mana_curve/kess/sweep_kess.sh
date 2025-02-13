@@ -3,7 +3,7 @@ cd ..
 python sweep_over_template.py \
 --template kess/kess_template.json \
 --deck_name kess \
---samples 1000 \
+--samples 10000 \
 --simulations 1000 \
 --num_turns 8 \
 --mana_threshold 7 \
