@@ -44,6 +44,7 @@ class Card:
         self.goldfisher = goldfisher
         self.index = index
         self.printable = name
+        self.unique_name = f"{self.name} ({self.index})"
 
         self.sub_types = [t.lower() for t in self.sub_types]
         self.types = [t.lower() for t in self.types]
@@ -132,6 +133,9 @@ class Card:
             cost -= self.goldfisher.spell_cost_reduction
         if self.creature:
             cost -= self.goldfisher.creature_cost_reduction
+        if self.enchantment:
+            cost -= self.goldfisher.enchantment_cost_reduction
+        cost = max(1, cost)
         return cost
 
     def when_played(self):
@@ -177,7 +181,11 @@ class ManaProducer(Card):
         "Talisman of Hierarchy",
         "Deep Gnome Terramancer",
         "Cultivate", # tommy slimes
-
+        "Utopia Sprawl",
+        "Wild Growth",
+        "Overgrowth",
+        "Fertile Ground",
+        "Wolfwillow Haven",
     ]
     ramp = True
     def __init__(self, *args, **kwargs):
@@ -187,7 +195,17 @@ class ManaProducer(Card):
             "Fellwar Stone",
             "Sakura-Tribe Elder",
             "Incubation Druid",
+            "Commander's Sphere",
+            "Orzhov Signet",
+            "Solemn Simulacrum",
+            "Claim Jumper",
+            "Talisman of Hierarchy",
+            "Deep Gnome Terramancer",
             "Cultivate", # tommy slimes
+            "Utopia Sprawl",
+            "Wild Growth",
+            "Fertile Ground",
+            "Wolfwillow Haven",
         ]:
             self.mana = 1
         elif self.name in [
@@ -195,12 +213,7 @@ class ManaProducer(Card):
             "Relic of Sauron",
             "Rishkar, Peema Renegade",
             "Katilda, Dawnhart Prime",
-            "Commander's Sphere",
-            "Orzhov Signet",
-            "Solemn Simulacrum",
-            "Claim Jumper",
-            "Talisman of Hierarchy",
-            "Deep Gnome Terramancer",
+            "Overgrowth",
         ]:
             self.mana = 2
         elif self.name in [
@@ -227,6 +240,7 @@ class ScalingManaProducer(Card):
         "Kodama of the West Tree",
     ]
     ramp = True
+    priority = 2
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # initial mana production
@@ -266,10 +280,34 @@ class CryptolithRite(Card):
         "Manaweft Sliver",
     ]
     ramp = True
+    priority = 2
 
     def when_played(self):
         super().when_played()
         self.goldfisher.mana_functions.append(cryptolith_rites)
+        return self
+    
+class Sanctum(Card):
+    card_class = 'Sanctum'
+    card_names = [
+        "Serra's Sanctum",
+        "Sanctum Weaver",
+    ]
+    priority = 2
+
+    def __init__(self, *args, **kwargs):
+        if kwargs['name'] == "Serra's Sanctum":
+            kwargs['types'] = ['artifact']
+        super().__init__(*args, **kwargs)
+
+    def when_played(self):
+        super().when_played()
+        self.goldfisher.mana_functions.append(enchantment_sanctums)
+        return self
+    
+    def when_played_as_land(self):
+        super().when_played_as_land()
+        self.goldfisher.mana_functions.append(enchantment_sanctums)
         return self
 
 class CostReducer(Card):
@@ -279,6 +317,8 @@ class CostReducer(Card):
         "Case of the Ransacked Lab",
         "Hamza, Guardian of Arashin",
         "Umori, the Collector", # tommy slimes
+        "Jukai Naturalist",
+        "Inquisitive Glimmer",
     ]
     ramp = True
     priority = 2
@@ -289,6 +329,7 @@ class CostReducer(Card):
         self.permanent_cost_reduction = 0
         self.creature_cost_reduction = 0
         self.spell_cost_reduction = 0
+        self.enchantment_cost_reduction = 0
         if self.name in [
             "Thunderclap Drake",
             "Case of the Ransacked Lab",
@@ -299,6 +340,11 @@ class CostReducer(Card):
             "Umori, the Collector", # tommy slimes
         ]:
             self.creature_cost_reduction = 1
+        elif self.name in [
+            "Jukai Naturalist",
+            "Inquisitive Glimmer",
+        ]:
+            self.enchantment_cost_reduction = 1
         else:
             raise ValueError(f"Unknown cost reducer {self.name}")
 
@@ -308,6 +354,7 @@ class CostReducer(Card):
         self.goldfisher.permanent_cost_reduction += self.permanent_cost_reduction
         self.goldfisher.creature_cost_reduction += self.creature_cost_reduction
         self.goldfisher.spell_cost_reduction += self.spell_cost_reduction
+        self.goldfisher.enchantment_cost_reduction += self.enchantment_cost_reduction
         return self
     
 class Tutor(Card):
@@ -330,12 +377,13 @@ class Tutor(Card):
                 "Gemhide Sliver",
                 "Manaweft Sliver",
                 "Enduring Vitality",
-                "Argothian Enchantress,"
-                "Sythis, Harvest's Hand,"
-                "Setessan Champion,"
-                "Satyr Enchanter,"
-                "Verduran Enchantress,"
-                "Eidolon of Blossoms,"
+                "Sanctum Weaver",
+                "Argothian Enchantress",
+                "Sythis, Harvest's Hand",
+                "Setessan Champion",
+                "Satyr Enchanter",
+                "Verduran Enchantress",
+                "Eidolon of Blossoms",
             ]
         else:
             raise ValueError(f"Unknown cost reducer {self.name}")
@@ -345,7 +393,50 @@ class Tutor(Card):
         for target in self.tutor_targets:
             if target in self.goldfisher.deckdict:
                 card = self.goldfisher.deckdict[target]
+                # card = self.goldfisher.decklist[card_i]
                 if card.zone == self.goldfisher.deck:
+                    self.goldfisher.log.append(f"Tutored {card.printable}")
+                    card.change_zone(self.goldfisher.hand)
+                    break
+                else:
+                    self.goldfisher.log.append(f"Failed to find {card.printable}")
+        return self
+    
+
+class LandTutor(Card):
+    card_class = 'LandTutor'
+    card_names = [
+        "Tolaria West",
+        "Urza's Cave",
+    ]
+    ramp = True
+    priority = 3
+
+    def __init__(self, *args, **kwargs):
+        kwargs['types'] += ['sorcery']
+        kwargs['cmc'] = 3
+        super().__init__(*args, **kwargs)
+        self.tapped = False
+        if self.name == "Tolaria West":
+            self.tapped = True
+
+        if self.name in [
+            "Tolaria West",
+            "Urza's Cave",
+        ]:
+            self.tutor_targets = [
+                "Serra's Sanctum",
+            ]
+        else:
+            raise ValueError(f"Unknown land tutor {self.name}")
+
+    def when_played(self):
+        super().when_played()
+        for target in self.tutor_targets:
+            if target in self.goldfisher.deckdict:
+                card = self.goldfisher.deckdict[target]
+                if card.zone == self.goldfisher.deck:
+                    self.goldfisher.log.append(f"Tutored {card.printable}")
                     card.change_zone(self.goldfisher.hand)
                     break
         return self
@@ -520,6 +611,8 @@ class PerTurnDraw(Card):
         "Toski, Bearer of Secrets",
         "Leinore, Autumn Sovereign",
         "Compost", # tommy slimes
+        "Tuvasa the Sunlit",
+        "Mystic Remora",
     ]
     priority = 1
 
@@ -532,6 +625,8 @@ class PerTurnDraw(Card):
             "Toski, Bearer of Secrets",
             "Leinore, Autumn Sovereign",
             "Compost", # tommy slimes
+            "Tuvasa the Sunlit",
+            "Mystic Remora",
         ]:
             self.redraw = 1
         else:
@@ -554,6 +649,16 @@ class PerCastDraw(Card):
         "Guardian Project",
         "Vanquisher's Banner", # tommy slimes
         "Tribute to the World Tree", # tommy slimes
+        "Mesa Enchantress",
+        "Satyr Enchanter",
+        "Enchantress's Presence",
+        "Entity Tracker",
+        "Eidolon of Blossoms",
+        "Setessan Champion",
+        "Sythis, Harvest's Hand",
+        "Verduran Enchantress",
+        "Argothian Enchantress",
+
     ]
     priority = 1
 
@@ -563,6 +668,7 @@ class PerCastDraw(Card):
         self.permanent_cast_draw = 0
         self.spell_cast_draw = 0
         self.creature_cast_draw = 0
+        self.enchantment_cast_draw = 0
 
         if self.name in [
             "Archmage of Runes",
@@ -582,6 +688,18 @@ class PerCastDraw(Card):
             "Tribute to the World Tree", # tommy slimes
         ]:
             self.creature_cast_draw = 1
+        elif self.name in [
+            "Mesa Enchantress",
+            "Satyr Enchanter",
+            "Enchantress's Presence",
+            "Entity Tracker",
+            "Eidolon of Blossoms",
+            "Setessan Champion",
+            "Sythis, Harvest's Hand",
+            "Verduran Enchantress",
+            "Argothian Enchantress",
+        ]:
+            self.enchantment_cast_draw = 1
         else:
             raise ValueError(f"Unknown draw {self.name}")
         
@@ -607,6 +725,9 @@ class PerCastDraw(Card):
                 self.goldfisher.draw()
         if casted_card.creature:
             for i in range(self.creature_cast_draw):
+                self.goldfisher.draw()
+        if casted_card.enchantment:
+            for i in range(self.enchantment_cast_draw):
                 self.goldfisher.draw()
         return self
     
