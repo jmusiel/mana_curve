@@ -4,3 +4,5 @@
 *.csv
 **/top_decklists/**
 *_template.json
+decks/**/*.txt
+decks/**/*.png
