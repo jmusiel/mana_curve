@@ -6,3 +6,4 @@
 *_template.json
 decks/**/*.txt
 decks/**/*.png
+*.egg-info/**
