@@ -273,20 +273,9 @@ class Goldfisher:
     
     def play_land(self):
         played_effects = []
-        while self.played_land_this_turn < self.lands_per_turn:
-            mdfc = None
-            land = None
-            for i in self.hand:
-                card = self.decklist[i]
-                if card.land:
-                    if card.mdfc:
-                        mdfc = card
-                    else:
-                        land = card
-                        break
-            if land is None:
-                land = mdfc
-            if land is not None:
+        playable_lands = sorted([self.decklist[i] for i in self.hand if self.decklist[i].land])
+        for land in reversed(playable_lands):
+            if self.played_land_this_turn < self.lands_per_turn:
                 land.change_zone(self.lands)
                 played_effects.append(land.played_as_land())
                 self.played_land_this_turn += 1

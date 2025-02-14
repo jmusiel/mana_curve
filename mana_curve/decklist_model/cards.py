@@ -9,6 +9,7 @@ class Card:
     card_names = []
     ramp = False
     priority = 0
+    land_priority = 0
     def __init__(
             self,
             name: Optional[str] = None,
@@ -93,20 +94,18 @@ class Card:
         if 'land' in self.types:
             self.permanent = True
             self.land = True
-        self.mdfc = '//' in self.name
+        
+        self.mdfc = False
+        if self.land and self.spell:
+            self.mdfc = True
+            self.land_priority = -1
 
     def __lt__(self, other):
-        if self.priority == other.priority:
-            self.cmc < other.cmc
-        else:
-            return self.priority < other.priority
-
-        if ('Draw' not in self.card_class) and ('Draw' in other.card_class):
-            return True
-        elif ('Draw' in self.card_class) and ('Draw' not in other.card_class):
-            return False
-        else:
-            return self.cmc < other.cmc
+        if not self.priority == other.priority:
+            return self.priority < other.priority            
+        if not self.land_priority == other.land_priority:
+            return self.land_priority < other.land_priority
+        return self.cmc < other.cmc
 
 
     def __eq__(self, other):
@@ -186,6 +185,8 @@ class ManaProducer(Card):
         "Overgrowth",
         "Fertile Ground",
         "Wolfwillow Haven",
+        "Kodama's Reach",
+        "Farseek",
     ]
     ramp = True
     def __init__(self, *args, **kwargs):
@@ -206,6 +207,8 @@ class ManaProducer(Card):
             "Wild Growth",
             "Fertile Ground",
             "Wolfwillow Haven",
+            "Kodama's Reach",
+            "Farseek",
         ]:
             self.mana = 1
         elif self.name in [
@@ -442,30 +445,6 @@ class LandTutor(Card):
         return self
 
 
-        
-
-class CantripDraw(Card):
-    card_class = 'CantripDraw'
-    card_names = [
-        "Picklock Prankster // Free the Fae",
-        "Frantic Search",
-        "Brainstorm",
-        "Consider",
-        "Thought Scour",
-        "Faithless Looting",
-        "Gitaxian Probe",
-        "Gamble",
-        "Visions of Beyond",
-        "Mystical Tutor",
-        "See the Truth",
-    ]
-    priority = 1
-
-    def when_played(self):
-        super().when_played()
-        self.goldfisher.draw()
-        return self
-    
 class Draw(Card):
     card_class = 'Draw'
     card_names = [
@@ -533,6 +512,17 @@ class DrawDiscard(Card):
         "Maestros Charm",
         "Prismari Command",
         "Deadly Dispute",
+        "Picklock Prankster // Free the Fae",
+        "Frantic Search",
+        "Brainstorm",
+        "Consider",
+        "Thought Scour",
+        "Faithless Looting",
+        "Gitaxian Probe",
+        "Gamble",
+        "Visions of Beyond",
+        "Mystical Tutor",
+        "See the Truth",
     ]
     priority = 1
 
@@ -543,25 +533,31 @@ class DrawDiscard(Card):
         self.seconddraw = 0
         self.make_treasures = 0
 
+
         if self.name in [
+            "Frantic Search",
+            "Brainstorm",
+            "Gitaxian Probe",
+            "Gamble",
+            "Visions of Beyond",
+            "Mystical Tutor",
+            "See the Truth",
+        ]:
+            self.firstdraw = 1
+        elif self.name in [
             "Fact or Fiction",
         ]:
             self.firstdraw = 5
             self.discard = 2
-            self.seconddraw = 0
-            self.make_treasures = 0
         elif self.name in [
             "Windfall",
         ]:
-            self.firstdraw = 0
             self.discard = 100
             self.seconddraw = 6
-            self.make_treasures = 0
         elif self.name in [
             "Unexpected Windfall",
             "Big Score",
         ]:
-            self.firstdraw = 0
             self.discard = 1
             self.seconddraw = 2
             self.make_treasures = 2
@@ -570,21 +566,36 @@ class DrawDiscard(Card):
         ]:
             self.firstdraw = 5
             self.discard = 4
-            self.seconddraw = 0
-            self.make_treasures = 0
+        elif self.name in [
+            "Picklock Prankster // Free the Fae",
+        ]:
+            self.firstdraw = 4
+            self.discard = 3
+        elif self.name in [
+            "Consider",
+        ]:
+            self.firstdraw = 2
+            self.discard = 1
+        elif self.name in [
+            "Thought Scour",
+        ]:
+            self.firstdraw = 3
+            self.discard = 2
+        elif self.name in [
+            "Faithless Looting",
+        ]:
+            self.firstdraw = 2
+            self.discard = 2
         elif self.name in [
             "Prismari Command",
         ]:
             self.firstdraw = 2
             self.discard = 2
-            self.seconddraw = 0
             self.make_treasures = 1
         elif self.name in [
             "Deadly Dispute",
         ]:
             self.firstdraw = 2
-            self.discard = 0
-            self.seconddraw = 0
             self.make_treasures = 1
         else:
             raise ValueError(f"Unknown draw/discard {self.name}")
