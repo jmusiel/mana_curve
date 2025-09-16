@@ -30,7 +30,7 @@ def main(config):
     deck_list = get_decklist(config)
     save_path = get_deckpath(config['deck_name'])
     with open(save_path, 'w') as f:
-        json.dump(deck_list, f)
+        json.dump(deck_list, f, indent=4)
 
 def get_decklist(config):
     pp.pprint(config)
