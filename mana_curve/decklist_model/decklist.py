@@ -135,9 +135,10 @@ def get_hare_apparent():
         "oracle_cmc": 2,
         "cmc": 2,
         "cost": "{1}{W}",
-        "text": "When Hare Apparent enters the battlefield, create a 1/1 white Rabbit creature token.",
+        "text": "When this creature enters, create a number of 1/1 white Rabbit creature tokens equal to the number of other creatures you control named Hare Apparent.\nA deck can have any number of cards named Hare Apparent.",
         "sub_types": [
-            "Rabbit"
+            "Rabbit",
+            "Noble"
         ],
         "super_types": [],
         "types": [
@@ -146,10 +147,10 @@ def get_hare_apparent():
         "identity": [
             "White"
         ],
-        "default_category": None,
-        "user_category": "Creature",
+        "default_category": "Tokens",
+        "user_category": "hare apparent",
         "commander": False
-    }
+    },
 
 if __name__ == "__main__":
     parser = get_parser()
