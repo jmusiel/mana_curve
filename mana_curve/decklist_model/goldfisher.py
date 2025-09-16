@@ -471,10 +471,10 @@ class Goldfisher:
         # consistency = (1-bottom_25_percent)/0.75
 
         con_threshold = 0.25
-        threshold_index = bisect.bisect_left(cumulative_mana, total_mana * con_threshold)
-        threshold_percent = threshold_index / len(mana_spent_list)
-        threshold_mana = sorted_mana[threshold_index]
-        consistency = (1 - threshold_percent)/(1 - con_threshold)
+        threshold_index = bisect.bisect_left(cumulative_mana, total_mana * con_threshold) # index of game where the bottom 25% of all cumulative mana was spent
+        threshold_percent = threshold_index / len(mana_spent_list) # fraction of the games which account for the bottom 25% of mana
+        threshold_mana = sorted_mana[threshold_index] # actual mana spent in the 25th percentile game
+        consistency = (1 - threshold_percent)/(1 - con_threshold) # fraction of 75th percent mana games over the number that should be 0.75
         # consistency = con_threshold/threshold_percent
 
         if self.verbose:
@@ -514,7 +514,7 @@ def main(config):
     print(f"\n-----------------------------------")
     print(f"{config['deck_name']} ({config['turns']} turns, {config['sims']} sims, {min_lands}-{max_lands-1} lands) - max mana @ {max_mana}, max consistency @ {max_consistency}, min bad turns @ {min_bad_turns}, min mid turns @ {min_mid_turns}")
     print(f"-----------------------------------")
-    print(tabulate(outcomes, headers=["Land Ct", "Mana (EV)", "Consistency", "Bad Turns", "Mid Turns", "Lands", "Mulls", "Draws", "25th", "50th", "75th", f"{con_threshold}th% Frac", f"{con_threshold}th% Game"]))
+    print(tabulate(outcomes, headers=["Land Ct", "Mana (EV)", "Consistency", "Bad Turns", "Mid Turns", "Lands", "Mulls", "Draws", "25th", "50th", "75th", f"{int(con_threshold)}th% Frac", f"{int(con_threshold)}th% Game"]))
     
 
 
