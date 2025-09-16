@@ -462,6 +462,7 @@ class Draw(Card):
         "Explore", # tommy slimes
         "Mulch", # tommy slimes
         "Urban Evolution", # tommy slimes
+        "Diresight" # rabbits
     ]
     priority = 1
 
@@ -477,6 +478,7 @@ class Draw(Card):
         elif self.name in [
             "Flame of Anor",
             "Plumb the Forbidden",
+            "Diresight" # rabbits
         ]:
             self.draw = 2
         elif self.name in [
@@ -624,6 +626,13 @@ class PerTurnDraw(Card):
         "Compost", # tommy slimes
         "Tuvasa the Sunlit",
         "Mystic Remora",
+        "Enduring Innocence", # rabbits
+        "Haliya, Guided by Light", # rabbits
+        "Priest of Forgotten Gods", # rabbits
+        "Tocasia's Welcome", # rabbits
+        "Welcoming Vampire", # rabbits
+        "Rumor Gatherer", # rabbits
+        "Morbid Opportunist", # rabbits
     ]
     priority = 1
 
@@ -638,6 +647,13 @@ class PerTurnDraw(Card):
             "Compost", # tommy slimes
             "Tuvasa the Sunlit",
             "Mystic Remora",
+            "Enduring Innocence", # rabbits
+            "Haliya, Guided by Light", # rabbits
+            "Priest of Forgotten Gods", # rabbits
+            "Tocasia's Welcome", # rabbits
+            "Welcoming Vampire", # rabbits
+            "Rumor Gatherer", # rabbits
+            "Morbid Opportunist", # rabbits
         ]:
             self.redraw = 1
         else:
@@ -669,6 +685,8 @@ class PerCastDraw(Card):
         "Sythis, Harvest's Hand",
         "Verduran Enchantress",
         "Argothian Enchantress",
+        "Erebos, Bleak-Hearted", # rabbits
+        "Mentor of the Meek", # rabbits
 
     ]
     priority = 1
@@ -697,6 +715,8 @@ class PerCastDraw(Card):
             "Guardian Project",
             "Vanquisher's Banner", # tommy slimes
             "Tribute to the World Tree", # tommy slimes
+            "Erebos, Bleak-Hearted", # rabbits
+            "Mentor of the Meek", # rabbits
         ]:
             self.creature_cast_draw = 1
         elif self.name in [
