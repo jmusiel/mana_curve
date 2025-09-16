@@ -101,6 +101,7 @@ class Goldfisher:
         self.record_quartile = False
         self.record_decile = False
         self.record_centile = False
+        self.record_half = True  # Always record halves since they're important metrics
         if kwargs["record_results"] == "quartile":
             self.record_quartile = True
             self.record_decile = True
@@ -347,6 +348,8 @@ class Goldfisher:
             "low_decile": defaultdict(list),
             "top_quartile": defaultdict(list),
             "low_quartile": defaultdict(list),
+            "top_half": defaultdict(list),
+            "low_half": defaultdict(list),
         }
 
         mana_spent_list = []
@@ -399,21 +402,31 @@ class Goldfisher:
                     low_decile_threshold = np.percentile(mana_spent_list, 10)
                     top_quartile_threshold = np.percentile(mana_spent_list, 75)
                     low_quartile_threshold = np.percentile(mana_spent_list, 25)
+                    median_threshold = np.percentile(mana_spent_list, 50)
                 else:
-                    record_game = None
+                    # Record games in all applicable categories
+                    record_games = []
+                    
+                    # Top categories (inclusive)
                     if self.record_centile and total_mana_spent >= top_centile_threshold:
-                        record_game = "top_centile"
-                    elif self.record_centile and total_mana_spent <= low_centile_threshold:
-                        record_game = "low_centile"
+                        record_games.extend(["top_centile", "top_decile", "top_quartile", "top_half"])
                     elif self.record_decile and total_mana_spent >= top_decile_threshold:
-                        record_game = "top_decile"
-                    elif self.record_decile and total_mana_spent <= low_decile_threshold:
-                        record_game = "low_decile"
+                        record_games.extend(["top_decile", "top_quartile", "top_half"])
                     elif self.record_quartile and total_mana_spent >= top_quartile_threshold:
-                        record_game = "top_quartile"
+                        record_games.extend(["top_quartile", "top_half"])
+                    elif self.record_half and total_mana_spent >= median_threshold:
+                        record_games.append("top_half")
+                    
+                    # Bottom categories (inclusive)
+                    if self.record_centile and total_mana_spent <= low_centile_threshold:
+                        record_games.extend(["low_centile", "low_decile", "low_quartile", "low_half"])
+                    elif self.record_decile and total_mana_spent <= low_decile_threshold:
+                        record_games.extend(["low_decile", "low_quartile", "low_half"])
                     elif self.record_quartile and total_mana_spent <= low_quartile_threshold:
-                        record_game = "low_quartile"
-                    if record_game is not None:
+                        record_games.extend(["low_quartile", "low_half"])
+                    elif self.record_half and total_mana_spent < median_threshold:
+                        record_games.append("low_half")
+                    for record_game in record_games:
                         if len(game_records[record_game]["logs"]) < 10:
                             game_records[record_game]["logs"].append(self.log)
                         game_records[record_game]["mana"].append(total_mana_spent)
@@ -486,7 +499,25 @@ class Goldfisher:
             print(f"Bottom 25% mana: ({bottom_25_percent*100:.2f}%)")
             print(f"Bottom 25% game: {bottom_25_mana}")
         
-        return self.land_count, mean_mana, consistency, mean_bad_turns, mean_mid_turns, mean_lands, mean_mulls, mean_draws, percentile_25, percentile_50, percentile_75, threshold_percent, threshold_mana, con_threshold
+        # Calculate proportions for each distribution category
+        # Exclude sample games from total count
+        total_games = self.sims - sample_games
+        distribution_stats = {
+            'top_centile': len(game_records['top_centile']['mana']) / total_games if self.record_centile else 0,
+            'top_decile': len(game_records['top_decile']['mana']) / total_games if self.record_decile else 0,
+            'top_quartile': len(game_records['top_quartile']['mana']) / total_games if self.record_quartile else 0,
+            'top_half': len(game_records['top_half']['mana']) / total_games if self.record_half else 0,
+            'low_half': len(game_records['low_half']['mana']) / total_games if self.record_half else 0,
+            'low_quartile': len(game_records['low_quartile']['mana']) / total_games if self.record_quartile else 0,
+            'low_decile': len(game_records['low_decile']['mana']) / total_games if self.record_decile else 0,
+            'low_centile': len(game_records['low_centile']['mana']) / total_games if self.record_centile else 0,
+        }
+
+        return (
+            self.land_count, mean_mana, consistency, mean_bad_turns, mean_mid_turns, 
+            mean_lands, mean_mulls, mean_draws, percentile_25, percentile_50, percentile_75, 
+            threshold_percent, threshold_mana, con_threshold, distribution_stats
+        )
 
 
 
@@ -499,10 +530,24 @@ def main(config):
     min_lands = config['min_lands'] or goldfisher.land_count
     max_lands = (config['max_lands'] or goldfisher.land_count) + 1
     outcomes = []
+    distribution_outcomes = []
     for i in tqdm(range(min_lands, max_lands), total=max_lands-min_lands):
         goldfisher.set_lands(i, cuts=config['cuts'])
         outcome = goldfisher.simulate()
-        outcomes.append(outcome[:-1])
+        outcomes.append(outcome[:-2])  # Exclude con_threshold and distribution_stats
+        dist_stats = outcome[-1]  # Get distribution stats
+        distribution_outcomes.append([
+            i,  # Land count
+            f"{dist_stats['top_centile']*100:.1f}%",
+            f"{dist_stats['top_decile']*100:.1f}%",
+            f"{dist_stats['top_quartile']*100:.1f}%",
+            f"{dist_stats['top_half']*100:.1f}%",
+            f"{dist_stats['low_half']*100:.1f}%",
+            f"{dist_stats['low_quartile']*100:.1f}%",
+            f"{dist_stats['low_decile']*100:.1f}%",
+            f"{dist_stats['low_centile']*100:.1f}%",
+        ])
+
     # get land count at max consistency and at max mana ev
     outcomes_arr = np.array(outcomes)
     max_mana = outcomes_arr[:,0][np.argmax(outcomes_arr[:,1])]
@@ -510,11 +555,25 @@ def main(config):
     min_bad_turns = outcomes_arr[:,0][np.argmin(outcomes_arr[:,3])]
     min_mid_turns = outcomes_arr[:,0][np.argmin(outcomes_arr[:,4])]
 
-    con_threshold = outcome[-1]*100
+    con_threshold = outcome[-2]*100
     print(f"\n-----------------------------------")
     print(f"{config['deck_name']} ({config['turns']} turns, {config['sims']} sims, {min_lands}-{max_lands-1} lands) - max mana @ {max_mana}, max consistency @ {max_consistency}, min bad turns @ {min_bad_turns}, min mid turns @ {min_mid_turns}")
     print(f"-----------------------------------")
     print(tabulate(outcomes, headers=["Land Ct", "Mana (EV)", "Consistency", "Bad Turns", "Mid Turns", "Lands", "Mulls", "Draws", "25th", "50th", "75th", f"{int(con_threshold)}th% Frac", f"{int(con_threshold)}th% Game"]))
+    
+    print("\nDistribution Statistics:")
+    print("------------------------")
+    print(tabulate(distribution_outcomes, headers=[
+        "Land Ct",
+        "Top 1%",
+        "Top 10%",
+        "Top 25%",
+        "Top 50%",
+        "Low 50%",
+        "Low 25%",
+        "Low 10%",
+        "Low 1%"
+    ], tablefmt="simple"))
     
 
 
