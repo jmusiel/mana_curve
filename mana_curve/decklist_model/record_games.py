@@ -43,8 +43,9 @@ def save_game_records(deck_name, game_records, decklist, commanders, land_count,
         f.write("\n")
 
         f.write(f"Decklist:\n")
+        f.write(f"Name | [class] | (cmc) | (cast turn)\n")
         for card, cmc, ct in zip(decklist, cmc_list, cast_turn_mean):
-            f.write(f"{card} ({cmc}) ({ct})\n")
+            f.write(f"{card.name} [{card.card_class}] ({cmc}) ({ct})\n")
         f.write("\n")
 
         f.write(f"Game Records:\n")

@@ -442,7 +442,7 @@ class Goldfisher:
         save_game_records(
             deck_name=self.deck_name, 
             game_records=game_records, 
-            decklist=[card.name for card in self.decklist], 
+            decklist=self.decklist, 
             commanders=[card.name for card in self.commanders], 
             land_count=self.land_count, 
             sims=self.sims,
