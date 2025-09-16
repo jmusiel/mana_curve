@@ -7,3 +7,4 @@
 decks/**/*.txt
 decks/**/*.png
 *.egg-info/**
+uv.lock
