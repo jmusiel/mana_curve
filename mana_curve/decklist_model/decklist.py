@@ -128,6 +128,29 @@ def get_basic_island():
         "commander": False
     }
 
+def get_hare_apparent():
+    return {
+        "name": "Hare Apparent",
+        "quantity": 1,
+        "oracle_cmc": 2,
+        "cmc": 2,
+        "cost": "{1}{W}",
+        "text": "When Hare Apparent enters the battlefield, create a 1/1 white Rabbit creature token.",
+        "sub_types": [
+            "Rabbit"
+        ],
+        "super_types": [],
+        "types": [
+            "Creature"
+        ],
+        "identity": [
+            "White"
+        ],
+        "default_category": None,
+        "user_category": "Creature",
+        "commander": False
+    }
+
 if __name__ == "__main__":
     parser = get_parser()
     args = parser.parse_args()

@@ -1,4 +1,4 @@
-from mana_curve.decklist_model.decklist import get_decklist, load_decklist, get_basic_island, get_deckpath
+from mana_curve.decklist_model.decklist import get_decklist, load_decklist, get_basic_island, get_deckpath, get_hare_apparent
 from mana_curve.decklist_model.decklist import main as save_archidekt
 from mana_curve.decklist_model.cards import card_factory
 import bisect
@@ -112,32 +112,40 @@ class Goldfisher:
         elif kwargs["record_results"] == "centile":
             self.record_centile = True
 
-    def set_lands(self, land_count, cuts=[]):
+    def set_lands(self, target_land_count, cuts=[]):
+        # Store original deck composition for reference
+        if not hasattr(self, 'original_deck'):
+            self.original_deck = {
+                'lands': [card for card in self.decklist if card.land],
+                'spells': [card for card in self.decklist if not card.land],
+                'hare_count': len([card for card in self.decklist if card.name == "Hare Apparent"])
+            }
+        
         cutted = []
         spells_list = []
         lands_list = []
-        for card in self.decklist:
-            if card.land:
-                lands_list.append(card)
-            else:
-                spells_list.append(card)
-        land_diff = land_count - len(lands_list)
-        while land_diff > 0:
+        
+        # Start with non-land cards from original deck
+        for card in self.original_deck['spells']:
+            if card.name != "Hare Apparent":
+                card_dict = vars(card)
+                spells_list.append(card_factory(**card_dict))
+        
+        # Calculate how many Hare Apparents we need
+        # Base number is original count (24) adjusted by land difference from original (34)
+        original_lands = len(self.original_deck['lands'])
+        land_diff = target_land_count - original_lands
+        target_hare_count = self.original_deck['hare_count'] - land_diff
+        
+        # Add Hare Apparents
+        for _ in range(target_hare_count):
+            spells_list.append(card_factory(**get_hare_apparent()))
+        
+        # Add lands
+        for _ in range(target_land_count):
             lands_list.append(card_factory(**get_basic_island()))
-            land_diff -= 1
-            if cuts and len(spells_list) + len(lands_list) > self.original_card_count:
-                for j, card in enumerate(spells_list):
-                    if card.name in cuts:
-                        spells_list.remove(card)
-                        cutted.append(card.name)
-                        break
-        while land_diff < 0:
-            for card in lands_list:
-                if not card.spell:
-                    lands_list.remove(card)
-                    cutted.append(card.name)
-                    break
-            land_diff += 1
+        
+        # Rebuild the deck
         updated_decklist = spells_list + lands_list
         self.decklist = []
         for i, card in enumerate(updated_decklist):
@@ -145,11 +153,15 @@ class Goldfisher:
             card_dict['goldfisher'] = self
             card_dict['index'] = i
             self.decklist.append(card_factory(**card_dict))
+        
+        # Update deck dictionary and counts
+        hare_count = len([card for card in self.decklist if card.name == "Hare Apparent"])
         self.deckdict = {card.name:card for card in self.decklist}
-        if cutted:
-            print(f"Cutted: {cutted}")
-        print(f"\nSet land count to {land_count} prev {self.land_count} ({len(lands_list)} lands, {len(spells_list)} spells, total {len(self.decklist)})")
+        prev_land_count = self.land_count
         self.land_count = len([card for card in self.decklist if card.land])
+        
+        # Print status
+        print(f"\nSet land count to {target_land_count} prev {prev_land_count} ({len(lands_list)} lands, {len(spells_list)} spells [{hare_count} Hare Apparents], total {len(self.decklist)})")
 
         
     def reset(self):
