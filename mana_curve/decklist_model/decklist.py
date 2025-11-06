@@ -24,6 +24,10 @@ def get_parser():
         "--verbose",
         action="store_true",
     )
+    parser.add_argument(
+        "--include_cuts_and_adds",
+        action="store_true",
+    )
     return parser
 
 def main(config):
@@ -42,6 +46,10 @@ def get_decklist(config):
     deck = getDeckById(deckid)
     categories_in_deck = {cat.name:cat.included_in_deck for cat in deck.categories}
     cards = [card for card in deck.cards if categories_in_deck[card.categories[0]]]
+    if config.get('include_cuts_and_adds', False):
+        categories_in_deck['Add'] = True
+        categories_in_deck['add'] = True
+        cards = [card for card in deck.cards if (categories_in_deck[card.categories[0]] and card.label != 'Cuts')]
     for card in tqdm(cards, desc="Getting decklist"):
         for i in range(card.quantity):
             if categories_in_deck[card.categories[0]]:
@@ -60,6 +68,7 @@ def get_decklist(config):
                 card_dict["identity"] = card.card.oracle_card.color_identity
                 card_dict["default_category"] = card.card.oracle_card.default_category
                 card_dict["user_category"] = card.categories[0]
+                card_dict["tag"] = card.label
                 card_dict["commander"] = card.categories[0] == 'Commander'
                 if card.card.oracle_card.faces:
                     card_dict["cost"] = None

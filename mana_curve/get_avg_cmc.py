@@ -26,6 +26,11 @@ def get_parser():
             "https://archidekt.com/decks/1856247/lords_landed_libations",
         ],
     )
+    parser.add_argument(
+        "--include_cuts_and_adds",
+        "-a",
+        action="store_true",
+    )
     return parser
 
 def card_is_land(card):
@@ -54,16 +59,20 @@ def main(config):
     deck_names = []
     spell_counts = []
     land_counts = []
+    total_counts = []
     for deck_url in config['deck_urls']:
         deck_name = deck_url.split('/')[-1]
-        decklist = get_decklist({'deck_url': deck_url, 'verbose': False})
+        decklist = get_decklist({'deck_url': deck_url, 'verbose': False, 'include_cuts_and_adds': config['include_cuts_and_adds']})
         decklists.append(decklist)
 
         cmcs = []
         nonland_count = 0
         land_count = 0
+        commander_mvs = []
         for card in decklist:
-            if not card_is_land(card):
+            if card['commander']:
+                commander_mvs.append(card['cmc'])
+            elif not card_is_land(card):
                 cmcs.append(card['cmc'])
                 nonland_count += 1
             else:
@@ -75,11 +84,13 @@ def main(config):
         deck_names.append(deck_name)
         spell_counts.append(nonland_count)
         land_counts.append(land_count)
+        total_counts.append(nonland_count + land_count)
         print_terminal_histogram(cmcs)
         print(f"{deck_name}: avg_cmc: {avgcmc} ({nonland_count} spells, {land_count} lands)")
+        print(f"commander mvs: {commander_mvs}")
         print("\n")
 
-    df = pd.DataFrame({'deck_name': deck_names, 'avg_cmc': avgcmcs, 'spell_counts': spell_counts, 'land_counts': land_counts})
+    df = pd.DataFrame({'deck_name': deck_names, 'avg_cmc': avgcmcs, 'spell_counts': spell_counts, 'land_counts': land_counts, 'total': total_counts})
     # sort by by avg_cmc
     df = df.sort_values('avg_cmc')
     print(df.to_string())
