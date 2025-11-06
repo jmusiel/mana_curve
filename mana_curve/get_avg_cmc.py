@@ -2,6 +2,7 @@ import argparse
 import pprint
 from mana_curve.decklist_model.decklist import get_decklist
 import numpy as np
+import pandas as pd
 
 def get_parser():
     parser = argparse.ArgumentParser()
@@ -37,6 +38,8 @@ def main(config):
 
     decklists = []
     avgcmcs = []
+    deck_names = []
+    spell_counts = []
     for deck_url in config['deck_urls']:
         deck_name = deck_url.split('/')[-1]
         decklist = get_decklist({'deck_url': deck_url, 'verbose': False})
@@ -52,8 +55,15 @@ def main(config):
                 print(f"{card['name']} cmc: {card['cmc']}")
         avgcmc /= nonland_count
         avgcmcs.append(avgcmc)
+        deck_names.append(deck_name)
+        spell_counts.append(nonland_count)
         print(f"{deck_name}: avg_cmc: {avgcmcs[-1]} ({nonland_count} spells)")
         print("\n")
+
+    df = pd.DataFrame({'deck_name': deck_names, 'spell_counts': spell_counts, 'avg_cmc': avgcmcs})
+    # sort by by avg_cmc
+    df = df.sort_values('avg_cmc')
+    print(df.to_string())
 
     print("done")
 
