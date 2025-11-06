@@ -12,7 +12,6 @@ def get_parser():
         nargs="+",
         default=[
             "https://archidekt.com/decks/9699790/santas_etb_workshop",
-            "https://archidekt.com/decks/16391355/kesss_chill_charms",
             "https://archidekt.com/decks/7947868/kesss_cozy_cantrips",
             "https://archidekt.com/decks/81320/the_rr_connection",
             "https://archidekt.com/decks/1930237/riku_because_riku_is_bonkers",
@@ -44,14 +43,26 @@ def card_is_land(card):
     return False
 
 def print_terminal_histogram(values):
-    max_value = max(values)
-    min_value = min(values)
-    num_bins = max_value - min_value + 1
-    bins = [0] * num_bins
+    if not values:
+        return
+    # Bins for 0, 1, 2, 3, 4, 5, 6, 7, 8+
+    bins = [0] * 9
     for value in values:
-        bins[value - min_value] += 1
-    for i in range(num_bins):
-        print(f"{i + min_value}: {bins[i]}")
+        if value >= 8:
+            bins[8] += 1
+        else:
+            bins[value] += 1
+
+    max_label_len = 2
+    for i in range(len(bins)):
+        if i == 8:
+            label = "8+"
+        else:
+            label = str(i)
+
+        count = bins[i]
+        bar = '█' * count
+        print(f"{label.rjust(max_label_len)}: {bar} {count}")
 
 def main(config):
     pp = pprint.PrettyPrinter(indent=4)
