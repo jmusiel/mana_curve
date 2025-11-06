@@ -13,6 +13,7 @@ def get_parser():
         default=[
             "https://archidekt.com/decks/9699790/santas_etb_workshop",
             "https://archidekt.com/decks/16391355/kesss_chill_charms",
+            "https://archidekt.com/decks/7947868/kesss_cozy_cantrips",
             "https://archidekt.com/decks/81320/the_rr_connection",
             "https://archidekt.com/decks/1930237/riku_because_riku_is_bonkers",
             "https://archidekt.com/decks/9538770/hms_her_majestys_slivers",
@@ -35,6 +36,8 @@ def get_parser():
 
 def card_is_land(card):
     if "Land" in card['types']:
+        if "transform" in card['text']:
+            return False
         return True
     if "rien Revealed" in card['name']:
         return True
