@@ -462,7 +462,8 @@ class Draw(Card):
         "Explore", # tommy slimes
         "Mulch", # tommy slimes
         "Urban Evolution", # tommy slimes
-        "Diresight" # rabbits
+        "Diresight", # rabbits
+        "Read the Bones", # rabbits
     ]
     priority = 1
 
@@ -478,7 +479,8 @@ class Draw(Card):
         elif self.name in [
             "Flame of Anor",
             "Plumb the Forbidden",
-            "Diresight" # rabbits
+            "Diresight", # rabbits,
+            "Read the Bones", # rabbits
         ]:
             self.draw = 2
         elif self.name in [
@@ -621,6 +623,7 @@ class PerTurnDraw(Card):
         "Black Market Connections",
         "Esper Sentinel",
         "Phyrexian Arena",
+        "Ripples of Undeath", # rabbits
         "Toski, Bearer of Secrets",
         "Leinore, Autumn Sovereign",
         "Compost", # tommy slimes
@@ -642,6 +645,7 @@ class PerTurnDraw(Card):
             "Black Market Connections",
             "Esper Sentinel",
             "Phyrexian Arena",
+            "Ripples of Undeath", # rabbits
             "Toski, Bearer of Secrets",
             "Leinore, Autumn Sovereign",
             "Compost", # tommy slimes
