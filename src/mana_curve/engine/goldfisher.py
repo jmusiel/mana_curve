@@ -130,6 +130,9 @@ def _card_to_dict(card: Card) -> dict:
     }
 
 
+_REPLAY_CAP_PER_WORKER = 15
+
+
 def _worker_run_batch(
     deck_dicts: list[dict],
     turns: int,
@@ -143,9 +146,11 @@ def _worker_run_batch(
     Creates a fresh Goldfisher and runs ``n_games`` simulations.
     Returns raw per-game stats as lists.
 
-    When *capture_replays* is ``True`` the worker also records turn-by-turn
-    snapshots for a sample of games and classifies them into top/mid/low
-    quartile buckets (capped at 10 games each).
+    When *capture_replays* is ``True`` the worker records unclassified
+    turn-by-turn snapshots for a sample of games (up to
+    ``_REPLAY_CAP_PER_WORKER``).  Classification into quartile buckets
+    happens later in ``_run_parallel`` once the full mana distribution
+    is available.
     """
     gf = Goldfisher(
         deck_dicts, turns=turns, sims=n_games,
@@ -161,14 +166,10 @@ def _worker_run_batch(
     card_cast_turns: list[list] = [[] for _ in gf.decklist]
     played_cards_per_game: list[set] = []
 
-    # Replay capture state (only used when capture_replays is True)
-    replay_thresholds_set = False
-    top_q_threshold = 0.0
-    low_q_threshold = 0.0
-    replay_buckets: dict[str, list] = {"top": [], "mid": [], "low": []}
-    # Use 10% of the batch (min 20) as calibration; the floor must be low
-    # enough that small per-worker batches still leave room for capture.
-    sample_games = int(max(n_games / 10, min(20, n_games - 1)))
+    # Unclassified replay snapshots: list of (total_mana, replay_dict)
+    raw_replays: list[tuple[int, dict]] = []
+    # Start capturing after the first 10% of games to get some variance
+    replay_start = max(int(n_games * 0.1), 1)
 
     for j in range(n_games):
         global_j = game_offset + j
@@ -185,8 +186,8 @@ def _worker_run_batch(
         # Decide whether to capture this game's replay
         _capture_this = (
             capture_replays
-            and replay_thresholds_set
-            and not all(len(b) >= 10 for b in replay_buckets.values())
+            and j >= replay_start
+            and len(raw_replays) < _REPLAY_CAP_PER_WORKER
         )
         turn_snapshots: list[dict] = []
         starting_hand_names: list[str] = []
@@ -250,30 +251,15 @@ def _worker_run_batch(
                     game_played.add(k)
         played_cards_per_game.append(game_played)
 
-        # Replay: set thresholds after calibration sample, classify games
-        if capture_replays:
-            if not replay_thresholds_set and j > sample_games:
-                top_q_threshold = float(np.percentile(mana_spent, 75))
-                low_q_threshold = float(np.percentile(mana_spent, 25))
-                replay_thresholds_set = True
-            elif _capture_this:
-                game_replay = {
-                    "total_mana": total_mana_spent,
-                    "mulligans": mulligans,
-                    "starting_hand": starting_hand_names,
-                    "turns": turn_snapshots,
-                }
-                if total_mana_spent >= top_q_threshold:
-                    if len(replay_buckets["top"]) < 10:
-                        replay_buckets["top"].append(game_replay)
-                elif total_mana_spent <= low_q_threshold:
-                    if len(replay_buckets["low"]) < 10:
-                        replay_buckets["low"].append(game_replay)
-                else:
-                    if len(replay_buckets["mid"]) < 10:
-                        replay_buckets["mid"].append(game_replay)
+        if _capture_this:
+            raw_replays.append((total_mana_spent, {
+                "total_mana": total_mana_spent,
+                "mulligans": mulligans,
+                "starting_hand": starting_hand_names,
+                "turns": turn_snapshots,
+            }))
 
-    result = {
+    result: dict = {
         "mana_spent": mana_spent,
         "mulls": mulls,
         "lands_played": lands_played,
@@ -284,7 +270,7 @@ def _worker_run_batch(
         "played_cards_per_game": played_cards_per_game,
     }
     if capture_replays:
-        result["replay_data"] = replay_buckets
+        result["raw_replays"] = raw_replays
     return result
 
 
@@ -877,7 +863,7 @@ class Goldfisher:
                     executor.submit(
                         _worker_run_batch,
                         deck_dicts, self.turns, n, self.seed, offset,
-                        capture_replays=(w == 0),
+                        capture_replays=True,
                     )
                 )
                 offset += n
@@ -889,9 +875,9 @@ class Goldfisher:
             "played_cards_per_game": [],
         }
         card_cast_turns: list[list] = [[] for _ in self.decklist]
-        replay_data: dict = {}
+        all_raw_replays: list[tuple[int, dict]] = []
 
-        for idx, future in enumerate(futures):
+        for future in futures:
             batch = future.result()
             for key in ["mana_spent", "mulls", "lands_played",
                         "cards_drawn", "bad_turns", "mid_turns"]:
@@ -899,11 +885,26 @@ class Goldfisher:
             for k, turns_list in enumerate(batch["card_cast_turns"]):
                 card_cast_turns[k].extend(turns_list)
             merged["played_cards_per_game"].extend(batch["played_cards_per_game"])
-            if idx == 0:
-                replay_data = batch.get("replay_data", {})
+            all_raw_replays.extend(batch.get("raw_replays", []))
 
         merged["card_cast_turns"] = card_cast_turns
-        merged["replay_data"] = replay_data
+
+        # Classify pooled replays using the full mana distribution
+        replay_buckets: dict[str, list] = {"top": [], "mid": [], "low": []}
+        if all_raw_replays and merged["mana_spent"]:
+            top_threshold = float(np.percentile(merged["mana_spent"], 75))
+            low_threshold = float(np.percentile(merged["mana_spent"], 25))
+            for mana_val, replay in all_raw_replays:
+                if mana_val >= top_threshold:
+                    if len(replay_buckets["top"]) < 10:
+                        replay_buckets["top"].append(replay)
+                elif mana_val <= low_threshold:
+                    if len(replay_buckets["low"]) < 10:
+                        replay_buckets["low"].append(replay)
+                else:
+                    if len(replay_buckets["mid"]) < 10:
+                        replay_buckets["mid"].append(replay)
+        merged["replay_data"] = replay_buckets
         return merged
 
     def _simulate_from_raw(self, raw: dict) -> SimulationResult:
