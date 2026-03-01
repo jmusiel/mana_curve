@@ -5,10 +5,13 @@ A Magic: The Gathering commander deck simulation tool. Runs "goldfishing" simula
 ## Features
 
 - **Goldfishing engine** -- simulates drawing, mulligans, land drops, and spell casting over N turns
+- **Parallel simulation** -- uses multiple CPU cores via `ProcessPoolExecutor` for fast results (configurable `workers` parameter, defaults to all CPUs)
 - **Data-driven card effects** -- 118 cards with special abilities (ramp, draw, cost reduction, tutors) defined as composable effects. Adding a new card is a single `register()` call in `effects/card_database.py`
 - **Archidekt integration** -- pull decklists directly from Archidekt URLs via the API
 - **Land count sweeping** -- test a range of land counts and compare EV, consistency, bad turns, and percentile distributions
-- **Extensible metrics** -- register custom metric functions on top of the built-in ones (mean mana, consistency, bad turns, etc.)
+- **Card performance analysis** -- identifies which cards are overrepresented in high- vs low-performing games
+- **Game replay viewer** -- interactive turn-by-turn replay of sample games from top/mid/low quartiles, showing hand state, played cards, board state, and mana production (works in both sequential and parallel modes)
+- **Web UI** -- Flask-based dashboard for importing decks, running simulations, and viewing results with charts and replay viewer
 - **Reports** -- generates text reports with per-bucket game stats and mana curve scatter plots (PNG)
 
 ## Setup
@@ -39,6 +42,15 @@ uv pip install -e ".[dev]"
 # See all options
 .venv/bin/python -m mana_curve.cli.main --help
 ```
+
+### Web UI
+
+```bash
+# Start the Flask development server
+.venv/bin/flask --app src.mana_curve.web:create_app run --debug
+```
+
+Then open http://127.0.0.1:5000 to import decks, run simulations, and explore results including the interactive game replay viewer.
 
 ### As a library
 
@@ -80,6 +92,7 @@ src/mana_curve/
 ├── engine/          # Goldfisher simulation, mana calculation, mulligan strategy
 ├── metrics/         # MetricsCollector, built-in metrics, aggregation, reporting
 ├── decklist/        # JSON loader, Archidekt API, deck builder
+├── web/             # Flask web UI (routes, templates, simulation runner)
 └── cli/             # CLI entry point
 
 tests/

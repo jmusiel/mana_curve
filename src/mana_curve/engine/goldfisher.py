@@ -136,11 +136,16 @@ def _worker_run_batch(
     n_games: int,
     base_seed: int | None,
     game_offset: int,
+    capture_replays: bool = False,
 ) -> dict:
     """Top-level function for ProcessPoolExecutor workers.
 
     Creates a fresh Goldfisher and runs ``n_games`` simulations.
     Returns raw per-game stats as lists.
+
+    When *capture_replays* is ``True`` the worker also records turn-by-turn
+    snapshots for a sample of games and classifies them into top/mid/low
+    quartile buckets (capped at 10 games each).
     """
     gf = Goldfisher(
         deck_dicts, turns=turns, sims=n_games,
@@ -156,6 +161,15 @@ def _worker_run_batch(
     card_cast_turns: list[list] = [[] for _ in gf.decklist]
     played_cards_per_game: list[set] = []
 
+    # Replay capture state (only used when capture_replays is True)
+    replay_thresholds_set = False
+    top_q_threshold = 0.0
+    low_q_threshold = 0.0
+    replay_buckets: dict[str, list] = {"top": [], "mid": [], "low": []}
+    # Use 10% of the batch (min 20) as calibration; the floor must be low
+    # enough that small per-worker batches still leave room for capture.
+    sample_games = int(max(n_games / 10, min(20, n_games - 1)))
+
     for j in range(n_games):
         global_j = game_offset + j
         if base_seed is not None:
@@ -168,9 +182,24 @@ def _worker_run_batch(
         game_bad = 0
         game_mid = 0
 
+        # Decide whether to capture this game's replay
+        _capture_this = (
+            capture_replays
+            and replay_thresholds_set
+            and not all(len(b) >= 10 for b in replay_buckets.values())
+        )
+        turn_snapshots: list[dict] = []
+        starting_hand_names: list[str] = []
+        if _capture_this:
+            starting_hand_names = [gf.decklist[idx].name for idx in state.hand]
+
         for i in range(turns):
             turn_mana = 0
             spells_played = 0
+
+            if _capture_this:
+                hand_before = [gf.decklist[idx].name for idx in state.hand]
+
             played = gf._take_turn(state)
             for card in played:
                 if not card.ramp:
@@ -184,6 +213,27 @@ def _worker_run_batch(
             if spells_played < 2 and state.deck and turn_mana < i + 1:
                 game_mid += 1
             total_mana_spent += turn_mana
+
+            if _capture_this:
+                turn_snapshots.append({
+                    "turn": i + 1,
+                    "hand_before_draw": hand_before,
+                    "played": [
+                        {
+                            "name": c.name,
+                            "cost": c.cost,
+                            "mana_spent": c.mana_spent_when_played,
+                            "is_land": c.land,
+                        }
+                        for c in played
+                    ],
+                    "mana_spent_this_turn": turn_mana,
+                    "total_mana_production": gf._get_mana(state),
+                    "hand_after": [gf.decklist[idx].name for idx in state.hand],
+                    "battlefield": [gf.decklist[idx].name for idx in state.battlefield],
+                    "lands": [gf.decklist[idx].name for idx in state.lands],
+                    "graveyard": [gf.decklist[idx].name for idx in state.yard],
+                })
 
         mana_spent.append(total_mana_spent)
         lands_played.append(game_lands)
@@ -200,7 +250,30 @@ def _worker_run_batch(
                     game_played.add(k)
         played_cards_per_game.append(game_played)
 
-    return {
+        # Replay: set thresholds after calibration sample, classify games
+        if capture_replays:
+            if not replay_thresholds_set and j > sample_games:
+                top_q_threshold = float(np.percentile(mana_spent, 75))
+                low_q_threshold = float(np.percentile(mana_spent, 25))
+                replay_thresholds_set = True
+            elif _capture_this:
+                game_replay = {
+                    "total_mana": total_mana_spent,
+                    "mulligans": mulligans,
+                    "starting_hand": starting_hand_names,
+                    "turns": turn_snapshots,
+                }
+                if total_mana_spent >= top_q_threshold:
+                    if len(replay_buckets["top"]) < 10:
+                        replay_buckets["top"].append(game_replay)
+                elif total_mana_spent <= low_q_threshold:
+                    if len(replay_buckets["low"]) < 10:
+                        replay_buckets["low"].append(game_replay)
+                else:
+                    if len(replay_buckets["mid"]) < 10:
+                        replay_buckets["mid"].append(game_replay)
+
+    result = {
         "mana_spent": mana_spent,
         "mulls": mulls,
         "lands_played": lands_played,
@@ -210,6 +283,9 @@ def _worker_run_batch(
         "card_cast_turns": card_cast_turns,
         "played_cards_per_game": played_cards_per_game,
     }
+    if capture_replays:
+        result["replay_data"] = replay_buckets
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -801,6 +877,7 @@ class Goldfisher:
                     executor.submit(
                         _worker_run_batch,
                         deck_dicts, self.turns, n, self.seed, offset,
+                        capture_replays=(w == 0),
                     )
                 )
                 offset += n
@@ -812,8 +889,9 @@ class Goldfisher:
             "played_cards_per_game": [],
         }
         card_cast_turns: list[list] = [[] for _ in self.decklist]
+        replay_data: dict = {}
 
-        for future in futures:
+        for idx, future in enumerate(futures):
             batch = future.result()
             for key in ["mana_spent", "mulls", "lands_played",
                         "cards_drawn", "bad_turns", "mid_turns"]:
@@ -821,8 +899,11 @@ class Goldfisher:
             for k, turns_list in enumerate(batch["card_cast_turns"]):
                 card_cast_turns[k].extend(turns_list)
             merged["played_cards_per_game"].extend(batch["played_cards_per_game"])
+            if idx == 0:
+                replay_data = batch.get("replay_data", {})
 
         merged["card_cast_turns"] = card_cast_turns
+        merged["replay_data"] = replay_data
         return merged
 
     def _simulate_from_raw(self, raw: dict) -> SimulationResult:
@@ -888,6 +969,8 @@ class Goldfisher:
         played_cards_per_game = raw.get("played_cards_per_game", [])
         card_performance = self._compute_card_performance(mana_spent_list, played_cards_per_game)
 
+        replay_data = raw.get("replay_data", {})
+
         return SimulationResult(
             land_count=self.land_count,
             mean_mana=mean_mana,
@@ -908,6 +991,7 @@ class Goldfisher:
             ci_mean_bad_turns=ci_mean_bad_turns,
             distribution_stats=distribution_stats,
             card_performance=card_performance,
+            replay_data=replay_data,
         )
 
     def simulate(self) -> SimulationResult:

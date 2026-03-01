@@ -560,8 +560,38 @@ class TestReplayData:
             avg_low = sum(g["total_mana"] for g in rd["low"]) / len(rd["low"])
             assert avg_top > avg_low
 
-    def test_parallel_returns_empty_replay_data(self, parallel_result):
-        assert parallel_result.replay_data == {}
+    def test_parallel_returns_populated_replay_data(self, parallel_result):
+        rd = parallel_result.replay_data
+        assert "top" in rd
+        assert "mid" in rd
+        assert "low" in rd
+
+    def test_parallel_replay_buckets_have_games(self, parallel_result):
+        rd = parallel_result.replay_data
+        assert len(rd["top"]) > 0
+        assert len(rd["low"]) > 0
+
+    def test_parallel_replay_game_has_required_fields(self, parallel_result):
+        rd = parallel_result.replay_data
+        for bucket in ("top", "mid", "low"):
+            for game in rd[bucket]:
+                assert "total_mana" in game
+                assert "mulligans" in game
+                assert "starting_hand" in game
+                assert "turns" in game
+
+    def test_parallel_replay_turns_have_snapshot_fields(self, parallel_result):
+        game = parallel_result.replay_data["top"][0]
+        for turn in game["turns"]:
+            assert "turn" in turn
+            assert "hand_before_draw" in turn
+            assert "played" in turn
+            assert "mana_spent_this_turn" in turn
+            assert "total_mana_production" in turn
+            assert "hand_after" in turn
+            assert "battlefield" in turn
+            assert "lands" in turn
+            assert "graveyard" in turn
 
     def test_few_sims_returns_empty_replay_data(self):
         deck = _simple_deck()
