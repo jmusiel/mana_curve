@@ -5,13 +5,13 @@
 <form method="POST" action="{{ url_for('decks.import_deck') }}">
     <div class="form-group">
         <label for="deck_url">Archidekt Deck URL</label>
-        <input type="url" id="deck_url" name="deck_url" required
-               placeholder="https://archidekt.com/decks/12345/my_deck">
+        <input type="url" id="deck_url" name="deck_url"
+               placeholder="https://archidekt.com/decks/81320/the_rr_connection">
     </div>
     <div class="form-group">
         <label for="deck_name">Deck Name</label>
-        <input type="text" id="deck_name" name="deck_name" required
-               placeholder="my_deck">
+        <input type="text" id="deck_name" name="deck_name"
+               placeholder="the_rr_connection">
     </div>
     <button type="submit" class="btn btn-primary">Import</button>
 </form>

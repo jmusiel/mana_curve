@@ -1,0 +1,8 @@
+<div class="job-status job-failed">
+    <p><strong>Validation Error</strong></p>
+    <ul>
+        {% for error in errors %}
+            <li class="error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+</div>
