@@ -16,9 +16,11 @@ from mana_curve.effects.json_loader import (
     VALID_SLOTS,
     _hydrate_effect,
     _merge_metadata,
+    build_overridden_registry,
+    get_effect_schema,
     load_registry_from_json,
 )
-from mana_curve.effects.registry import CardEffects
+from mana_curve.effects.registry import CardEffects, EffectRegistry
 
 _JSON_PATH = Path(__file__).resolve().parents[2] / "src" / "mana_curve" / "effects" / "card_effects.json"
 
@@ -341,3 +343,123 @@ def test_unknown_type_in_json_raises(tmp_path):
     }
     with pytest.raises(ValueError, match="Unknown effect type"):
         load_registry_from_json(_write_json(tmp_path, data))
+
+
+# ---------------------------------------------------------------------------
+# EffectRegistry.copy()
+# ---------------------------------------------------------------------------
+
+def test_registry_copy_returns_new_instance(registry):
+    copy = registry.copy()
+    assert isinstance(copy, EffectRegistry)
+    assert copy is not registry
+    assert len(copy) == len(registry)
+
+
+def test_registry_copy_is_independent(registry):
+    copy = registry.copy()
+    copy.register("Fake Card", CardEffects(ramp=True))
+    assert copy.has("Fake Card")
+    assert not registry.has("Fake Card")
+
+
+# ---------------------------------------------------------------------------
+# build_overridden_registry()
+# ---------------------------------------------------------------------------
+
+def test_build_overridden_registry_replaces_effect(registry):
+    overrides = {
+        "Sol Ring": {
+            "effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 5}}],
+            "ramp": True,
+        }
+    }
+    new_reg = build_overridden_registry(registry, overrides)
+    sol = new_reg.get("Sol Ring")
+    assert sol is not None
+    assert sol.on_play[0].amount == 5
+    assert sol.ramp is True
+    # Original unchanged
+    assert registry.get("Sol Ring").on_play[0].amount == 2
+
+
+def test_build_overridden_registry_adds_new_card(registry):
+    overrides = {
+        "My Custom Card": {
+            "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 3}}],
+        }
+    }
+    new_reg = build_overridden_registry(registry, overrides)
+    custom = new_reg.get("My Custom Card")
+    assert custom is not None
+    assert len(custom.on_play) == 1
+    assert isinstance(custom.on_play[0], builtin.DrawCards)
+    assert custom.on_play[0].amount == 3
+
+
+def test_build_overridden_registry_invalid_slot_raises(registry):
+    overrides = {
+        "Bad Card": {
+            "effects": [{"type": "produce_mana", "slot": "bad_slot", "params": {"amount": 1}}],
+        }
+    }
+    with pytest.raises(ValueError, match="Invalid slot"):
+        build_overridden_registry(registry, overrides)
+
+
+def test_build_overridden_registry_empty_overrides(registry):
+    new_reg = build_overridden_registry(registry, {})
+    assert len(new_reg) == len(registry)
+
+
+def test_build_overridden_registry_preserves_metadata(registry):
+    overrides = {
+        "Sol Ring": {
+            "effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 3}}],
+            "ramp": True,
+            "tapped": True,
+        }
+    }
+    new_reg = build_overridden_registry(registry, overrides)
+    sol = new_reg.get("Sol Ring")
+    assert sol.ramp is True
+    assert sol.tapped is True
+
+
+# ---------------------------------------------------------------------------
+# get_effect_schema()
+# ---------------------------------------------------------------------------
+
+def test_get_effect_schema_contains_all_types():
+    schema = get_effect_schema()
+    for type_str in TYPE_MAP:
+        assert type_str in schema, f"Missing {type_str} from schema"
+
+
+def test_get_effect_schema_structure():
+    schema = get_effect_schema()
+    produce = schema["produce_mana"]
+    assert produce["label"] == "ProduceMana"
+    assert produce["slot"] == "on_play"
+    assert "amount" in produce["params"]
+    assert produce["params"]["amount"]["type"] == "int"
+    assert produce["params"]["amount"]["default"] == 1
+
+
+def test_get_effect_schema_slots_are_valid():
+    schema = get_effect_schema()
+    for type_str, info in schema.items():
+        assert info["slot"] in VALID_SLOTS, f"{type_str} has invalid slot {info['slot']}"
+
+
+def test_get_effect_schema_per_turn_draw():
+    schema = get_effect_schema()
+    ptd = schema["per_turn_draw"]
+    assert ptd["slot"] == "per_turn"
+    assert ptd["label"] == "PerTurnDraw"
+
+
+def test_get_effect_schema_mana_function():
+    schema = get_effect_schema()
+    crm = schema["cryptolith_rites_mana"]
+    assert crm["slot"] == "mana_function"

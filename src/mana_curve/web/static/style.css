@@ -382,6 +382,117 @@ a:hover { text-decoration: underline; }
     border-color: #86efac;
 }
 
+/* Effects editor */
+.effects-editor {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+.effects-summary {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    cursor: pointer;
+    list-style: none;
+}
+.effects-summary::-webkit-details-marker { display: none; }
+.effects-summary h2 { margin: 0; font-size: 1.1rem; }
+.effects-count { color: #64748b; font-size: 0.85rem; }
+.effects-group { margin-top: 0.75rem; }
+.effects-group-summary {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #475569;
+    cursor: pointer;
+    padding: 0.25rem 0;
+}
+.effects-card-list { margin-top: 0.5rem; }
+.effects-card {
+    border: 1px solid #f1f5f9;
+    border-radius: 6px;
+    margin-bottom: 0.35rem;
+}
+.effects-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+}
+.effects-card-name { font-weight: 500; min-width: 12rem; }
+.effects-card-cmc { color: #94a3b8; min-width: 3.5rem; }
+.effects-card-badges {
+    flex: 1;
+    color: #2563eb;
+    font-size: 0.8rem;
+    font-family: monospace;
+}
+.effects-card-badges.no-effects { color: #94a3b8; font-style: italic; font-family: inherit; }
+.btn-sm { padding: 0.2rem 0.6rem; font-size: 0.8rem; }
+.override-panel {
+    padding: 0.5rem 0.75rem 0.75rem;
+    border-top: 1px solid #f1f5f9;
+    background: #fafbfc;
+}
+.override-effect-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+    flex-wrap: wrap;
+}
+.override-effect-row select {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+.effect-params {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.effect-param-label {
+    font-size: 0.8rem;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.effect-param-input {
+    padding: 0.2rem 0.4rem;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+.btn-remove-effect {
+    background: none;
+    border: none;
+    color: #dc2626;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0 0.3rem;
+    line-height: 1;
+}
+.override-metadata {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: #475569;
+    flex-wrap: wrap;
+}
+.override-metadata label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.override-actions { margin-top: 0.5rem; }
+
 /* Headings */
 h1 { font-size: 1.5rem; margin-bottom: 1rem; }
 h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }

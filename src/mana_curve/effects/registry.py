@@ -71,5 +71,11 @@ class EffectRegistry:
     def __len__(self) -> int:
         return len(self._registry)
 
+    def copy(self) -> EffectRegistry:
+        """Return a shallow copy so modifications don't affect the original."""
+        new = EffectRegistry()
+        new._registry = dict(self._registry)
+        return new
+
     def __contains__(self, name: str) -> bool:
         return name in self._registry

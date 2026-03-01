@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 
-from flask import Blueprint, abort, flash, jsonify, make_response, render_template, request
+from flask import Blueprint, abort, flash, jsonify, render_template, request
 
-from mana_curve.decklist.loader import get_deckpath, load_decklist
+from mana_curve.decklist.loader import get_deckpath, load_decklist, load_overrides, save_overrides
+from mana_curve.effects.card_database import DEFAULT_REGISTRY
+from mana_curve.effects.json_loader import TYPE_MAP, get_effect_schema
 from mana_curve.web.services.simulation_runner import SimulationRunner
 
 # Web UI compute limits (CLI remains unrestricted)
@@ -24,15 +27,81 @@ def get_runner() -> SimulationRunner:
     return _runner
 
 
+_CLASS_TO_TYPE_KEY = {cls: key for key, cls in TYPE_MAP.items()}
+_SLOT_FIELDS = ["on_play", "per_turn", "cast_trigger", "mana_function"]
+
+
+def _effects_to_override(card_effects):
+    """Convert a CardEffects instance to the JSON override format used by the UI."""
+    effects = []
+    for slot in _SLOT_FIELDS:
+        for effect in getattr(card_effects, slot, []):
+            type_key = _CLASS_TO_TYPE_KEY.get(type(effect))
+            if type_key is None:
+                continue
+            params = dict(vars(effect)) if vars(effect) else {}
+            effects.append({"type": type_key, "slot": slot, "params": params})
+    result = {"effects": effects}
+    if card_effects.ramp:
+        result["ramp"] = True
+    if card_effects.priority:
+        result["priority"] = card_effects.priority
+    return result
+
+
+def _describe_effects(card_effects):
+    """Build a human-readable description of a CardEffects instance."""
+    parts = []
+    for effect in card_effects.on_play:
+        parts.append(f"{type(effect).__name__}({', '.join(f'{k}={v}' for k, v in vars(effect).items())})" if vars(effect) else type(effect).__name__)
+    for effect in card_effects.per_turn:
+        parts.append(f"{type(effect).__name__}({', '.join(f'{k}={v}' for k, v in vars(effect).items())})" if vars(effect) else type(effect).__name__)
+    for effect in card_effects.cast_trigger:
+        parts.append(f"{type(effect).__name__}({', '.join(f'{k}={v}' for k, v in vars(effect).items())})" if vars(effect) else type(effect).__name__)
+    for effect in card_effects.mana_function:
+        parts.append(type(effect).__name__)
+    return ", ".join(parts) if parts else ""
+
+
 @bp.route("/<deck_name>")
 def config(deck_name: str):
     path = get_deckpath(deck_name)
     if not os.path.isfile(path):
         abort(404)
-    cards = load_decklist(deck_name)
+
+    deck_list = load_decklist(deck_name)
     land_count = sum(
-        c.get("quantity", 1) for c in cards if "Land" in c.get("types", [])
+        c.get("quantity", 1) for c in deck_list if "Land" in c.get("types", [])
     )
+
+    saved_overrides = load_overrides(deck_name)
+
+    card_effects_list = []
+    for card_dict in deck_list:
+        name = card_dict.get("name", "")
+        types = card_dict.get("types", [])
+        if "Land" in types:
+            continue
+        effects = DEFAULT_REGISTRY.get(name)
+        entry = {
+            "name": name,
+            "cmc": card_dict.get("cmc", 0),
+            "types": types,
+            "has_effects": effects is not None,
+            "effects_display": _describe_effects(effects) if effects else "",
+            "registry_override": _effects_to_override(effects) if effects else None,
+        }
+        # If this card has a saved override, attach override data for the template
+        if name in saved_overrides:
+            entry["original_effects"] = entry["effects_display"]
+            entry["has_effects"] = True
+            entry["effects_display"] = "User override"
+            entry["override"] = saved_overrides[name]
+        card_effects_list.append(entry)
+    card_effects_list.sort(key=lambda c: (not c["has_effects"], c["cmc"], c["name"]))
+
+    effect_schema = get_effect_schema()
+
     return render_template(
         "simulate.html",
         deck_name=deck_name,
@@ -40,6 +109,9 @@ def config(deck_name: str):
         max_sims=MAX_SIMS,
         max_turns=MAX_TURNS,
         max_land_sweep=MAX_LAND_SWEEP,
+        card_effects=card_effects_list,
+        effect_schema=effect_schema,
+        saved_overrides=saved_overrides,
     )
 
 
@@ -51,6 +123,16 @@ def run(deck_name: str):
 
     seed_val = request.form.get("seed", "").strip()
     workers_val = int(request.form.get("workers", 0))
+
+    # Parse effect overrides JSON (empty dict if missing or invalid)
+    overrides_raw = request.form.get("effect_overrides", "{}").strip()
+    try:
+        effect_overrides = json.loads(overrides_raw) if overrides_raw else {}
+    except (json.JSONDecodeError, TypeError):
+        effect_overrides = {}
+
+    # Persist overrides to disk (even if empty, to clear previous overrides)
+    save_overrides(deck_name, effect_overrides)
 
     turns = int(request.form.get("turns", 10))
     sims = int(request.form.get("sims", 1000))
@@ -81,12 +163,28 @@ def run(deck_name: str):
         "seed": int(seed_val) if seed_val else None,
         "workers": workers_val if workers_val > 0 else (os.cpu_count() or 1),
         "mulligan": request.form.get("mulligan", "default"),
+        "effect_overrides": effect_overrides,
     }
 
     runner = get_runner()
     job_id = runner.submit(deck_name, sim_config)
     status = runner.get_status(job_id)
     return render_template("partials/job_status.html", **status)
+
+
+@bp.route("/<deck_name>/overrides", methods=["POST"])
+def save_overrides_api(deck_name: str):
+    path = get_deckpath(deck_name)
+    if not os.path.isfile(path):
+        abort(404)
+
+    try:
+        effect_overrides = request.get_json(force=True) or {}
+    except (TypeError, ValueError):
+        effect_overrides = {}
+
+    save_overrides(deck_name, effect_overrides)
+    return jsonify({"ok": True})
 
 
 @bp.route("/status/<job_id>")
@@ -97,9 +195,7 @@ def status(job_id: str):
         abort(404)
 
     if status["status"] == "completed":
-        resp = make_response(render_template("partials/job_status.html", **status))
-        resp.headers["HX-Redirect"] = f"/sim/results/{job_id}"
-        return resp
+        return render_template("partials/results_content.html", **status)
 
     return render_template("partials/job_status.html", **status)
 
