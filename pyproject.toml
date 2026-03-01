@@ -19,6 +19,9 @@ dev = [
     "pytest>=9.0.2",
     "flask>=3.1",
 ]
+autocard = [
+    "ollama>=0.4.0",
+]
 
 [project.scripts]
 mana-curve = "mana_curve.cli.main:main"
