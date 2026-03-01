@@ -224,6 +224,7 @@
 <script>
 const EFFECT_SCHEMA = {{ effect_schema | tojson }};
 const CARD_EFFECTS = {{ card_effects | tojson }};
+const SAVED_OVERRIDES = {{ saved_overrides | tojson }};
 
 function toggleOverride(btn) {
     const card = btn.closest('.effects-card');
@@ -364,10 +365,81 @@ function collectOverrides() {
     document.getElementById('effect-overrides-input').value = JSON.stringify(overrides);
 }
 
+function addEffectRowWithData(panel, effectData) {
+    const list = panel.querySelector('.override-effects-list');
+    const row = document.createElement('div');
+    row.className = 'override-effect-row';
+
+    const typeKeys = Object.keys(EFFECT_SCHEMA);
+    let typeOpts = typeKeys.map(k => `<option value="${k}"${k === effectData.type ? ' selected' : ''}>${EFFECT_SCHEMA[k].label} (${EFFECT_SCHEMA[k].slot})</option>`).join('');
+
+    row.innerHTML = `
+        <select class="effect-type-select" onchange="onTypeChange(this)">
+            ${typeOpts}
+        </select>
+        <div class="effect-params"></div>
+        <button type="button" class="btn-remove-effect" onclick="this.parentElement.remove(); collectOverrides();">&times;</button>
+    `;
+    list.appendChild(row);
+    // Build params UI for the selected type
+    onTypeChange(row.querySelector('.effect-type-select'));
+    // Now populate param values from saved data
+    if (effectData.params) {
+        row.querySelectorAll('.effect-param-input').forEach(inp => {
+            const pName = inp.dataset.param;
+            if (pName in effectData.params) {
+                const val = effectData.params[pName];
+                if (inp.type === 'checkbox') {
+                    inp.checked = !!val;
+                } else if (Array.isArray(val)) {
+                    inp.value = val.join(', ');
+                } else {
+                    inp.value = val;
+                }
+            }
+        });
+    }
+}
+
+function loadSavedOverrides() {
+    if (!SAVED_OVERRIDES || Object.keys(SAVED_OVERRIDES).length === 0) return;
+
+    document.querySelectorAll('.effects-card').forEach(card => {
+        const cardName = card.dataset.cardName;
+        if (!(cardName in SAVED_OVERRIDES)) return;
+
+        const override = SAVED_OVERRIDES[cardName];
+        const panel = card.querySelector('.override-panel');
+        const toggleBtn = card.querySelector('.override-toggle');
+
+        // Open the panel
+        panel.style.display = 'block';
+        toggleBtn.textContent = 'Hide';
+
+        // Add effect rows from saved data
+        if (override.effects && override.effects.length > 0) {
+            override.effects.forEach(eff => addEffectRowWithData(panel, eff));
+        }
+
+        // Set metadata
+        if (override.ramp) panel.querySelector('.meta-ramp').checked = true;
+        if (override.tapped) panel.querySelector('.meta-tapped').checked = true;
+        if (override.is_land_tutor) panel.querySelector('.meta-is-land-tutor').checked = true;
+        if (override.priority) panel.querySelector('.meta-priority').value = override.priority;
+        if (override.override_cmc !== undefined && override.override_cmc !== null) {
+            panel.querySelector('.meta-override-cmc').value = override.override_cmc;
+        }
+    });
+    collectOverrides();
+}
+
 // Collect on form submit
 document.getElementById('sim-form').addEventListener('htmx:configRequest', function() {
     collectOverrides();
 });
+
+// Load saved overrides on page load
+loadSavedOverrides();
 </script>
 {% endif %}
 {% endblock %}

@@ -35,6 +35,33 @@ def save_decklist(deck_name: str, decklist: List[Dict[str, Any]]) -> str:
     return path
 
 
+def get_overrides_path(deck_name: str) -> str:
+    """Return the path to a deck's overrides file: decks/<name>/<name>.overrides.json."""
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    )
+    deck_dir = os.path.join(project_root, "decks", deck_name)
+    os.makedirs(deck_dir, exist_ok=True)
+    return os.path.join(deck_dir, f"{deck_name}.overrides.json")
+
+
+def load_overrides(deck_name: str) -> Dict[str, Any]:
+    """Load saved overrides. Returns {} if file doesn't exist."""
+    path = get_overrides_path(deck_name)
+    if not os.path.isfile(path):
+        return {}
+    with open(path) as f:
+        return json.load(f)
+
+
+def save_overrides(deck_name: str, overrides: Dict[str, Any]) -> str:
+    """Save overrides dict to JSON. Returns file path."""
+    path = get_overrides_path(deck_name)
+    with open(path, "w") as f:
+        json.dump(overrides, f, indent=4)
+    return path
+
+
 def get_basic_island() -> Dict[str, Any]:
     """Return a card dict for a basic Island."""
     return {

@@ -21,6 +21,13 @@ def client(app):
     return app.test_client()
 
 
+def _write_json(path, data):
+    """Helper to write JSON to a file (used for monkeypatching save_overrides)."""
+    with open(path, "w") as f:
+        json.dump(data, f)
+    return path
+
+
 def _create_test_deck(tmp_path, name="testdeck"):
     """Create a minimal deck JSON in tmp_path and return the path."""
     deck_dir = tmp_path / "decks" / name
@@ -814,3 +821,87 @@ class TestEffectOverrides:
         })
         assert response.status_code == 200
         assert submitted_configs[0]["effect_overrides"] == {}
+
+    def test_run_saves_overrides_to_disk(self, client, tmp_path, monkeypatch):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        overrides_file = str(tmp_path / "testdeck.overrides.json")
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.save_overrides",
+            lambda name, data: _write_json(overrides_file, data),
+        )
+        from mana_curve.web.routes import simulation as sim_mod
+
+        mock_runner = type("MockRunner", (), {
+            "submit": lambda self, name, cfg: "abc123",
+            "get_status": lambda self, jid: {
+                "job_id": "abc123", "deck_name": "testdeck",
+                "status": "running", "progress": 0, "total": 4,
+                "config": {}, "results": [], "error": None,
+            },
+        })()
+        monkeypatch.setattr(sim_mod, "get_runner", lambda: mock_runner)
+
+        overrides = {"Sol Ring": {"effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 5}}]}}
+        client.post("/sim/testdeck/run", data={
+            "turns": "10", "sims": "100", "min_lands": "36", "max_lands": "39",
+            "effect_overrides": json.dumps(overrides),
+        })
+        with open(overrides_file) as f:
+            saved = json.load(f)
+        assert saved == overrides
+
+    def test_config_loads_saved_overrides(self, client, tmp_path, monkeypatch):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.load_decklist",
+            lambda name: json.loads(
+                open(os.path.join(root, "decks", name, f"{name}.json")).read()
+            ),
+        )
+        saved = {"Sol Ring": {"effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 5}}]}}
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.load_overrides",
+            lambda name: saved,
+        )
+        response = client.get("/sim/testdeck")
+        assert response.status_code == 200
+        assert b"SAVED_OVERRIDES" in response.data
+
+    def test_empty_overrides_clears_file(self, client, tmp_path, monkeypatch):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        overrides_file = str(tmp_path / "testdeck.overrides.json")
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.save_overrides",
+            lambda name, data: _write_json(overrides_file, data),
+        )
+        from mana_curve.web.routes import simulation as sim_mod
+
+        mock_runner = type("MockRunner", (), {
+            "submit": lambda self, name, cfg: "abc123",
+            "get_status": lambda self, jid: {
+                "job_id": "abc123", "deck_name": "testdeck",
+                "status": "running", "progress": 0, "total": 4,
+                "config": {}, "results": [], "error": None,
+            },
+        })()
+        monkeypatch.setattr(sim_mod, "get_runner", lambda: mock_runner)
+
+        client.post("/sim/testdeck/run", data={
+            "turns": "10", "sims": "100", "min_lands": "36", "max_lands": "39",
+            "effect_overrides": "{}",
+        })
+        with open(overrides_file) as f:
+            saved = json.load(f)
+        assert saved == {}

@@ -7,7 +7,7 @@ import os
 
 from flask import Blueprint, abort, flash, jsonify, make_response, render_template, request
 
-from mana_curve.decklist.loader import get_deckpath, load_decklist
+from mana_curve.decklist.loader import get_deckpath, load_decklist, load_overrides, save_overrides
 from mana_curve.effects.card_database import DEFAULT_REGISTRY
 from mana_curve.effects.json_loader import get_effect_schema
 from mana_curve.web.services.simulation_runner import SimulationRunner
@@ -52,6 +52,8 @@ def config(deck_name: str):
         c.get("quantity", 1) for c in deck_list if "Land" in c.get("types", [])
     )
 
+    saved_overrides = load_overrides(deck_name)
+
     card_effects_list = []
     for card_dict in deck_list:
         name = card_dict.get("name", "")
@@ -59,13 +61,19 @@ def config(deck_name: str):
         if "Land" in types:
             continue
         effects = DEFAULT_REGISTRY.get(name)
-        card_effects_list.append({
+        entry = {
             "name": name,
             "cmc": card_dict.get("cmc", 0),
             "types": types,
             "has_effects": effects is not None,
             "effects_display": _describe_effects(effects) if effects else "",
-        })
+        }
+        # If this card has a saved override, attach override data for the template
+        if name in saved_overrides:
+            entry["has_effects"] = True
+            entry["effects_display"] = "User override"
+            entry["override"] = saved_overrides[name]
+        card_effects_list.append(entry)
     card_effects_list.sort(key=lambda c: (not c["has_effects"], c["cmc"], c["name"]))
 
     effect_schema = get_effect_schema()
@@ -79,6 +87,7 @@ def config(deck_name: str):
         max_land_sweep=MAX_LAND_SWEEP,
         card_effects=card_effects_list,
         effect_schema=effect_schema,
+        saved_overrides=saved_overrides,
     )
 
 
@@ -97,6 +106,9 @@ def run(deck_name: str):
         effect_overrides = json.loads(overrides_raw) if overrides_raw else {}
     except (json.JSONDecodeError, TypeError):
         effect_overrides = {}
+
+    # Persist overrides to disk (even if empty, to clear previous overrides)
+    save_overrides(deck_name, effect_overrides)
 
     turns = int(request.form.get("turns", 10))
     sims = int(request.form.get("sims", 1000))
