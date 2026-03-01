@@ -471,6 +471,34 @@ def _make_card_performance():
     }
 
 
+def _make_replay_data():
+    turn = {
+        "turn": 1,
+        "hand_before_draw": ["Island 0", "Creature 1"],
+        "played": [
+            {"name": "Island 0", "cost": "", "mana_spent": 0, "is_land": True},
+            {"name": "Creature 1", "cost": "{1}", "mana_spent": 1, "is_land": False},
+        ],
+        "mana_spent_this_turn": 1,
+        "total_mana_production": 1,
+        "hand_after": ["Creature 2"],
+        "battlefield": [],
+        "lands": ["Island 0"],
+        "graveyard": [],
+    }
+    game = {
+        "total_mana": 15,
+        "mulligans": 0,
+        "starting_hand": ["Island 0", "Creature 1", "Creature 2"],
+        "turns": [turn],
+    }
+    return {
+        "top": [game],
+        "mid": [game],
+        "low": [game],
+    }
+
+
 def _make_mock_results():
     return [
         {
@@ -498,6 +526,7 @@ def _make_mock_results():
                 "low_centile": 0.01,
             },
             "card_performance": _make_card_performance(),
+            "replay_data": _make_replay_data(),
         },
         {
             "land_count": 37,
@@ -524,6 +553,7 @@ def _make_mock_results():
                 "low_centile": 0.01,
             },
             "card_performance": _make_card_performance(),
+            "replay_data": _make_replay_data(),
         },
     ]
 
@@ -592,6 +622,22 @@ class TestResultsPage:
         assert b"manaChart" in response.data
         assert b"distributionChart" in response.data
         assert b"consistencyChart" in response.data
+
+    def test_results_page_has_game_replays(self, client, monkeypatch):
+        from mana_curve.web.routes import simulation as sim_mod
+
+        monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
+        response = client.get("/sim/results/abc123")
+        assert b"Game Replays" in response.data
+
+    def test_results_page_has_quantile_tabs(self, client, monkeypatch):
+        from mana_curve.web.routes import simulation as sim_mod
+
+        monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
+        response = client.get("/sim/results/abc123")
+        assert b"Top Quartile" in response.data
+        assert b"Mid" in response.data
+        assert b"Low Quartile" in response.data
 
     def test_results_incomplete_job_404(self, client, monkeypatch):
         from mana_curve.web.routes import simulation as sim_mod

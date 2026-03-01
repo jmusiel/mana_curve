@@ -53,6 +53,7 @@ class SimulationResult:
     distribution_stats: Dict[str, float] = field(default_factory=dict)
     card_performance: Dict[str, Any] = field(default_factory=dict)
     game_records: Dict[str, Dict[str, list]] = field(default_factory=dict)
+    replay_data: Dict[str, Any] = field(default_factory=dict)
 
     # 95% confidence intervals (low, high)
     ci_mean_mana: Tuple[float, float] = (0.0, 0.0)
@@ -934,6 +935,7 @@ class Goldfisher:
         mid_turns_list = []
         card_cast_turn_list: list[list] = [[] for _ in self.decklist]
         played_cards_per_game: list[set] = []
+        replay_buckets: dict[str, list] = {"top": [], "mid": [], "low": []}
 
         for j in tqdm(range(self.sims), leave=False):
             if self.seed is not None:
@@ -947,9 +949,23 @@ class Goldfisher:
             mid_turns = 0
             all_cards_played: list[Card] = []
 
+            # Replay capture: only when thresholds are available and buckets not full
+            _capture_replay = (
+                top_centile_threshold is not None
+                and not all(len(b) >= 10 for b in replay_buckets.values())
+            )
+            turn_snapshots: list[dict] = []
+            starting_hand_names: list[str] = []
+            if _capture_replay:
+                starting_hand_names = [self.decklist[idx].name for idx in state.hand]
+
             for i in range(self.turns):
                 mana_spent = 0
                 spells_played = 0
+
+                if _capture_replay:
+                    hand_before = [self.decklist[idx].name for idx in state.hand]
+
                 played = self._take_turn(state)
 
                 for card in played:
@@ -966,6 +982,27 @@ class Goldfisher:
                 if spells_played < 2 and state.deck and mana_spent < i + 1:
                     mid_turns += 1
                 total_mana_spent += mana_spent
+
+                if _capture_replay:
+                    turn_snapshots.append({
+                        "turn": i + 1,
+                        "hand_before_draw": hand_before,
+                        "played": [
+                            {
+                                "name": c.name,
+                                "cost": c.cost,
+                                "mana_spent": c.mana_spent_when_played,
+                                "is_land": c.land,
+                            }
+                            for c in played
+                        ],
+                        "mana_spent_this_turn": mana_spent,
+                        "total_mana_production": self._get_mana(state),
+                        "hand_after": [self.decklist[idx].name for idx in state.hand],
+                        "battlefield": [self.decklist[idx].name for idx in state.battlefield],
+                        "lands": [self.decklist[idx].name for idx in state.lands],
+                        "graveyard": [self.decklist[idx].name for idx in state.yard],
+                    })
 
             mana_spent_list.append(total_mana_spent)
             lands_played_list.append(lands_played)
@@ -1052,6 +1089,24 @@ class Goldfisher:
                             [c.unique_name for c in all_cards_played]
                         )
 
+            # Classify game into replay buckets
+            if _capture_replay:
+                game_replay = {
+                    "total_mana": total_mana_spent,
+                    "mulligans": mulligans,
+                    "starting_hand": starting_hand_names,
+                    "turns": turn_snapshots,
+                }
+                if total_mana_spent >= top_quartile_threshold:
+                    if len(replay_buckets["top"]) < 10:
+                        replay_buckets["top"].append(game_replay)
+                elif total_mana_spent <= low_quartile_threshold:
+                    if len(replay_buckets["low"]) < 10:
+                        replay_buckets["low"].append(game_replay)
+                else:
+                    if len(replay_buckets["mid"]) < 10:
+                        replay_buckets["mid"].append(game_replay)
+
             if self.verbose:
                 for line in state.log:
                     print(line)
@@ -1128,6 +1183,7 @@ class Goldfisher:
             distribution_stats=distribution_stats,
             card_performance=card_performance,
             game_records=dict(game_records),
+            replay_data=replay_buckets,
             ci_mean_mana=ci_mean_mana,
             ci_consistency=ci_consistency,
             ci_mean_bad_turns=ci_mean_bad_turns,

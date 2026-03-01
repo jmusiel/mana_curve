@@ -493,6 +493,86 @@ class TestCardPerformance:
         assert result.card_performance == {}
 
 
+class TestReplayData:
+    """Tests for structured replay data capture."""
+
+    def test_replay_data_has_buckets(self, sequential_result):
+        rd = sequential_result.replay_data
+        assert "top" in rd
+        assert "mid" in rd
+        assert "low" in rd
+
+    def test_buckets_have_games(self, sequential_result):
+        rd = sequential_result.replay_data
+        assert len(rd["top"]) > 0
+        assert len(rd["low"]) > 0
+
+    def test_buckets_capped_at_10(self, sequential_result):
+        rd = sequential_result.replay_data
+        for bucket in ("top", "mid", "low"):
+            assert len(rd[bucket]) <= 10
+
+    def test_game_has_required_fields(self, sequential_result):
+        rd = sequential_result.replay_data
+        for bucket in ("top", "mid", "low"):
+            for game in rd[bucket]:
+                assert "total_mana" in game
+                assert "mulligans" in game
+                assert "starting_hand" in game
+                assert "turns" in game
+
+    def test_starting_hand_is_list_of_strings(self, sequential_result):
+        game = sequential_result.replay_data["top"][0]
+        assert isinstance(game["starting_hand"], list)
+        assert all(isinstance(name, str) for name in game["starting_hand"])
+
+    def test_turns_have_snapshot_fields(self, sequential_result):
+        game = sequential_result.replay_data["top"][0]
+        for turn in game["turns"]:
+            assert "turn" in turn
+            assert "hand_before_draw" in turn
+            assert "played" in turn
+            assert "mana_spent_this_turn" in turn
+            assert "total_mana_production" in turn
+            assert "hand_after" in turn
+            assert "battlefield" in turn
+            assert "lands" in turn
+            assert "graveyard" in turn
+
+    def test_turn_numbers_sequential(self, sequential_result):
+        game = sequential_result.replay_data["top"][0]
+        turn_numbers = [t["turn"] for t in game["turns"]]
+        assert turn_numbers == list(range(1, len(turn_numbers) + 1))
+
+    def test_played_cards_have_fields(self, sequential_result):
+        game = sequential_result.replay_data["top"][0]
+        for turn in game["turns"]:
+            for card in turn["played"]:
+                assert "name" in card
+                assert "cost" in card
+                assert "mana_spent" in card
+                assert "is_land" in card
+
+    def test_top_bucket_higher_mana_than_low(self, sequential_result):
+        rd = sequential_result.replay_data
+        if rd["top"] and rd["low"]:
+            avg_top = sum(g["total_mana"] for g in rd["top"]) / len(rd["top"])
+            avg_low = sum(g["total_mana"] for g in rd["low"]) / len(rd["low"])
+            assert avg_top > avg_low
+
+    def test_parallel_returns_empty_replay_data(self, parallel_result):
+        assert parallel_result.replay_data == {}
+
+    def test_few_sims_returns_empty_replay_data(self):
+        deck = _simple_deck()
+        gf = Goldfisher(deck, turns=5, sims=50, record_results="quartile", seed=1)
+        result = gf.simulate()
+        rd = result.replay_data
+        assert rd["top"] == []
+        assert rd["mid"] == []
+        assert rd["low"] == []
+
+
 class TestGameRecords:
     """Tests for game_records populated in sequential path."""
 
