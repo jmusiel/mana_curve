@@ -63,3 +63,4 @@ class GameState:
 
     # Game log
     log: List[str] = field(default_factory=list)
+    should_log: bool = True

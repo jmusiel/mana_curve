@@ -82,7 +82,8 @@ _active_deckdict: Dict[str, Card] = {}
 def _draw(state: GameState) -> None:
     """Draw a card from the deck into the hand."""
     if not state.deck:
-        state.log.append("Draw failed, deck is empty")
+        if state.should_log:
+            state.log.append("Draw failed, deck is empty")
         state.draws += 1
         return
     drawn_i = state.deck.pop()
@@ -90,7 +91,8 @@ def _draw(state: GameState) -> None:
     drawn.zone = state.hand
     state.hand.append(drawn_i)
     state.draws += 1
-    state.log.append(f"Draw {drawn.printable}")
+    if state.should_log:
+        state.log.append(f"Draw {drawn.printable}")
 
 
 def _random_discard(state: GameState) -> None:
@@ -98,7 +100,8 @@ def _random_discard(state: GameState) -> None:
     discarded_i = random.choice(state.hand)
     discarded = _active_decklist[discarded_i]
     discarded.change_zone(state.yard)
-    state.log.append(f"Discarded {discarded.printable}")
+    if state.should_log:
+        state.log.append(f"Discarded {discarded.printable}")
 
 
 def _find_card_by_name(state: GameState, name: str) -> Card | None:
@@ -148,6 +151,7 @@ class Goldfisher:
         self.sims = sims
         self.verbose = verbose
         self.seed = seed
+        self._should_log = verbose or record_results is not None
 
         # Separate commanders from the decklist
         self.commanders: list[Card] = []
@@ -219,6 +223,9 @@ class Goldfisher:
 
         card = Card(**kw)
 
+        # Cache registry effects on the card to avoid repeated lookups
+        card._cached_effects = effects
+
         # Apply card-level flags from registry
         if effects:
             card.ramp = effects.ramp
@@ -234,6 +241,7 @@ class Goldfisher:
     def _reset(self) -> GameState:
         """Create a fresh GameState for a new game."""
         state = GameState()
+        state.should_log = self._should_log
         state.card_cast_turn = [None] * len(self.decklist)
 
         # Set up module-level references for effects
@@ -297,10 +305,11 @@ class Goldfisher:
                 state.deck.append(card.index)
             random.shuffle(state.deck)
 
-            if mulligans == -1:
-                state.log.append("### Opening hand:")
-            else:
-                state.log.append(f"### Mulligan #{mulligans + 1}")
+            if state.should_log:
+                if mulligans == -1:
+                    state.log.append("### Opening hand:")
+                else:
+                    state.log.append(f"### Mulligan #{mulligans + 1}")
 
             cards = 7
             if mulligans > 0:
@@ -319,7 +328,8 @@ class Goldfisher:
 
         state.starting_hand = [self.decklist[i] for i in state.hand]
         state.starting_hand_land_count = lands_in_hand
-        state.log.append(f"### Kept {lands_in_hand}/{len(state.hand)} lands/cards")
+        if state.should_log:
+            state.log.append(f"### Kept {lands_in_hand}/{len(state.hand)} lands/cards")
         return mulligans
 
     def _get_mana(self, state: GameState) -> int:
@@ -349,13 +359,14 @@ class Goldfisher:
 
         playables = sorted(playables)
 
-        playables_str = []
-        for card in playables:
-            if card.commander:
-                playables_str.append(f"{card.cmc}(c)")
-            else:
-                playables_str.append(f"{card.cmc}")
-        state.log.append(f"--Playable Spells: {playables_str}")
+        if state.should_log:
+            playables_str = []
+            for card in playables:
+                if card.commander:
+                    playables_str.append(f"{card.cmc}(c)")
+                else:
+                    playables_str.append(f"{card.cmc}")
+            state.log.append(f"--Playable Spells: {playables_str}")
 
         return playables
 
@@ -368,7 +379,8 @@ class Goldfisher:
         for land in reversed(playable_lands):
             if state.played_land_this_turn < state.lands_per_turn:
                 land.change_zone(state.lands)
-                state.log.append(f"Played as land {land.printable}")
+                if state.should_log:
+                    state.log.append(f"Played as land {land.printable}")
                 land.mana_spent_when_played = 0
                 played.append(land)
                 state.played_land_this_turn += 1
@@ -376,7 +388,7 @@ class Goldfisher:
                     state.untapped_land_this_turn += 1
 
                 # Apply on_play effects for lands
-                effects = self.registry.get(land.name)
+                effects = land._cached_effects
                 if effects:
                     for eff in effects.on_play:
                         if isinstance(eff, OnPlayEffect):
@@ -413,7 +425,7 @@ class Goldfisher:
                         trigger_eff.cast_trigger(trigger_card, card, state)
 
                     # Register this card's effects
-                    effects = self.registry.get(card.name)
+                    effects = card._cached_effects
                     if effects:
                         for eff in effects.cast_trigger:
                             state.cast_triggers.append((card, eff))
@@ -423,7 +435,8 @@ class Goldfisher:
                             state.mana_functions.append(eff)
 
                     # Execute on_play effects
-                    state.log.append(f"Played {card.printable}")
+                    if state.should_log:
+                        state.log.append(f"Played {card.printable}")
                     card.mana_spent_when_played = card.cmc
                     if card.creature:
                         state.creatures_played += 1
@@ -445,18 +458,20 @@ class Goldfisher:
             playables = self._get_playables(state, mana_available)
 
         if mana_available < state.treasure:
-            state.log.append(f"Spent treasures: [{state.treasure}] -> [{mana_available}]")
+            if state.should_log:
+                state.log.append(f"Spent treasures: [{state.treasure}] -> [{mana_available}]")
             state.treasure = mana_available
 
         return played_effects
 
     def _take_turn(self, state: GameState) -> list[Card]:
         """Execute one turn."""
-        state.log.append(
-            f"### Turn {state.turn + 1} "
-            f"(Lands: {len(state.lands)}, Mana: {self._get_mana(state)}[{state.treasure}], "
-            f"Hand: {len(state.hand)})"
-        )
+        if state.should_log:
+            state.log.append(
+                f"### Turn {state.turn + 1} "
+                f"(Lands: {len(state.lands)}, Mana: {self._get_mana(state)}[{state.treasure}], "
+                f"Hand: {len(state.hand)})"
+            )
         state.played_land_this_turn = 0
         state.untapped_land_this_turn = 0
         state.tapped_creatures_this_turn = 0
