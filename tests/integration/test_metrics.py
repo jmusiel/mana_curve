@@ -1,0 +1,444 @@
+"""Comprehensive tests for all simulation metrics.
+
+Tests cover every field of SimulationResult for both sequential
+and parallel execution paths, including distribution_stats.
+"""
+
+import pytest
+
+from mana_curve.engine.goldfisher import Goldfisher, SimulationResult
+
+
+def _simple_deck(num_lands: int = 37, num_spells: int = 62) -> list[dict]:
+    """Build a simple deck with lands and vanilla creatures."""
+    deck = []
+    deck.append({
+        "name": "Test Commander",
+        "cmc": 4,
+        "cost": "{2}{U}{B}",
+        "text": "",
+        "types": ["Creature"],
+        "commander": True,
+    })
+    for i in range(num_lands):
+        deck.append({
+            "name": f"Island {i}",
+            "cmc": 0,
+            "cost": "",
+            "text": "",
+            "types": ["Land"],
+            "commander": False,
+        })
+    for i in range(num_spells):
+        cmc = (i % 6) + 1
+        deck.append({
+            "name": f"Creature {i}",
+            "cmc": cmc,
+            "cost": f"{{{cmc}}}",
+            "text": "",
+            "types": ["Creature"],
+            "commander": False,
+        })
+    return deck
+
+
+# Use enough sims for stable distribution stats (need > calibration sample)
+SIMS = 500
+SEED = 42
+
+
+@pytest.fixture(scope="module")
+def sequential_result() -> SimulationResult:
+    """Run a single sequential simulation used by multiple tests."""
+    deck = _simple_deck()
+    gf = Goldfisher(deck, turns=10, sims=SIMS, record_results="quartile", seed=SEED)
+    return gf.simulate()
+
+
+@pytest.fixture(scope="module")
+def parallel_result() -> SimulationResult:
+    """Run a single parallel simulation used by multiple tests."""
+    deck = _simple_deck()
+    gf = Goldfisher(
+        deck, turns=10, sims=SIMS, record_results="quartile", seed=SEED, workers=2,
+    )
+    return gf.simulate()
+
+
+# ---------------------------------------------------------------------------
+# Core metric sanity checks (sequential)
+# ---------------------------------------------------------------------------
+
+class TestCoreMetrics:
+    """Verify all core SimulationResult fields are populated and sensible."""
+
+    def test_land_count(self, sequential_result):
+        assert sequential_result.land_count == 37
+
+    def test_mean_mana_positive(self, sequential_result):
+        assert sequential_result.mean_mana > 0
+
+    def test_mean_lands_positive(self, sequential_result):
+        assert sequential_result.mean_lands > 0
+
+    def test_mean_lands_bounded(self, sequential_result):
+        """Over 10 turns, can't play more lands than turns (1 per turn default)."""
+        assert sequential_result.mean_lands <= 10
+
+    def test_mean_mulls_nonnegative(self, sequential_result):
+        assert sequential_result.mean_mulls >= 0
+
+    def test_mean_draws_positive(self, sequential_result):
+        """Should draw at least 7 cards (opening hand)."""
+        assert sequential_result.mean_draws >= 7
+
+    def test_mean_bad_turns_nonnegative(self, sequential_result):
+        assert sequential_result.mean_bad_turns >= 0
+
+    def test_mean_bad_turns_bounded(self, sequential_result):
+        assert sequential_result.mean_bad_turns <= 10
+
+    def test_mean_mid_turns_nonnegative(self, sequential_result):
+        assert sequential_result.mean_mid_turns >= 0
+
+    def test_mean_mid_turns_bounded(self, sequential_result):
+        assert sequential_result.mean_mid_turns <= 10
+
+    def test_percentiles_ordered(self, sequential_result):
+        """25th <= 50th <= 75th percentile."""
+        r = sequential_result
+        assert r.percentile_25 <= r.percentile_50 <= r.percentile_75
+
+    def test_percentiles_positive(self, sequential_result):
+        assert sequential_result.percentile_25 >= 0
+        assert sequential_result.percentile_50 > 0
+        assert sequential_result.percentile_75 > 0
+
+
+class TestConsistency:
+    """Tests for the consistency metric and its threshold."""
+
+    def test_consistency_range(self, sequential_result):
+        """Consistency should be between 0 and ~1.33 (theoretical max)."""
+        assert 0 < sequential_result.consistency <= 1.4
+
+    def test_con_threshold(self, sequential_result):
+        assert sequential_result.con_threshold == 0.25
+
+    def test_threshold_percent_range(self, sequential_result):
+        assert 0 <= sequential_result.threshold_percent <= 1
+
+    def test_threshold_mana_positive(self, sequential_result):
+        assert sequential_result.threshold_mana >= 0
+
+
+class TestConfidenceIntervals:
+    """Tests for 95% confidence intervals."""
+
+    def test_ci_mean_mana_brackets_mean(self, sequential_result):
+        r = sequential_result
+        assert r.ci_mean_mana[0] <= r.mean_mana <= r.ci_mean_mana[1]
+
+    def test_ci_mean_mana_width_positive(self, sequential_result):
+        r = sequential_result
+        assert r.ci_mean_mana[1] > r.ci_mean_mana[0]
+
+    def test_ci_mean_bad_turns_brackets_mean(self, sequential_result):
+        r = sequential_result
+        assert r.ci_mean_bad_turns[0] <= r.mean_bad_turns <= r.ci_mean_bad_turns[1]
+
+    def test_ci_consistency_brackets_mean(self, sequential_result):
+        r = sequential_result
+        assert r.ci_consistency[0] <= r.consistency <= r.ci_consistency[1]
+
+    def test_ci_consistency_width_positive(self, sequential_result):
+        r = sequential_result
+        assert r.ci_consistency[1] > r.ci_consistency[0]
+
+    def test_ci_narrows_with_more_sims(self):
+        """More sims should yield a tighter CI."""
+        deck = _simple_deck()
+        gf_small = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED)
+        r_small = gf_small.simulate()
+
+        gf_big = Goldfisher(deck, turns=5, sims=2000, record_results="quartile", seed=SEED)
+        r_big = gf_big.simulate()
+
+        ci_width_small = r_small.ci_mean_mana[1] - r_small.ci_mean_mana[0]
+        ci_width_big = r_big.ci_mean_mana[1] - r_big.ci_mean_mana[0]
+        assert ci_width_big < ci_width_small
+
+
+# ---------------------------------------------------------------------------
+# Distribution stats
+# ---------------------------------------------------------------------------
+
+class TestDistributionStats:
+    """Tests for distribution_stats bucketing."""
+
+    def test_all_keys_present(self, sequential_result):
+        ds = sequential_result.distribution_stats
+        expected = [
+            "top_centile", "top_decile", "top_quartile", "top_half",
+            "low_half", "low_quartile", "low_decile", "low_centile",
+        ]
+        for key in expected:
+            assert key in ds, f"Missing key: {key}"
+
+    def test_all_values_nonnegative(self, sequential_result):
+        for key, val in sequential_result.distribution_stats.items():
+            assert val >= 0, f"{key} is negative: {val}"
+
+    def test_all_values_at_most_one(self, sequential_result):
+        for key, val in sequential_result.distribution_stats.items():
+            assert val <= 1.0, f"{key} exceeds 1.0: {val}"
+
+    def test_top_half_nonzero(self, sequential_result):
+        """Top 50% bucket should capture a significant fraction of games."""
+        assert sequential_result.distribution_stats["top_half"] > 0.3
+
+    def test_low_half_nonzero(self, sequential_result):
+        assert sequential_result.distribution_stats["low_half"] > 0.3
+
+    def test_top_quartile_nonzero(self, sequential_result):
+        """Top 25% bucket should capture roughly 25% of games."""
+        assert sequential_result.distribution_stats["top_quartile"] > 0.1
+
+    def test_low_quartile_nonzero(self, sequential_result):
+        assert sequential_result.distribution_stats["low_quartile"] > 0.1
+
+    def test_top_decile_nonzero(self, sequential_result):
+        assert sequential_result.distribution_stats["top_decile"] > 0.01
+
+    def test_low_decile_nonzero(self, sequential_result):
+        assert sequential_result.distribution_stats["low_decile"] > 0.01
+
+    def test_bucket_ordering(self, sequential_result):
+        """Larger buckets should capture at least as many games as smaller ones."""
+        ds = sequential_result.distribution_stats
+        assert ds["top_half"] >= ds["top_quartile"]
+        assert ds["top_quartile"] >= ds["top_decile"]
+        assert ds["top_decile"] >= ds["top_centile"]
+        assert ds["low_half"] >= ds["low_quartile"]
+        assert ds["low_quartile"] >= ds["low_decile"]
+        assert ds["low_decile"] >= ds["low_centile"]
+
+    def test_not_all_zero(self, sequential_result):
+        """Distribution stats should not all be zero."""
+        ds = sequential_result.distribution_stats
+        assert sum(ds.values()) > 0
+
+    def test_halves_sum_near_one(self, sequential_result):
+        """top_half + low_half should be close to 1.0."""
+        ds = sequential_result.distribution_stats
+        total = ds["top_half"] + ds["low_half"]
+        assert 0.9 <= total <= 1.1, f"Halves sum to {total}"
+
+
+# ---------------------------------------------------------------------------
+# Parallel path parity
+# ---------------------------------------------------------------------------
+
+class TestParallelParity:
+    """Verify parallel path produces consistent results with sequential."""
+
+    def test_mean_mana_matches(self, sequential_result, parallel_result):
+        """CRN: same seed should give identical mean_mana."""
+        assert sequential_result.mean_mana == parallel_result.mean_mana
+
+    def test_mean_lands_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_lands == parallel_result.mean_lands
+
+    def test_mean_mulls_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_mulls == parallel_result.mean_mulls
+
+    def test_mean_draws_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_draws == parallel_result.mean_draws
+
+    def test_mean_bad_turns_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_bad_turns == parallel_result.mean_bad_turns
+
+    def test_mean_mid_turns_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_mid_turns == parallel_result.mean_mid_turns
+
+    def test_percentiles_match(self, sequential_result, parallel_result):
+        assert sequential_result.percentile_25 == parallel_result.percentile_25
+        assert sequential_result.percentile_50 == parallel_result.percentile_50
+        assert sequential_result.percentile_75 == parallel_result.percentile_75
+
+    def test_consistency_matches(self, sequential_result, parallel_result):
+        assert sequential_result.consistency == parallel_result.consistency
+
+    def test_threshold_matches(self, sequential_result, parallel_result):
+        assert sequential_result.threshold_percent == parallel_result.threshold_percent
+        assert sequential_result.threshold_mana == parallel_result.threshold_mana
+
+
+class TestParallelDistributionStats:
+    """Verify parallel distribution_stats are populated and reasonable."""
+
+    def test_all_keys_present(self, parallel_result):
+        ds = parallel_result.distribution_stats
+        expected = [
+            "top_centile", "top_decile", "top_quartile", "top_half",
+            "low_half", "low_quartile", "low_decile", "low_centile",
+        ]
+        for key in expected:
+            assert key in ds, f"Missing key: {key}"
+
+    def test_not_all_zero(self, parallel_result):
+        ds = parallel_result.distribution_stats
+        assert sum(ds.values()) > 0, "All distribution stats are zero in parallel path"
+
+    def test_top_half_nonzero(self, parallel_result):
+        assert parallel_result.distribution_stats["top_half"] > 0.3
+
+    def test_low_half_nonzero(self, parallel_result):
+        assert parallel_result.distribution_stats["low_half"] > 0.3
+
+    def test_bucket_ordering(self, parallel_result):
+        ds = parallel_result.distribution_stats
+        assert ds["top_half"] >= ds["top_quartile"]
+        assert ds["top_quartile"] >= ds["top_decile"]
+        assert ds["top_decile"] >= ds["top_centile"]
+        assert ds["low_half"] >= ds["low_quartile"]
+        assert ds["low_quartile"] >= ds["low_decile"]
+        assert ds["low_decile"] >= ds["low_centile"]
+
+    def test_distribution_stats_close_to_sequential(self, sequential_result, parallel_result):
+        """Both paths use the same raw data, so distribution stats should be identical."""
+        ds_seq = sequential_result.distribution_stats
+        ds_par = parallel_result.distribution_stats
+        for key in ds_seq:
+            assert ds_seq[key] == pytest.approx(ds_par[key], abs=0.001), (
+                f"{key}: seq={ds_seq[key]}, par={ds_par[key]}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# as_row formatting
+# ---------------------------------------------------------------------------
+
+class TestAsRow:
+    """Tests for SimulationResult.as_row() formatting."""
+
+    def test_row_length(self, sequential_result):
+        row = sequential_result.as_row()
+        assert len(row) == 13
+
+    def test_land_count_first(self, sequential_result):
+        row = sequential_result.as_row()
+        assert row[0] == sequential_result.land_count
+
+    def test_mean_mana_formatted(self, sequential_result):
+        row = sequential_result.as_row()
+        assert "+/-" in row[1]
+        assert str(f"{sequential_result.mean_mana:.2f}") in row[1]
+
+    def test_consistency_formatted(self, sequential_result):
+        row = sequential_result.as_row()
+        assert "+/-" in row[2]
+
+    def test_numeric_fields(self, sequential_result):
+        """Fields 3-12 should be numeric."""
+        row = sequential_result.as_row()
+        for i in range(3, 13):
+            assert isinstance(row[i], (int, float)), f"row[{i}] = {row[i]} is not numeric"
+
+
+# ---------------------------------------------------------------------------
+# Edge cases
+# ---------------------------------------------------------------------------
+
+class TestEdgeCases:
+    """Edge case tests for simulation metrics."""
+
+    def test_few_sims_no_crash(self):
+        """Should not crash with very few sims (below calibration threshold)."""
+        deck = _simple_deck()
+        gf = Goldfisher(deck, turns=5, sims=50, record_results="quartile", seed=1)
+        result = gf.simulate()
+        assert isinstance(result, SimulationResult)
+        # Distribution stats should be all zeros (not enough data to calibrate)
+        ds = result.distribution_stats
+        assert all(v == 0 for v in ds.values())
+
+    def test_record_results_none(self):
+        """record_results=None should still produce valid metrics."""
+        deck = _simple_deck()
+        gf = Goldfisher(deck, turns=5, sims=200, record_results=None, seed=1)
+        result = gf.simulate()
+        assert result.mean_mana > 0
+        ds = result.distribution_stats
+        # record_half is always True, so half buckets are computed;
+        # centile/decile/quartile should be zero when record_results=None
+        assert ds["top_centile"] == 0
+        assert ds["top_decile"] == 0
+        assert ds["top_quartile"] == 0
+        assert ds["low_centile"] == 0
+        assert ds["low_decile"] == 0
+        assert ds["low_quartile"] == 0
+
+    def test_one_turn(self):
+        """Simulation with 1 turn should still produce valid results."""
+        deck = _simple_deck()
+        gf = Goldfisher(deck, turns=1, sims=200, record_results="quartile", seed=1)
+        result = gf.simulate()
+        assert result.mean_mana >= 0
+        assert result.mean_lands >= 0
+        assert result.mean_lands <= 1
+
+    def test_more_lands_more_mean_lands(self):
+        """A deck with more lands should result in higher mean lands played."""
+        deck_low = _simple_deck(num_lands=30, num_spells=69)
+        gf_low = Goldfisher(deck_low, turns=10, sims=500, record_results="quartile", seed=SEED)
+        r_low = gf_low.simulate()
+
+        deck_high = _simple_deck(num_lands=45, num_spells=54)
+        gf_high = Goldfisher(deck_high, turns=10, sims=500, record_results="quartile", seed=SEED)
+        r_high = gf_high.simulate()
+
+        assert r_high.mean_lands > r_low.mean_lands
+
+    def test_more_lands_fewer_bad_turns(self):
+        """More lands should reduce bad turns (fewer missed land drops)."""
+        deck_low = _simple_deck(num_lands=25, num_spells=74)
+        gf_low = Goldfisher(deck_low, turns=10, sims=500, record_results="quartile", seed=SEED)
+        r_low = gf_low.simulate()
+
+        deck_high = _simple_deck(num_lands=40, num_spells=59)
+        gf_high = Goldfisher(deck_high, turns=10, sims=500, record_results="quartile", seed=SEED)
+        r_high = gf_high.simulate()
+
+        # With enough lands, you should have fewer dead turns
+        # (but too many lands also creates dead turns; 40 vs 25 should be better)
+        assert r_high.mean_bad_turns <= r_low.mean_bad_turns
+
+
+# ---------------------------------------------------------------------------
+# Game records (sequential only — parallel doesn't record game logs)
+# ---------------------------------------------------------------------------
+
+class TestGameRecords:
+    """Tests for game_records populated in sequential path."""
+
+    def test_game_records_populated(self, sequential_result):
+        """Game records should have entries for the distribution buckets."""
+        gr = sequential_result.game_records
+        assert len(gr) > 0
+
+    def test_game_records_have_mana_data(self, sequential_result):
+        gr = sequential_result.game_records
+        # At least one bucket should have recorded mana data
+        has_mana = any(
+            "mana" in bucket_data and len(bucket_data["mana"]) > 0
+            for bucket_data in gr.values()
+        )
+        assert has_mana
+
+    def test_game_records_logs_capped(self, sequential_result):
+        """Game record logs should be capped at 10 per bucket."""
+        gr = sequential_result.game_records
+        for bucket, data in gr.items():
+            if "logs" in data:
+                assert len(data["logs"]) <= 10, f"{bucket} has {len(data['logs'])} logs"

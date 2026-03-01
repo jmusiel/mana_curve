@@ -636,6 +636,58 @@ class Goldfisher:
         )
         self.land_count = sum(1 for c in self.decklist if c.land)
 
+    def _compute_distribution_stats(self, mana_spent_list: list) -> Dict[str, float]:
+        """Compute distribution bucket fractions from raw mana data.
+
+        Uses the first 10% (min 100) games to calibrate percentile thresholds,
+        then counts what fraction of remaining games fall into each bucket.
+        """
+        sample_games = int(max(len(mana_spent_list) / 10, 100))
+        if sample_games >= len(mana_spent_list):
+            # Not enough data for calibration
+            return {k: 0.0 for k in [
+                "top_centile", "top_decile", "top_quartile", "top_half",
+                "low_half", "low_quartile", "low_decile", "low_centile",
+            ]}
+
+        calibration = mana_spent_list[:sample_games]
+        evaluation = mana_spent_list[sample_games:]
+
+        top_centile_threshold = float(np.percentile(calibration, 99))
+        low_centile_threshold = float(np.percentile(calibration, 1))
+        top_decile_threshold = float(np.percentile(calibration, 90))
+        low_decile_threshold = float(np.percentile(calibration, 10))
+        top_quartile_threshold = float(np.percentile(calibration, 75))
+        low_quartile_threshold = float(np.percentile(calibration, 25))
+        median_threshold = float(np.percentile(calibration, 50))
+
+        counts = {k: 0 for k in [
+            "top_centile", "top_decile", "top_quartile", "top_half",
+            "low_half", "low_quartile", "low_decile", "low_centile",
+        ]}
+
+        for mana in evaluation:
+            if self.record_centile and mana >= top_centile_threshold:
+                counts["top_centile"] += 1
+            if self.record_decile and mana >= top_decile_threshold:
+                counts["top_decile"] += 1
+            if self.record_quartile and mana >= top_quartile_threshold:
+                counts["top_quartile"] += 1
+            if self.record_half and mana >= median_threshold:
+                counts["top_half"] += 1
+
+            if self.record_centile and mana <= low_centile_threshold:
+                counts["low_centile"] += 1
+            if self.record_decile and mana <= low_decile_threshold:
+                counts["low_decile"] += 1
+            if self.record_quartile and mana <= low_quartile_threshold:
+                counts["low_quartile"] += 1
+            if self.record_half and mana < median_threshold:
+                counts["low_half"] += 1
+
+        total = len(evaluation)
+        return {k: v / total for k, v in counts.items()}
+
     def _get_deck_dicts(self) -> list[dict]:
         """Serialize current decklist + commanders to dicts for workers."""
         dicts = [_card_to_dict(c) for c in self.commanders]
@@ -736,6 +788,9 @@ class Goldfisher:
             float(np.percentile(boot_consistencies, 97.5)),
         )
 
+        # Compute distribution stats (same calibration approach as sequential path)
+        distribution_stats = self._compute_distribution_stats(mana_spent_list)
+
         return SimulationResult(
             land_count=self.land_count,
             mean_mana=mean_mana,
@@ -754,6 +809,7 @@ class Goldfisher:
             ci_mean_mana=ci_mean_mana,
             ci_consistency=ci_consistency,
             ci_mean_bad_turns=ci_mean_bad_turns,
+            distribution_stats=distribution_stats,
         )
 
     def simulate(self) -> SimulationResult:
@@ -949,17 +1005,7 @@ class Goldfisher:
             float(np.percentile(boot_consistencies, 97.5)),
         )
 
-        total_recorded = self.sims - sample_games
-        distribution_stats = {
-            "top_centile": len(game_records["top_centile"]["mana"]) / total_recorded if self.record_centile else 0,
-            "top_decile": len(game_records["top_decile"]["mana"]) / total_recorded if self.record_decile else 0,
-            "top_quartile": len(game_records["top_quartile"]["mana"]) / total_recorded if self.record_quartile else 0,
-            "top_half": len(game_records["top_half"]["mana"]) / total_recorded if self.record_half else 0,
-            "low_half": len(game_records["low_half"]["mana"]) / total_recorded if self.record_half else 0,
-            "low_quartile": len(game_records["low_quartile"]["mana"]) / total_recorded if self.record_quartile else 0,
-            "low_decile": len(game_records["low_decile"]["mana"]) / total_recorded if self.record_decile else 0,
-            "low_centile": len(game_records["low_centile"]["mana"]) / total_recorded if self.record_centile else 0,
-        }
+        distribution_stats = self._compute_distribution_stats(mana_spent_list)
 
         return SimulationResult(
             land_count=self.land_count,
