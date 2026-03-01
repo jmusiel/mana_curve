@@ -127,7 +127,7 @@
                 {% for card in results[0].card_performance.high_performing %}
                 <tr>
                     <td>{{ loop.index }}</td>
-                    <td style="text-align:left">{{ card.name }}</td>
+                    <td style="text-align:left"><a href="https://scryfall.com/search?exact={{ card.name|urlencode }}" target="_blank" class="card-link" data-card-name="{{ card.name }}">{{ card.name }}</a></td>
                     <td>{{ card.cost }}</td>
                     <td style="text-align:left">{{ card.effects }}</td>
                     <td>{{ "%.1f"|format(card.top_rate * 100) }}%</td>
@@ -158,7 +158,7 @@
                 {% for card in results[0].card_performance.low_performing %}
                 <tr>
                     <td>{{ loop.index }}</td>
-                    <td style="text-align:left">{{ card.name }}</td>
+                    <td style="text-align:left"><a href="https://scryfall.com/search?exact={{ card.name|urlencode }}" target="_blank" class="card-link" data-card-name="{{ card.name }}">{{ card.name }}</a></td>
                     <td>{{ card.cost }}</td>
                     <td style="text-align:left">{{ card.effects }}</td>
                     <td>{{ "%.1f"|format(card.top_rate * 100) }}%</td>
@@ -300,6 +300,45 @@
                 }
             });
         });
+})();
+
+// Shared tooltip for Scryfall card image hover
+(function() {
+    const tooltip = document.createElement('div');
+    tooltip.id = 'card-preview-tooltip';
+    document.body.appendChild(tooltip);
+
+    const cache = {};
+
+    document.querySelectorAll('.card-link').forEach(link => {
+        link.addEventListener('mouseenter', function(e) {
+            const name = this.dataset.cardName;
+            if (!cache[name]) {
+                const img = document.createElement('img');
+                img.src = 'https://api.scryfall.com/cards/named?exact='
+                    + encodeURIComponent(name) + '&format=image&version=normal';
+                img.alt = name;
+                cache[name] = img;
+            }
+            tooltip.innerHTML = '';
+            tooltip.appendChild(cache[name]);
+            tooltip.style.display = 'block';
+            positionTooltip(e);
+        });
+
+        link.addEventListener('mousemove', positionTooltip);
+
+        link.addEventListener('mouseleave', function() {
+            tooltip.style.display = 'none';
+        });
+    });
+
+    function positionTooltip(e) {
+        const x = e.clientX + 15;
+        const y = Math.max(10, e.clientY - 180);
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+    }
 })();
 </script>
 {% endblock %}
