@@ -32,6 +32,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max_lands", type=int, default=39)
     parser.add_argument("--cuts", nargs="+", type=str, default=[])
     parser.add_argument("--record_results", type=str, default="quartile")
+    parser.add_argument("--seed", type=int, default=None)
     return parser
 
 

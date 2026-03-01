@@ -94,3 +94,51 @@ def test_set_lands():
     original = gf.land_count
     gf.set_lands(original + 2)
     assert gf.land_count == original + 2
+
+
+def test_seed_reproducibility():
+    """Same seed produces identical results."""
+    deck = _simple_deck()
+    gf1 = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=42)
+    r1 = gf1.simulate()
+
+    gf2 = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=42)
+    r2 = gf2.simulate()
+
+    assert r1.mean_mana == r2.mean_mana
+    assert r1.mean_lands == r2.mean_lands
+    assert r1.mean_mulls == r2.mean_mulls
+    assert r1.consistency == r2.consistency
+
+
+def test_different_seeds_differ():
+    """Different seeds produce different results."""
+    deck = _simple_deck()
+    gf1 = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=42)
+    r1 = gf1.simulate()
+
+    gf2 = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=99)
+    r2 = gf2.simulate()
+
+    # Very unlikely to be exactly equal with different seeds
+    assert r1.mean_mana != r2.mean_mana
+
+
+def test_crn_across_land_counts():
+    """CRN: same seed across land counts uses same random draws per game index."""
+    deck = _simple_deck(num_lands=35, num_spells=64)
+    seed = 123
+
+    gf = Goldfisher(deck, turns=5, sims=50, record_results="quartile", seed=seed)
+    gf.set_lands(36)
+    r36 = gf.simulate()
+
+    gf.set_lands(38)
+    r38 = gf.simulate()
+
+    # With CRN, results should differ (different land counts) but be comparable.
+    # The key property: both ran with the same per-game seeds.
+    # We verify this indirectly: re-running 36 with same seed gives identical result.
+    gf.set_lands(36)
+    r36_again = gf.simulate()
+    assert r36.mean_mana == r36_again.mean_mana

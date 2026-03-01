@@ -139,6 +139,7 @@ class Goldfisher:
         mulligan_strategy: MulliganStrategy | None = None,
         record_results: str = "quartile",
         deck_name: str | None = None,
+        seed: int | None = None,
         **kwargs,
     ):
         self.registry = registry or DEFAULT_REGISTRY
@@ -146,6 +147,7 @@ class Goldfisher:
         self.turns = turns
         self.sims = sims
         self.verbose = verbose
+        self.seed = seed
 
         # Separate commanders from the decklist
         self.commanders: list[Card] = []
@@ -548,6 +550,8 @@ class Goldfisher:
         card_cast_turn_list: list[list] = [[] for _ in self.decklist]
 
         for j in tqdm(range(self.sims), leave=False):
+            if self.seed is not None:
+                random.seed(self.seed + j)
             state = self._reset()
             mulligans = self._mulligan(state)
 
