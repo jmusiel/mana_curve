@@ -905,3 +905,59 @@ class TestEffectOverrides:
         with open(overrides_file) as f:
             saved = json.load(f)
         assert saved == {}
+
+    def test_overrides_api_saves_to_disk(self, client, tmp_path, monkeypatch):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        overrides_file = str(tmp_path / "testdeck.overrides.json")
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.save_overrides",
+            lambda name, data: _write_json(overrides_file, data),
+        )
+        overrides = {"Sol Ring": {"effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 3}}]}}
+        response = client.post(
+            "/sim/testdeck/overrides",
+            data=json.dumps(overrides),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        assert response.get_json() == {"ok": True}
+        with open(overrides_file) as f:
+            saved = json.load(f)
+        assert saved == overrides
+
+    def test_overrides_api_clears_with_empty(self, client, tmp_path, monkeypatch):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        overrides_file = str(tmp_path / "testdeck.overrides.json")
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.save_overrides",
+            lambda name, data: _write_json(overrides_file, data),
+        )
+        response = client.post(
+            "/sim/testdeck/overrides",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        with open(overrides_file) as f:
+            saved = json.load(f)
+        assert saved == {}
+
+    def test_overrides_api_nonexistent_deck_404(self, client, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: str(tmp_path / "nonexistent" / "nonexistent.json"),
+        )
+        response = client.post(
+            "/sim/nonexistent/overrides",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        assert response.status_code == 404

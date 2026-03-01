@@ -306,6 +306,18 @@ function removeOverride(btn) {
     panel.style.display = 'none';
     const toggleBtn = card.querySelector('.override-toggle');
     toggleBtn.textContent = card.querySelector('.no-effects') ? 'Add Effect' : 'Override';
+    // Reset the badge text to original
+    const badges = card.querySelector('.effects-card-badges');
+    const cardName = card.dataset.cardName;
+    const orig = CARD_EFFECTS.find(c => c.name === cardName);
+    const originalText = orig && orig.original_effects !== undefined ? orig.original_effects : (orig ? orig.effects_display : '');
+    if (originalText && originalText !== 'User override') {
+        badges.textContent = originalText;
+        badges.classList.remove('no-effects');
+    } else {
+        badges.textContent = 'No effects';
+        badges.classList.add('no-effects');
+    }
     // Uncheck metadata
     panel.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
     panel.querySelectorAll('input[type=number]').forEach(inp => {
@@ -313,6 +325,7 @@ function removeOverride(btn) {
         else if (inp.classList.contains('meta-override-cmc')) inp.value = '';
     });
     collectOverrides();
+    persistOverrides();
 }
 
 function collectOverrides() {
@@ -363,6 +376,15 @@ function collectOverrides() {
         overrides[cardName] = entry;
     });
     document.getElementById('effect-overrides-input').value = JSON.stringify(overrides);
+}
+
+function persistOverrides() {
+    const data = document.getElementById('effect-overrides-input').value;
+    fetch('{{ url_for("simulation.save_overrides_api", deck_name=deck_name) }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: data,
+    });
 }
 
 function addEffectRowWithData(panel, effectData) {

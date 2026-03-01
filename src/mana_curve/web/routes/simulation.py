@@ -70,6 +70,7 @@ def config(deck_name: str):
         }
         # If this card has a saved override, attach override data for the template
         if name in saved_overrides:
+            entry["original_effects"] = entry["effects_display"]
             entry["has_effects"] = True
             entry["effects_display"] = "User override"
             entry["override"] = saved_overrides[name]
@@ -146,6 +147,21 @@ def run(deck_name: str):
     job_id = runner.submit(deck_name, sim_config)
     status = runner.get_status(job_id)
     return render_template("partials/job_status.html", **status)
+
+
+@bp.route("/<deck_name>/overrides", methods=["POST"])
+def save_overrides_api(deck_name: str):
+    path = get_deckpath(deck_name)
+    if not os.path.isfile(path):
+        abort(404)
+
+    try:
+        effect_overrides = request.get_json(force=True) or {}
+    except (TypeError, ValueError):
+        effect_overrides = {}
+
+    save_overrides(deck_name, effect_overrides)
+    return jsonify({"ok": True})
 
 
 @bp.route("/status/<job_id>")
