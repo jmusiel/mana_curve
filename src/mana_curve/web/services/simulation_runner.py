@@ -1,8 +1,7 @@
 """Background simulation job manager.
 
-Runs Goldfisher simulations in daemon threads. Uses a semaphore to serialize
-simulations because Goldfisher relies on module-level globals
-(``_active_decklist``, ``_active_deckdict``) that are not thread-safe.
+Runs Goldfisher simulations in daemon threads. GameState is self-contained
+(no module-level globals), so concurrent simulations are safe.
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from mana_curve.decklist.loader import load_decklist
 from mana_curve.engine.goldfisher import Goldfisher
+from mana_curve.engine.mulligan import CurveAwareMulligan
 from mana_curve.metrics.reporter import result_to_dict
 
 
@@ -35,8 +35,6 @@ class SimulationRunner:
     def __init__(self) -> None:
         self._jobs: Dict[str, SimJob] = {}
         self._lock = threading.Lock()
-        # Serialize simulations to avoid goldfisher global conflicts
-        self._semaphore = threading.Semaphore(1)
 
     def submit(self, deck_name: str, config: Dict[str, Any]) -> str:
         """Start a background simulation. Returns the job ID."""
@@ -82,12 +80,15 @@ class SimulationRunner:
 
     def _run_simulation(self, job: SimJob) -> None:
         """Execute the simulation in a background thread."""
-        self._semaphore.acquire()
         try:
             with self._lock:
                 job.status = "running"
 
             deck_list = load_decklist(job.deck_name)
+
+            mulligan_strategy = None
+            if job.config.get("mulligan") == "curve_aware":
+                mulligan_strategy = CurveAwareMulligan()
 
             goldfisher = Goldfisher(
                 deck_list,
@@ -96,6 +97,9 @@ class SimulationRunner:
                 verbose=False,
                 record_results=job.config.get("record_results", "quartile"),
                 deck_name=job.deck_name,
+                seed=job.config.get("seed"),
+                workers=job.config.get("workers", 1),
+                mulligan_strategy=mulligan_strategy,
             )
 
             min_lands = job.config.get("min_lands", goldfisher.land_count)
@@ -117,5 +121,3 @@ class SimulationRunner:
             with self._lock:
                 job.status = "failed"
                 job.error = str(e)
-        finally:
-            self._semaphore.release()

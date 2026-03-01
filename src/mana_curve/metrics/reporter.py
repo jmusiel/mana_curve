@@ -116,4 +116,7 @@ def result_to_dict(result: SimulationResult) -> Dict[str, Any]:
         "threshold_percent": result.threshold_percent,
         "threshold_mana": result.threshold_mana,
         "distribution_stats": result.distribution_stats,
+        "ci_mean_mana": list(result.ci_mean_mana),
+        "ci_consistency": list(result.ci_consistency),
+        "ci_mean_bad_turns": list(result.ci_mean_bad_turns),
     }
