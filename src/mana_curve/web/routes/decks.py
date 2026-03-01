@@ -21,10 +21,13 @@ def import_form():
 @bp.route("/import", methods=["POST"])
 def import_deck():
     default_url = "https://archidekt.com/decks/81320/the_rr_connection"
-    default_name = "the_rr_connection"
 
     deck_url = request.form.get("deck_url", "").strip() or default_url
-    deck_name = request.form.get("deck_name", "").strip() or default_name
+    deck_name = request.form.get("deck_name", "").strip()
+
+    # If no name provided, extract it from the URL's last path segment
+    if not deck_name:
+        deck_name = deck_url.rstrip("/").rsplit("/", 1)[-1]
 
     try:
         fetch_and_save(deck_url, deck_name)

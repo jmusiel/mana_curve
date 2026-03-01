@@ -121,6 +121,22 @@ class TestImportPage:
         assert captured["url"] == "https://archidekt.com/decks/81320/the_rr_connection"
         assert captured["name"] == "the_rr_connection"
 
+    def test_import_empty_name_extracts_from_url(self, client, monkeypatch):
+        """Empty deck name should be extracted from the URL."""
+        captured = {}
+
+        def fake_fetch(url, name):
+            captured["url"] = url
+            captured["name"] = name
+
+        monkeypatch.setattr("mana_curve.web.routes.decks.fetch_and_save", fake_fetch)
+        response = client.post(
+            "/decks/import",
+            data={"deck_url": "https://archidekt.com/decks/555/my_cool_deck"},
+        )
+        assert captured["url"] == "https://archidekt.com/decks/555/my_cool_deck"
+        assert captured["name"] == "my_cool_deck"
+
     def test_import_provided_fields_override_defaults(self, client, monkeypatch):
         """Provided fields should be used instead of defaults."""
         captured = {}
