@@ -1,0 +1,391 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "group": "Mana Producers (1 mana)",
+      "defaults": {
+        "ramp": true,
+        "effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 1}}]
+      },
+      "cards": {
+        "Arcane Signet": {},
+        "Fellwar Stone": {},
+        "Sakura-Tribe Elder": {},
+        "Incubation Druid": {},
+        "Commander's Sphere": {},
+        "Orzhov Signet": {},
+        "Solemn Simulacrum": {},
+        "Claim Jumper": {},
+        "Talisman of Hierarchy": {},
+        "Deep Gnome Terramancer": {},
+        "Cultivate": {},
+        "Utopia Sprawl": {},
+        "Wild Growth": {},
+        "Fertile Ground": {},
+        "Wolfwillow Haven": {},
+        "Kodama's Reach": {},
+        "Farseek": {}
+      }
+    },
+    {
+      "group": "Mana Producers (2 mana)",
+      "defaults": {
+        "ramp": true,
+        "effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 2}}]
+      },
+      "cards": {
+        "Sol Ring": {},
+        "Relic of Sauron": {},
+        "Rishkar, Peema Renegade": {},
+        "Katilda, Dawnhart Prime": {},
+        "Overgrowth": {}
+      }
+    },
+    {
+      "group": "Mana Producers (3 mana)",
+      "defaults": {
+        "ramp": true,
+        "effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 3}}]
+      },
+      "cards": {
+        "Open the Way": {}
+      }
+    },
+    {
+      "group": "Scaling Mana Producers",
+      "defaults": {
+        "ramp": true,
+        "priority": 2,
+        "effects": [{"type": "scaling_mana", "slot": "per_turn", "params": {"amount": 1}}]
+      },
+      "cards": {
+        "As Foretold": {},
+        "Séance Board": {},
+        "Smothering Tithe": {},
+        "Gyre Sage": {},
+        "Kami of Whispered Hopes": {},
+        "Heronblade Elite": {},
+        "Kodama of the West Tree": {}
+      }
+    },
+    {
+      "group": "Cryptolith Rite effects",
+      "defaults": {
+        "ramp": true,
+        "priority": 2,
+        "effects": [{"type": "cryptolith_rites_mana", "slot": "mana_function"}]
+      },
+      "cards": {
+        "Gemhide Sliver": {},
+        "Enduring Vitality": {},
+        "Cryptolith Rite": {},
+        "Manaweft Sliver": {}
+      }
+    },
+    {
+      "group": "Enchantment Sanctum effects",
+      "defaults": {
+        "priority": 2,
+        "extra_types": ["artifact"],
+        "effects": [{"type": "enchantment_sanctum_mana", "slot": "mana_function"}]
+      },
+      "cards": {
+        "Serra's Sanctum": {},
+        "Sanctum Weaver": {}
+      }
+    },
+    {
+      "group": "Cost Reducers (nonpermanent)",
+      "defaults": {
+        "ramp": true,
+        "priority": 2,
+        "effects": [{"type": "reduce_cost", "slot": "on_play", "params": {"nonpermanent": 1}}]
+      },
+      "cards": {
+        "Thunderclap Drake": {},
+        "Case of the Ransacked Lab": {}
+      }
+    },
+    {
+      "group": "Cost Reducers (creature)",
+      "defaults": {
+        "ramp": true,
+        "priority": 2,
+        "effects": [{"type": "reduce_cost", "slot": "on_play", "params": {"creature": 1}}]
+      },
+      "cards": {
+        "Hamza, Guardian of Arashin": {},
+        "Umori, the Collector": {}
+      }
+    },
+    {
+      "group": "Cost Reducers (enchantment)",
+      "defaults": {
+        "ramp": true,
+        "priority": 2,
+        "effects": [{"type": "reduce_cost", "slot": "on_play", "params": {"enchantment": 1}}]
+      },
+      "cards": {
+        "Jukai Naturalist": {},
+        "Inquisitive Glimmer": {}
+      }
+    },
+    {
+      "group": "Green Tutors",
+      "defaults": {
+        "ramp": true,
+        "priority": 3,
+        "effects": [{"type": "tutor_to_hand", "slot": "on_play", "params": {"targets": [
+          "Gemhide Sliver",
+          "Manaweft Sliver",
+          "Enduring Vitality",
+          "Sanctum Weaver",
+          "Argothian Enchantress",
+          "Sythis, Harvest's Hand",
+          "Setessan Champion",
+          "Satyr Enchanter",
+          "Verduran Enchantress",
+          "Eidolon of Blossoms"
+        ]}}]
+      },
+      "cards": {
+        "Green Sun's Zenith": {},
+        "Finale of Devastation": {}
+      }
+    },
+    {
+      "group": "Land Tutors",
+      "defaults": {
+        "ramp": true,
+        "priority": 3,
+        "is_land_tutor": true,
+        "extra_types": ["sorcery"],
+        "override_cmc": 3
+      },
+      "cards": {
+        "Tolaria West": {
+          "effects": [{"type": "tutor_to_hand", "slot": "on_play", "params": {"targets": ["Serra's Sanctum"]}}],
+          "tapped": true
+        },
+        "Urza's Cave": {
+          "effects": [{"type": "tutor_to_hand", "slot": "on_play", "params": {"targets": ["Serra's Sanctum"]}}]
+        }
+      }
+    },
+    {
+      "group": "Immediate Draw (1 card)",
+      "defaults": {
+        "priority": 1,
+        "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 1}}]
+      },
+      "cards": {
+        "Archivist of Oghma": {},
+        "Growth Spiral": {},
+        "Explore": {},
+        "Mulch": {}
+      }
+    },
+    {
+      "group": "Immediate Draw (2 cards)",
+      "defaults": {
+        "priority": 1,
+        "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 2}}]
+      },
+      "cards": {
+        "Flame of Anor": {},
+        "Plumb the Forbidden": {},
+        "Diresight": {},
+        "Read the Bones": {}
+      }
+    },
+    {
+      "group": "Immediate Draw (3 cards)",
+      "defaults": {
+        "priority": 1,
+        "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 3}}]
+      },
+      "cards": {
+        "Manifold Insights": {},
+        "Mystic Confluence": {},
+        "Armorcraft Judge": {},
+        "Inspiring Call": {},
+        "Krav, the Unredeemed": {},
+        "Body Count": {},
+        "Urban Evolution": {}
+      }
+    },
+    {
+      "group": "Immediate Draw (4 cards)",
+      "defaults": {
+        "priority": 1,
+        "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 4}}]
+      },
+      "cards": {
+        "Rishkar's Expertise": {}
+      }
+    },
+    {
+      "group": "Draw/Discard (simple filter)",
+      "defaults": {
+        "priority": 1,
+        "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 1}}]
+      },
+      "cards": {
+        "Frantic Search": {},
+        "Brainstorm": {},
+        "Gitaxian Probe": {},
+        "Gamble": {},
+        "Visions of Beyond": {},
+        "Mystical Tutor": {},
+        "See the Truth": {}
+      }
+    },
+    {
+      "group": "Draw/Discard (complex)",
+      "defaults": {
+        "priority": 1
+      },
+      "cards": {
+        "Fact or Fiction": {
+          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 5, "discard": 2}}]
+        },
+        "Windfall": {
+          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"discard": 100, "second_draw": 6}}]
+        },
+        "Unexpected Windfall": {
+          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"discard": 1, "second_draw": 2, "make_treasures": 2}}]
+        },
+        "Big Score": {
+          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"discard": 1, "second_draw": 2, "make_treasures": 2}}]
+        },
+        "Maestros Charm": {
+          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 5, "discard": 4}}]
+        },
+        "Picklock Prankster // Free the Fae": {
+          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 4, "discard": 3}}]
+        },
+        "Consider": {
+          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 2, "discard": 1}}]
+        },
+        "Thought Scour": {
+          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 3, "discard": 2}}]
+        },
+        "Faithless Looting": {
+          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 2, "discard": 2}}]
+        },
+        "Prismari Command": {
+          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 2, "discard": 2, "make_treasures": 1}}]
+        },
+        "Deadly Dispute": {
+          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 2, "make_treasures": 1}}]
+        }
+      }
+    },
+    {
+      "group": "Per-Turn Draw",
+      "defaults": {
+        "priority": 1,
+        "effects": [{"type": "per_turn_draw", "slot": "per_turn", "params": {"amount": 1}}]
+      },
+      "cards": {
+        "Black Market Connections": {},
+        "Esper Sentinel": {},
+        "Phyrexian Arena": {},
+        "Ripples of Undeath": {},
+        "Toski, Bearer of Secrets": {},
+        "Leinore, Autumn Sovereign": {},
+        "Compost": {},
+        "Tuvasa the Sunlit": {},
+        "Mystic Remora": {},
+        "Enduring Innocence": {},
+        "Haliya, Guided by Light": {},
+        "Priest of Forgotten Gods": {},
+        "Tocasia's Welcome": {},
+        "Welcoming Vampire": {},
+        "Rumor Gatherer": {},
+        "Morbid Opportunist": {}
+      }
+    },
+    {
+      "group": "Per-Cast Draw (nonpermanent)",
+      "defaults": {
+        "priority": 1,
+        "effects": [{"type": "per_cast_draw", "slot": "cast_trigger", "params": {"nonpermanent": 1}}]
+      },
+      "cards": {
+        "Archmage Emeritus": {},
+        "Archmage of Runes": {
+          "effects": [
+            {"type": "per_cast_draw", "slot": "cast_trigger", "params": {"nonpermanent": 1}},
+            {"type": "reduce_cost", "slot": "on_play", "params": {"nonpermanent": 1}}
+          ]
+        }
+      }
+    },
+    {
+      "group": "Per-Cast Draw (spell)",
+      "defaults": {
+        "priority": 1,
+        "effects": [{"type": "per_cast_draw", "slot": "cast_trigger", "params": {"spell": 1}}]
+      },
+      "cards": {
+        "Bolas's Citadel": {}
+      }
+    },
+    {
+      "group": "Per-Cast Draw (creature)",
+      "defaults": {
+        "priority": 1,
+        "effects": [{"type": "per_cast_draw", "slot": "cast_trigger", "params": {"creature": 1}}]
+      },
+      "cards": {
+        "Skullclamp": {},
+        "Beast Whisperer": {},
+        "Guardian Project": {},
+        "Vanquisher's Banner": {},
+        "Tribute to the World Tree": {},
+        "Erebos, Bleak-Hearted": {},
+        "Mentor of the Meek": {},
+        "The Great Henge": {
+          "effects": [
+            {"type": "per_cast_draw", "slot": "cast_trigger", "params": {"creature": 1}},
+            {"type": "produce_mana", "slot": "on_play", "params": {"amount": 2}}
+          ]
+        }
+      }
+    },
+    {
+      "group": "Per-Cast Draw (enchantment)",
+      "defaults": {
+        "priority": 1,
+        "effects": [{"type": "per_cast_draw", "slot": "cast_trigger", "params": {"enchantment": 1}}]
+      },
+      "cards": {
+        "Mesa Enchantress": {},
+        "Satyr Enchanter": {},
+        "Enchantress's Presence": {},
+        "Entity Tracker": {},
+        "Eidolon of Blossoms": {},
+        "Setessan Champion": {},
+        "Sythis, Harvest's Hand": {},
+        "Verduran Enchantress": {},
+        "Argothian Enchantress": {}
+      }
+    },
+    {
+      "group": "Special Cards",
+      "defaults": {},
+      "cards": {
+        "Lórien Revealed": {
+          "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 3}}],
+          "extra_types": ["land"],
+          "tapped": true
+        },
+        "Cabal Coffers": {
+          "effects": [],
+          "extra_types": ["artifact"]
+        }
+      }
+    }
+  ]
+}
