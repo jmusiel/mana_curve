@@ -1,0 +1,23 @@
+{% if status == "running" or status == "pending" %}
+<div class="job-status"
+     hx-get="{{ url_for('simulation.status', job_id=job_id) }}"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+    <h3>Simulation {{ status }}...</h3>
+    <div class="progress-bar">
+        <div class="progress-fill" style="width: {{ (progress / total * 100) if total else 0 }}%"></div>
+    </div>
+    <p>{{ progress }} / {{ total }} land counts completed</p>
+</div>
+{% elif status == "completed" %}
+<div class="job-status job-complete">
+    <h3>Simulation Complete</h3>
+    <p>{{ results | length }} results ready.</p>
+    <a href="{{ url_for('simulation.results', job_id=job_id) }}" class="btn btn-primary">View Results</a>
+</div>
+{% elif status == "failed" %}
+<div class="job-status job-failed">
+    <h3>Simulation Failed</h3>
+    <p class="error">{{ error }}</p>
+</div>
+{% endif %}
