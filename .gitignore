@@ -8,3 +8,5 @@ decks/**/*.txt
 decks/**/*.png
 *.egg-info/**
 uv.lock
+CLAUDE.md
+*DESIGN.md
