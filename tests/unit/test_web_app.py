@@ -108,23 +108,53 @@ class TestImportPage:
         assert response.status_code == 200
         assert b"Archidekt" in response.data
 
-    def test_import_missing_fields_returns_400(self, client):
+    def test_import_empty_fields_uses_defaults(self, client, monkeypatch):
+        """Empty fields should fall back to the default deck URL/name."""
+        captured = {}
+
+        def fake_fetch(url, name):
+            captured["url"] = url
+            captured["name"] = name
+
+        monkeypatch.setattr("mana_curve.web.routes.decks.fetch_and_save", fake_fetch)
         response = client.post("/decks/import", data={})
-        assert response.status_code == 400
+        assert captured["url"] == "https://archidekt.com/decks/81320/the_rr_connection"
+        assert captured["name"] == "the_rr_connection"
 
-    def test_import_missing_deck_name_returns_400(self, client):
+    def test_import_empty_name_extracts_from_url(self, client, monkeypatch):
+        """Empty deck name should be extracted from the URL."""
+        captured = {}
+
+        def fake_fetch(url, name):
+            captured["url"] = url
+            captured["name"] = name
+
+        monkeypatch.setattr("mana_curve.web.routes.decks.fetch_and_save", fake_fetch)
         response = client.post(
             "/decks/import",
-            data={"deck_url": "https://archidekt.com/decks/123/test"},
+            data={"deck_url": "https://archidekt.com/decks/555/my_cool_deck"},
         )
-        assert response.status_code == 400
+        assert captured["url"] == "https://archidekt.com/decks/555/my_cool_deck"
+        assert captured["name"] == "my_cool_deck"
 
-    def test_import_missing_deck_url_returns_400(self, client):
+    def test_import_provided_fields_override_defaults(self, client, monkeypatch):
+        """Provided fields should be used instead of defaults."""
+        captured = {}
+
+        def fake_fetch(url, name):
+            captured["url"] = url
+            captured["name"] = name
+
+        monkeypatch.setattr("mana_curve.web.routes.decks.fetch_and_save", fake_fetch)
         response = client.post(
             "/decks/import",
-            data={"deck_name": "test"},
+            data={
+                "deck_url": "https://archidekt.com/decks/999/custom",
+                "deck_name": "custom",
+            },
         )
-        assert response.status_code == 400
+        assert captured["url"] == "https://archidekt.com/decks/999/custom"
+        assert captured["name"] == "custom"
 
 
 class TestDeckView:
@@ -199,16 +229,34 @@ class TestDeckView:
 
 
 class TestSimulationRoutes:
-    def test_config_form_renders(self, client, tmp_path, monkeypatch):
+    def _mock_deck(self, monkeypatch, tmp_path):
+        """Set up deck path and decklist mocks for simulation routes."""
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
             "mana_curve.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.load_decklist",
+            lambda name: json.loads(
+                open(os.path.join(root, "decks", name, f"{name}.json")).read()
+            ),
+        )
+
+    def test_config_form_renders(self, client, tmp_path, monkeypatch):
+        self._mock_deck(monkeypatch, tmp_path)
         response = client.get("/sim/testdeck")
         assert response.status_code == 200
         assert b"Simulate" in response.data
         assert b"testdeck" in response.data
+
+    def test_config_passes_land_count(self, client, tmp_path, monkeypatch):
+        self._mock_deck(monkeypatch, tmp_path)
+        response = client.get("/sim/testdeck")
+        assert response.status_code == 200
+        # Test deck has 1 Island => land_count=1
+        # The hint "(deck has 1 lands..." should be present
+        assert b"deck has 1 lands" in response.data
 
     def test_config_nonexistent_deck_404(self, client):
         response = client.get("/sim/nonexistent_xyz")
@@ -323,6 +371,85 @@ class TestSimulationRoutes:
         data = response.get_json()
         assert len(data) == 2
         assert data[0]["land_count"] == 36
+
+
+class TestSimulationValidation:
+    """Tests for web UI compute-limit validation."""
+
+    def _post_sim(self, client, monkeypatch, tmp_path, **overrides):
+        """POST to /sim/testdeck/run with default valid params, applying overrides."""
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        from mana_curve.web.routes import simulation as sim_mod
+
+        mock_runner = type("MockRunner", (), {
+            "submit": lambda self, name, cfg: "abc123",
+            "get_status": lambda self, jid: {
+                "job_id": "abc123",
+                "deck_name": "testdeck",
+                "status": "running",
+                "progress": 0,
+                "total": 4,
+                "config": {},
+                "results": [],
+                "error": None,
+            },
+        })()
+        monkeypatch.setattr(sim_mod, "get_runner", lambda: mock_runner)
+
+        data = {
+            "turns": "10",
+            "sims": "1000",
+            "min_lands": "34",
+            "max_lands": "38",
+        }
+        data.update(overrides)
+        return client.post("/sim/testdeck/run", data=data)
+
+    def test_valid_params_accepted(self, client, tmp_path, monkeypatch):
+        response = self._post_sim(client, monkeypatch, tmp_path)
+        assert response.status_code == 200
+
+    def test_sims_over_limit_returns_400(self, client, tmp_path, monkeypatch):
+        response = self._post_sim(client, monkeypatch, tmp_path, sims="5000")
+        assert response.status_code == 400
+        assert b"2000" in response.data
+
+    def test_turns_over_limit_returns_400(self, client, tmp_path, monkeypatch):
+        response = self._post_sim(client, monkeypatch, tmp_path, turns="20")
+        assert response.status_code == 400
+        assert b"14" in response.data
+
+    def test_land_sweep_over_limit_returns_400(self, client, tmp_path, monkeypatch):
+        response = self._post_sim(
+            client, monkeypatch, tmp_path, min_lands="20", max_lands="35",
+        )
+        assert response.status_code == 400
+        assert b"10" in response.data
+
+    def test_min_lands_greater_than_max_returns_400(self, client, tmp_path, monkeypatch):
+        response = self._post_sim(
+            client, monkeypatch, tmp_path, min_lands="40", max_lands="35",
+        )
+        assert response.status_code == 400
+        assert b"less than or equal" in response.data
+
+    def test_sims_at_limit_accepted(self, client, tmp_path, monkeypatch):
+        response = self._post_sim(client, monkeypatch, tmp_path, sims="2000")
+        assert response.status_code == 200
+
+    def test_turns_at_limit_accepted(self, client, tmp_path, monkeypatch):
+        response = self._post_sim(client, monkeypatch, tmp_path, turns="14")
+        assert response.status_code == 200
+
+    def test_land_sweep_at_limit_accepted(self, client, tmp_path, monkeypatch):
+        response = self._post_sim(
+            client, monkeypatch, tmp_path, min_lands="30", max_lands="40",
+        )
+        assert response.status_code == 200
 
 
 def _make_mock_results():

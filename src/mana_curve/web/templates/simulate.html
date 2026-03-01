@@ -1,4 +1,8 @@
 {% extends "base.html" %}
+{% set slider_min = [land_count - 10, 0] | max %}
+{% set slider_max = land_count + 10 %}
+{% set default_min = land_count - 2 %}
+{% set default_max = land_count + 2 %}
 {% block title %}Simulate {{ deck_name }} - Mana Curve{% endblock %}
 {% block content %}
 <h1>Simulate: {{ deck_name }}</h1>
@@ -7,22 +11,42 @@
       hx-swap="innerHTML">
     <div class="form-row">
         <div class="form-group">
-            <label for="turns">Turns</label>
-            <input type="number" id="turns" name="turns" value="10" min="1" max="20">
+            <label for="turns">Turns (max {{ max_turns }})</label>
+            <input type="number" id="turns" name="turns" value="10" min="1" max="{{ max_turns }}">
         </div>
         <div class="form-group">
-            <label for="sims">Simulations</label>
-            <input type="number" id="sims" name="sims" value="1000" min="100" max="100000" step="100">
+            <label for="sims">Simulations (max {{ max_sims }})</label>
+            <input type="number" id="sims" name="sims" value="1000" min="100" max="{{ max_sims }}" step="100">
         </div>
     </div>
-    <div class="form-row">
-        <div class="form-group">
-            <label for="min_lands">Min Lands</label>
-            <input type="number" id="min_lands" name="min_lands" value="36" min="20" max="50">
-        </div>
-        <div class="form-group">
-            <label for="max_lands">Max Lands</label>
-            <input type="number" id="max_lands" name="max_lands" value="39" min="20" max="50">
+    <div class="form-group">
+        <label>Land Range <span class="hint">(deck has {{ land_count }} lands, max sweep of {{ max_land_sweep }})</span></label>
+        <div class="range-slider-wrap">
+            <div class="range-row">
+                <div class="range-field">
+                    <label for="min-slider">Min Lands: <strong id="min-label">{{ default_min }}</strong></label>
+                    <input type="range" id="min-slider" list="land-ticks"
+                           min="{{ slider_min }}" max="{{ slider_max }}"
+                           value="{{ default_min }}" class="range-input">
+                </div>
+                <div class="range-field">
+                    <label for="max-slider">Max Lands: <strong id="max-label">{{ default_max }}</strong></label>
+                    <input type="range" id="max-slider" list="land-ticks"
+                           min="{{ slider_min }}" max="{{ slider_max }}"
+                           value="{{ default_max }}" class="range-input">
+                </div>
+            </div>
+            <datalist id="land-ticks">
+                {% for i in range(slider_min, slider_max + 1) %}
+                <option value="{{ i }}"{{ ' label="' ~ i ~ '"' if i == slider_min or i == land_count or i == slider_max or i % 5 == 0 else '' }}>
+                {% endfor %}
+            </datalist>
+            <div class="range-sweep-info">
+                Sweep: <strong id="sweep-label">{{ default_max - default_min }}</strong> land counts
+                ({{ default_min }} &ndash; {{ default_max }})
+            </div>
+            <input type="hidden" id="min_lands" name="min_lands" value="{{ default_min }}">
+            <input type="hidden" id="max_lands" name="max_lands" value="{{ default_max }}">
         </div>
     </div>
     <div class="form-row">
@@ -55,4 +79,63 @@
     <button type="submit" class="btn btn-primary">Run Simulation</button>
 </form>
 <div id="job-status"></div>
+
+<script>
+(function() {
+    const MAX_SWEEP = {{ max_land_sweep }};
+    const minSlider = document.getElementById('min-slider');
+    const maxSlider = document.getElementById('max-slider');
+    const minLabel = document.getElementById('min-label');
+    const maxLabel = document.getElementById('max-label');
+    const sweepLabel = document.getElementById('sweep-label');
+    const sweepInfo = document.querySelector('.range-sweep-info');
+    const minInput = document.getElementById('min_lands');
+    const maxInput = document.getElementById('max_lands');
+
+    function update() {
+        let minVal = parseInt(minSlider.value);
+        let maxVal = parseInt(maxSlider.value);
+
+        // Ensure min <= max
+        if (minVal > maxVal) {
+            if (this === minSlider) {
+                maxVal = minVal;
+                maxSlider.value = maxVal;
+            } else {
+                minVal = maxVal;
+                minSlider.value = minVal;
+            }
+        }
+
+        // Enforce max sweep
+        if (maxVal - minVal > MAX_SWEEP) {
+            if (this === minSlider) {
+                maxVal = minVal + MAX_SWEEP;
+                maxSlider.value = maxVal;
+            } else {
+                minVal = maxVal - MAX_SWEEP;
+                minSlider.value = minVal;
+            }
+        }
+
+        const sweep = maxVal - minVal;
+        minLabel.textContent = minVal;
+        maxLabel.textContent = maxVal;
+        sweepLabel.textContent = sweep;
+        sweepInfo.innerHTML = 'Sweep: <strong>' + sweep + '</strong> land counts (' + minVal + ' \u2013 ' + maxVal + ')';
+        minInput.value = minVal;
+        maxInput.value = maxVal;
+
+        // Warn if at limit
+        if (sweep >= MAX_SWEEP) {
+            sweepInfo.classList.add('at-limit');
+        } else {
+            sweepInfo.classList.remove('at-limit');
+        }
+    }
+
+    minSlider.addEventListener('input', update);
+    maxSlider.addEventListener('input', update);
+})();
+</script>
 {% endblock %}

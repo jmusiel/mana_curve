@@ -169,6 +169,50 @@ a:hover { text-decoration: underline; }
     padding: 1rem;
 }
 
+/* Range slider */
+.range-slider-wrap {
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 1rem;
+}
+.form-group > label .hint {
+    font-weight: 400;
+    color: #64748b;
+    font-size: 0.85rem;
+}
+.range-row {
+    display: flex;
+    gap: 1.5rem;
+}
+.range-field {
+    flex: 1;
+}
+.range-field label {
+    display: block;
+    font-size: 0.9rem;
+    color: #475569;
+    margin-bottom: 0.25rem;
+    font-weight: 500;
+}
+.range-input {
+    width: 100%;
+    height: 2rem;
+    cursor: pointer;
+    accent-color: #2563eb;
+}
+.range-sweep-info {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #475569;
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e2e8f0;
+}
+.range-sweep-info.at-limit {
+    color: #b45309;
+}
+
 /* Headings */
 h1 { font-size: 1.5rem; margin-bottom: 1rem; }
 h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
