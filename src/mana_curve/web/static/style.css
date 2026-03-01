@@ -265,6 +265,123 @@ a:hover { text-decoration: underline; }
     border-radius: 10px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
+/* Replay viewer */
+.replay-container {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-top: 1rem;
+    margin-bottom: 1.5rem;
+}
+.replay-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.replay-tab {
+    padding: 0.4rem 1rem;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: #f1f5f9;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #475569;
+    transition: background 0.15s;
+}
+.replay-tab:hover { background: #e2e8f0; }
+.replay-tab.active {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+}
+.replay-games {
+    display: flex;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+.replay-game-btn {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: #f8f9fa;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+.replay-game-btn:hover { background: #e2e8f0; }
+.replay-game-btn.active {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+}
+.replay-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+.replay-nav button {
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: #f1f5f9;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #475569;
+}
+.replay-nav button:hover { background: #e2e8f0; }
+.replay-nav button:disabled { opacity: 0.4; cursor: default; }
+.replay-nav .turn-counter {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #1a1a2e;
+}
+.replay-info {
+    font-size: 0.9rem;
+    color: #475569;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+.replay-section {
+    margin-bottom: 0.75rem;
+}
+.replay-section h4 {
+    font-size: 0.85rem;
+    color: #475569;
+    margin-bottom: 0.25rem;
+    font-weight: 600;
+}
+.replay-card-list {
+    font-size: 0.85rem;
+    color: #1a1a2e;
+    line-height: 1.8;
+}
+.replay-card-list a { margin-right: 0.25rem; }
+.replay-played-card {
+    display: inline-block;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 0.15rem 0.5rem;
+    margin: 0.15rem 0.25rem 0.15rem 0;
+    font-size: 0.8rem;
+}
+.replay-played-card.is-land {
+    background: #dcfce7;
+    border-color: #86efac;
+}
+
 /* Headings */
 h1 { font-size: 1.5rem; margin-bottom: 1rem; }
 h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }

@@ -186,9 +186,82 @@
     </div>
 </div>
 
+{% if results[0].replay_data and results[0].replay_data.top %}
+<h2>Game Replays</h2>
+<div class="replay-container" id="replay-viewer">
+    <div class="replay-tabs" id="replay-tabs">
+        <button class="replay-tab active" data-quantile="top">Top Quartile</button>
+        <button class="replay-tab" data-quantile="mid">Mid</button>
+        <button class="replay-tab" data-quantile="low">Low Quartile</button>
+    </div>
+    <div class="replay-games" id="replay-games"></div>
+    <div class="replay-info" id="replay-info"></div>
+    <div class="replay-nav" id="replay-nav">
+        <button id="replay-prev">&lt; Prev</button>
+        <span class="turn-counter" id="replay-turn-counter"></span>
+        <button id="replay-next">Next &gt;</button>
+    </div>
+    <div id="replay-content">
+        <div class="replay-section">
+            <h4>Hand (before draw):</h4>
+            <div class="replay-card-list" id="replay-hand-before"></div>
+        </div>
+        <div class="replay-section">
+            <h4>Played this turn:</h4>
+            <div class="replay-card-list" id="replay-played"></div>
+        </div>
+        <div class="replay-section">
+            <h4>Board State:</h4>
+            <div class="replay-card-list" id="replay-board"></div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <script>
 (function() {
     const apiUrl = "{{ url_for('simulation.api_results', job_id=job_id) }}";
+
+    // Shared tooltip for Scryfall card image hover
+    const tooltip = document.createElement('div');
+    tooltip.id = 'card-preview-tooltip';
+    document.body.appendChild(tooltip);
+    const tooltipCache = {};
+
+    function positionTooltip(e) {
+        const x = e.clientX + 15;
+        const y = Math.max(10, e.clientY - 180);
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+    }
+
+    function rebindTooltips() {
+        document.querySelectorAll('.card-link').forEach(link => {
+            if (link._tooltipBound) return;
+            link._tooltipBound = true;
+            link.addEventListener('mouseenter', function(e) {
+                const name = this.dataset.cardName;
+                if (!tooltipCache[name]) {
+                    const img = document.createElement('img');
+                    img.src = 'https://api.scryfall.com/cards/named?exact='
+                        + encodeURIComponent(name) + '&format=image&version=normal';
+                    img.alt = name;
+                    tooltipCache[name] = img;
+                }
+                tooltip.innerHTML = '';
+                tooltip.appendChild(tooltipCache[name]);
+                tooltip.style.display = 'block';
+                positionTooltip(e);
+            });
+            link.addEventListener('mousemove', positionTooltip);
+            link.addEventListener('mouseleave', function() {
+                tooltip.style.display = 'none';
+            });
+        });
+    }
+
+    // Bind tooltips for card-performance links rendered server-side
+    rebindTooltips();
 
     fetch(apiUrl)
         .then(r => r.json())
@@ -299,45 +372,137 @@
                     }
                 }
             });
+
+            // Replay viewer
+            initReplayViewer(data);
         });
-})();
 
-// Shared tooltip for Scryfall card image hover
-(function() {
-    const tooltip = document.createElement('div');
-    tooltip.id = 'card-preview-tooltip';
-    document.body.appendChild(tooltip);
+    function initReplayViewer(data) {
+        const viewer = document.getElementById('replay-viewer');
+        if (!viewer) return;
 
-    const cache = {};
+        const replayData = data[0].replay_data;
+        if (!replayData || !replayData.top || replayData.top.length === 0) return;
 
-    document.querySelectorAll('.card-link').forEach(link => {
-        link.addEventListener('mouseenter', function(e) {
-            const name = this.dataset.cardName;
-            if (!cache[name]) {
-                const img = document.createElement('img');
-                img.src = 'https://api.scryfall.com/cards/named?exact='
-                    + encodeURIComponent(name) + '&format=image&version=normal';
-                img.alt = name;
-                cache[name] = img;
+        let currentQuantile = 'top';
+        let currentGame = 0;
+        let currentTurn = 0;
+
+        function cardLink(name) {
+            return '<a class="card-link" data-card-name="' + name
+                + '" href="https://scryfall.com/search?exact='
+                + encodeURIComponent(name) + '" target="_blank">' + name + '</a>';
+        }
+
+        function renderGameButtons() {
+            const games = replayData[currentQuantile] || [];
+            const container = document.getElementById('replay-games');
+            container.innerHTML = '';
+            for (let i = 0; i < games.length; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'replay-game-btn' + (i === currentGame ? ' active' : '');
+                btn.textContent = i + 1;
+                btn.addEventListener('click', function() {
+                    currentGame = i;
+                    currentTurn = 0;
+                    renderReplay();
+                });
+                container.appendChild(btn);
             }
-            tooltip.innerHTML = '';
-            tooltip.appendChild(cache[name]);
-            tooltip.style.display = 'block';
-            positionTooltip(e);
+        }
+
+        function renderReplay() {
+            const games = replayData[currentQuantile] || [];
+            if (games.length === 0) {
+                document.getElementById('replay-info').textContent = 'No games in this bucket.';
+                document.getElementById('replay-turn-counter').textContent = '';
+                document.getElementById('replay-hand-before').innerHTML = '';
+                document.getElementById('replay-played').innerHTML = '';
+                document.getElementById('replay-board').innerHTML = '';
+                renderGameButtons();
+                return;
+            }
+
+            const game = games[currentGame];
+            const turn = game.turns[currentTurn];
+
+            // Update tab active states
+            document.querySelectorAll('.replay-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.quantile === currentQuantile);
+            });
+
+            renderGameButtons();
+
+            // Game info
+            document.getElementById('replay-info').innerHTML =
+                '<strong>Mana:</strong> ' + game.total_mana
+                + ' &nbsp;|&nbsp; <strong>Mulligans:</strong> ' + game.mulligans
+                + ' &nbsp;|&nbsp; <strong>Starting hand:</strong> '
+                + game.starting_hand.map(cardLink).join(', ');
+
+            // Turn nav
+            document.getElementById('replay-turn-counter').textContent =
+                'Turn ' + turn.turn + ' of ' + game.turns.length;
+            document.getElementById('replay-prev').disabled = currentTurn === 0;
+            document.getElementById('replay-next').disabled = currentTurn === game.turns.length - 1;
+
+            // Hand before draw
+            document.getElementById('replay-hand-before').innerHTML =
+                turn.hand_before_draw.length > 0
+                    ? turn.hand_before_draw.map(cardLink).join(', ')
+                    : '<em>Empty</em>';
+
+            // Played this turn
+            const playedHtml = turn.played.map(function(c) {
+                const cls = 'replay-played-card' + (c.is_land ? ' is-land' : '');
+                const detail = c.is_land ? '(land)' : '(' + c.cost + ', ' + c.mana_spent + ' mana)';
+                return '<span class="' + cls + '">'
+                    + cardLink(c.name) + ' ' + detail + '</span>';
+            }).join(' ');
+            document.getElementById('replay-played').innerHTML =
+                playedHtml || '<em>Nothing played</em>';
+
+            // Board state
+            const boardParts = [];
+            boardParts.push('<strong>Mana spent:</strong> ' + turn.mana_spent_this_turn
+                + ' &nbsp;|&nbsp; <strong>Total production:</strong> ' + turn.total_mana_production);
+            boardParts.push('<br><strong>Battlefield:</strong> '
+                + (turn.battlefield.length > 0 ? turn.battlefield.map(cardLink).join(', ') : '<em>Empty</em>'));
+            boardParts.push('<br><strong>Lands:</strong> '
+                + (turn.lands.length > 0 ? turn.lands.map(cardLink).join(', ') : '<em>None</em>'));
+            boardParts.push('<br><strong>Hand:</strong> '
+                + (turn.hand_after.length > 0 ? turn.hand_after.map(cardLink).join(', ') : '<em>Empty</em>'));
+            if (turn.graveyard.length > 0) {
+                boardParts.push('<br><strong>Graveyard:</strong> ' + turn.graveyard.map(cardLink).join(', '));
+            }
+            document.getElementById('replay-board').innerHTML = boardParts.join('');
+
+            rebindTooltips();
+        }
+
+        // Tab click handlers
+        document.querySelectorAll('.replay-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                currentQuantile = this.dataset.quantile;
+                currentGame = 0;
+                currentTurn = 0;
+                renderReplay();
+            });
         });
 
-        link.addEventListener('mousemove', positionTooltip);
-
-        link.addEventListener('mouseleave', function() {
-            tooltip.style.display = 'none';
+        // Turn navigation
+        document.getElementById('replay-prev').addEventListener('click', function() {
+            if (currentTurn > 0) { currentTurn--; renderReplay(); }
         });
-    });
+        document.getElementById('replay-next').addEventListener('click', function() {
+            const games = replayData[currentQuantile] || [];
+            if (games.length > 0 && currentTurn < games[currentGame].turns.length - 1) {
+                currentTurn++;
+                renderReplay();
+            }
+        });
 
-    function positionTooltip(e) {
-        const x = e.clientX + 15;
-        const y = Math.max(10, e.clientY - 180);
-        tooltip.style.left = x + 'px';
-        tooltip.style.top = y + 'px';
+        renderReplay();
     }
 })();
 </script>
