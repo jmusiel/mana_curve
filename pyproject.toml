@@ -1,7 +1,7 @@
 [project]
 name = "mana_curve"
-version = "0.1.0"
-description = "Utilities for deckbuilding"
+version = "0.2.0"
+description = "Magic: The Gathering commander deck simulation tool"
 requires-python = ">=3.11"
 dependencies = [
     "matplotlib>=3.10.6",
@@ -12,3 +12,21 @@ dependencies = [
     "tabulate>=0.9.0",
     "tqdm>=4.67.1",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[project.scripts]
+mana-curve = "mana_curve.cli.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mana_curve"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
