@@ -140,6 +140,26 @@ def test_confidence_intervals():
     assert result.ci_mean_mana[1] > result.ci_mean_mana[0]
 
 
+def test_parallel_simulation():
+    """Parallel simulation produces results consistent with sequential."""
+    deck = _simple_deck()
+
+    # Sequential with seed
+    gf_seq = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=42)
+    r_seq = gf_seq.simulate()
+
+    # Parallel with same seed (2 workers)
+    gf_par = Goldfisher(deck, turns=5, sims=200, record_results="quartile",
+                        seed=42, workers=2)
+    r_par = gf_par.simulate()
+
+    # With CRN (same seed), parallel and sequential should get the same raw stats
+    # because each game index gets the same seed regardless of batching
+    assert r_seq.mean_mana == r_par.mean_mana
+    assert r_seq.mean_lands == r_par.mean_lands
+    assert r_seq.mean_mulls == r_par.mean_mulls
+
+
 def test_crn_across_land_counts():
     """CRN: same seed across land counts uses same random draws per game index."""
     deck = _simple_deck(num_lands=35, num_spells=64)

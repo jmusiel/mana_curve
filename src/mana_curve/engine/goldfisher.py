@@ -6,8 +6,10 @@ No CLI code here -- returns structured ``SimulationResult``.
 
 from __future__ import annotations
 
+import os
 import random
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -112,6 +114,96 @@ def _find_card_by_name(state: GameState, name: str) -> Card | None:
     return state.deckdict.get(name)
 
 
+def _card_to_dict(card: Card) -> dict:
+    """Serialize a Card back to a dict for worker reconstruction."""
+    return {
+        "name": card.name, "quantity": card.quantity,
+        "oracle_cmc": card.oracle_cmc, "cmc": card.cmc,
+        "cost": card.cost, "text": card.text,
+        "sub_types": card.sub_types, "super_types": card.super_types,
+        "types": card.types, "identity": card.identity,
+        "default_category": card.default_category,
+        "user_category": card.user_category,
+        "tag": card.tag, "commander": card.commander,
+    }
+
+
+def _worker_run_batch(
+    deck_dicts: list[dict],
+    turns: int,
+    n_games: int,
+    base_seed: int | None,
+    game_offset: int,
+) -> dict:
+    """Top-level function for ProcessPoolExecutor workers.
+
+    Creates a fresh Goldfisher and runs ``n_games`` simulations.
+    Returns raw per-game stats as lists.
+    """
+    gf = Goldfisher(
+        deck_dicts, turns=turns, sims=n_games,
+        record_results=None, seed=base_seed,
+    )
+    # Adjust seed offset so each batch uses the correct per-game seeds
+    mana_spent = []
+    mulls = []
+    lands_played = []
+    cards_drawn = []
+    bad_turns = []
+    mid_turns = []
+    card_cast_turns: list[list] = [[] for _ in gf.decklist]
+
+    for j in range(n_games):
+        global_j = game_offset + j
+        if base_seed is not None:
+            random.seed(base_seed + global_j)
+        state = gf._reset()
+        mulligans = gf._mulligan(state)
+
+        total_mana_spent = 0
+        game_lands = 0
+        game_bad = 0
+        game_mid = 0
+
+        for i in range(turns):
+            turn_mana = 0
+            spells_played = 0
+            played = gf._take_turn(state)
+            for card in played:
+                if not card.ramp:
+                    turn_mana += card.mana_spent_when_played
+                if card.land:
+                    game_lands += 1
+                if card.spell:
+                    spells_played += 1
+            if spells_played == 0 and state.deck:
+                game_bad += 1
+            if spells_played < 2 and state.deck and turn_mana < i + 1:
+                game_mid += 1
+            total_mana_spent += turn_mana
+
+        mana_spent.append(total_mana_spent)
+        lands_played.append(game_lands)
+        mulls.append(mulligans)
+        cards_drawn.append(state.draws)
+        bad_turns.append(game_bad)
+        mid_turns.append(game_mid)
+
+        for k, turn in enumerate(state.card_cast_turn):
+            if turn is not None and not gf.decklist[k].land:
+                card_cast_turns[k].append(turn)
+
+    return {
+        "mana_spent": mana_spent,
+        "mulls": mulls,
+        "lands_played": lands_played,
+        "cards_drawn": cards_drawn,
+        "bad_turns": bad_turns,
+        "mid_turns": mid_turns,
+        "card_cast_turns": card_cast_turns,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Goldfisher engine
 # ---------------------------------------------------------------------------
@@ -146,6 +238,7 @@ class Goldfisher:
         record_results: str = "quartile",
         deck_name: str | None = None,
         seed: int | None = None,
+        workers: int = 1,
         **kwargs,
     ):
         self.registry = registry or DEFAULT_REGISTRY
@@ -154,6 +247,7 @@ class Goldfisher:
         self.sims = sims
         self.verbose = verbose
         self.seed = seed
+        self.workers = workers
         self._should_log = verbose or record_results is not None
 
         # Separate commanders from the decklist
@@ -542,8 +636,131 @@ class Goldfisher:
         )
         self.land_count = sum(1 for c in self.decklist if c.land)
 
+    def _get_deck_dicts(self) -> list[dict]:
+        """Serialize current decklist + commanders to dicts for workers."""
+        dicts = [_card_to_dict(c) for c in self.commanders]
+        dicts.extend(_card_to_dict(c) for c in self.decklist)
+        return dicts
+
+    def _run_parallel(self) -> dict:
+        """Run simulations across multiple worker processes."""
+        deck_dicts = self._get_deck_dicts()
+        num_workers = min(self.workers, self.sims)
+        batch_size = self.sims // num_workers
+        remainder = self.sims % num_workers
+
+        futures = []
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            offset = 0
+            for w in range(num_workers):
+                n = batch_size + (1 if w < remainder else 0)
+                futures.append(
+                    executor.submit(
+                        _worker_run_batch,
+                        deck_dicts, self.turns, n, self.seed, offset,
+                    )
+                )
+                offset += n
+
+        # Merge results from all workers
+        merged = {
+            "mana_spent": [], "mulls": [], "lands_played": [],
+            "cards_drawn": [], "bad_turns": [], "mid_turns": [],
+        }
+        card_cast_turns: list[list] = [[] for _ in self.decklist]
+
+        for future in futures:
+            batch = future.result()
+            for key in ["mana_spent", "mulls", "lands_played",
+                        "cards_drawn", "bad_turns", "mid_turns"]:
+                merged[key].extend(batch[key])
+            for k, turns_list in enumerate(batch["card_cast_turns"]):
+                card_cast_turns[k].extend(turns_list)
+
+        merged["card_cast_turns"] = card_cast_turns
+        return merged
+
+    def _simulate_from_raw(self, raw: dict) -> SimulationResult:
+        """Compute summary stats from raw per-game data (used by parallel path)."""
+        import bisect
+
+        mana_spent_list = raw["mana_spent"]
+        lands_played_list = raw["lands_played"]
+        mulls_list = raw["mulls"]
+        cards_drawn_list = raw["cards_drawn"]
+        bad_turns_list = raw["bad_turns"]
+        mid_turns_list = raw["mid_turns"]
+
+        mean_mana = float(np.mean(mana_spent_list))
+        mean_lands = float(np.mean(lands_played_list))
+        mean_mulls = float(np.mean(mulls_list))
+        mean_draws = float(np.mean(cards_drawn_list))
+        mean_bad_turns = float(np.mean(bad_turns_list))
+        mean_mid_turns = float(np.mean(mid_turns_list))
+        percentile_25 = float(np.percentile(mana_spent_list, 25))
+        percentile_50 = float(np.percentile(mana_spent_list, 50))
+        percentile_75 = float(np.percentile(mana_spent_list, 75))
+
+        total_mana = float(np.sum(mana_spent_list))
+        sorted_mana = sorted(mana_spent_list)
+        cumulative_mana = np.cumsum(sorted_mana)
+
+        con_threshold = 0.25
+        threshold_index = bisect.bisect_left(cumulative_mana, total_mana * con_threshold)
+        threshold_percent = threshold_index / len(mana_spent_list)
+        threshold_mana = float(sorted_mana[threshold_index])
+        consistency = (1 - threshold_percent) / (1 - con_threshold)
+
+        n = len(mana_spent_list)
+        z = 1.96
+
+        mana_se = float(np.std(mana_spent_list, ddof=1) / np.sqrt(n))
+        ci_mean_mana = (mean_mana - z * mana_se, mean_mana + z * mana_se)
+
+        bad_se = float(np.std(bad_turns_list, ddof=1) / np.sqrt(n))
+        ci_mean_bad_turns = (mean_bad_turns - z * bad_se, mean_bad_turns + z * bad_se)
+
+        n_boot = min(1000, n)
+        boot_consistencies = []
+        mana_arr = np.array(mana_spent_list)
+        for _ in range(n_boot):
+            boot_sample = np.random.choice(mana_arr, size=n, replace=True)
+            boot_total = float(np.sum(boot_sample))
+            boot_sorted = np.sort(boot_sample)
+            boot_cum = np.cumsum(boot_sorted)
+            boot_idx = int(np.searchsorted(boot_cum, boot_total * con_threshold))
+            boot_pct = boot_idx / n
+            boot_consistencies.append((1 - boot_pct) / (1 - con_threshold))
+        ci_consistency = (
+            float(np.percentile(boot_consistencies, 2.5)),
+            float(np.percentile(boot_consistencies, 97.5)),
+        )
+
+        return SimulationResult(
+            land_count=self.land_count,
+            mean_mana=mean_mana,
+            consistency=consistency,
+            mean_bad_turns=mean_bad_turns,
+            mean_mid_turns=mean_mid_turns,
+            mean_lands=mean_lands,
+            mean_mulls=mean_mulls,
+            mean_draws=mean_draws,
+            percentile_25=percentile_25,
+            percentile_50=percentile_50,
+            percentile_75=percentile_75,
+            threshold_percent=threshold_percent,
+            threshold_mana=threshold_mana,
+            con_threshold=con_threshold,
+            ci_mean_mana=ci_mean_mana,
+            ci_consistency=ci_consistency,
+            ci_mean_bad_turns=ci_mean_bad_turns,
+        )
+
     def simulate(self) -> SimulationResult:
         """Run all simulations and return a ``SimulationResult``."""
+        if self.workers > 1:
+            return self._simulate_from_raw(self._run_parallel())
+
         sample_games = max(self.sims / 10, 100)
         top_centile_threshold = None
         game_records: dict[str, dict[str, list]] = {

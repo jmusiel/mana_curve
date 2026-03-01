@@ -33,11 +33,16 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cuts", nargs="+", type=str, default=[])
     parser.add_argument("--record_results", type=str, default="quartile")
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Number of parallel workers (default: 1, use 0 for all CPUs)")
     return parser
 
 
 def run(config: dict) -> None:
     """Main simulation pipeline."""
+    import os
+    if config.get("workers", 1) == 0:
+        config["workers"] = os.cpu_count() or 1
     pp.pprint(config)
 
     if config.get("deck_url"):
