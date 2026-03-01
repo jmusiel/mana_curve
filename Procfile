@@ -1,1 +1,0 @@
-web: gunicorn "mana_curve.web:create_app()" --bind 0.0.0.0:${PORT:-8000}
