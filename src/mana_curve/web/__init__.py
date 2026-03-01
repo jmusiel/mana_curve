@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from flask import Flask
 
 
@@ -12,7 +14,7 @@ def create_app() -> Flask:
         template_folder="templates",
         static_folder="static",
     )
-    app.config["SECRET_KEY"] = "mana-curve-dev-key"
+    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "mana-curve-dev-key")
 
     from .routes import register_blueprints
 

@@ -10,3 +10,4 @@ decks/**/*.png
 uv.lock
 CLAUDE.md
 *DESIGN.md
+**/untracked/**
