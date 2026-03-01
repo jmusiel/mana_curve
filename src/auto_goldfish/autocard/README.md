@@ -577,20 +577,24 @@ Run LLM labeling on unlabeled cards.
 ```
 autocard label [--count N] [--model MODEL] [--batch-size N] [--concurrency N]
                [--resume] [--cards PATH] [--output PATH]
+               [--conservative | --no-conservative]
 ```
 
 - `--model`: Ollama model (default: `llama4:16x17b`)
 - `--batch-size`: Cards per LLM call (default: 1, try 10 for speed)
 - `--concurrency`: Parallel Ollama requests (default: 1, try 4)
 - `--resume`: Skip already-labeled cards (default: on)
+- `--conservative` / `--no-conservative`: Use conservative prompts that restrict the LLM to simpler, more reliable effect types (`produce_mana`, `draw_cards`, `draw_discard`, `reduce_cost`, `per_turn_draw`, `scaling_mana`) and slots (`on_play`, `per_turn`). Complex mechanics like cast triggers, mana functions, and tutors are approximated using the simpler types instead. (default: on)
 
 ### `autocard validate`
 
 Validate all labels in `labeled_cards.json` against the effect schema.
 
 ```
-autocard validate [--cards PATH]
+autocard validate [--cards PATH] [--conservative | --no-conservative]
 ```
+
+- `--conservative` / `--no-conservative`: Validate against the conservative type/slot subset. Use this to check LLM-generated labels. (default: off, since existing manually-created labels may use the full type set)
 
 ### `autocard export`
 

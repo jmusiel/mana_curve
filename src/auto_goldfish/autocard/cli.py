@@ -51,9 +51,11 @@ def cmd_label(args: argparse.Namespace) -> None:
         print("All cards are already labeled!")
         return
 
+    mode_str = "conservative" if args.conservative else "full"
     print(
         f"Labeling {len(unlabeled)} cards with model {args.model}"
-        f" (concurrency={args.concurrency}, batch_size={args.batch_size})..."
+        f" (concurrency={args.concurrency}, batch_size={args.batch_size},"
+        f" mode={mode_str})..."
     )
     output_path = Path(args.output) if args.output else None
     results = label_cards(
@@ -63,6 +65,7 @@ def cmd_label(args: argparse.Namespace) -> None:
         resume=args.resume,
         concurrency=args.concurrency,
         batch_size=args.batch_size,
+        conservative=args.conservative,
     )
     print(f"Labeled {len(results)} cards total.")
 
@@ -83,7 +86,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
     failed = 0
     for card_name, label in labeled.items():
         total += 1
-        errors = validate_label(card_name, label)
+        errors = validate_label(card_name, label, conservative=args.conservative)
         if errors:
             failed += 1
             for error in errors:
@@ -177,6 +180,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--batch-size", type=int, default=1,
         help="Cards per LLM call (default: 1, try 10 for speed)",
     )
+    label_parser.add_argument(
+        "--conservative", action=argparse.BooleanOptionalAction, default=True,
+        help="Use conservative prompts with simpler effect types (default: True)",
+    )
     label_parser.set_defaults(func=cmd_label)
 
     # validate
@@ -184,6 +191,10 @@ def build_parser() -> argparse.ArgumentParser:
     val_parser.add_argument(
         "--cards", type=str, default=None,
         help="Path to labeled_cards.json",
+    )
+    val_parser.add_argument(
+        "--conservative", action=argparse.BooleanOptionalAction, default=False,
+        help="Validate against conservative type subset (default: False)",
     )
     val_parser.set_defaults(func=cmd_validate)
 

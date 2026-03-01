@@ -17,6 +17,17 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_LABELED_PATH = Path(__file__).parent / "data" / "labeled_cards.json"
 
+# Conservative subset: types/slots that the LLM can reliably classify.
+CONSERVATIVE_TYPES = {
+    "produce_mana",
+    "draw_cards",
+    "draw_discard",
+    "reduce_cost",
+    "per_turn_draw",
+    "scaling_mana",
+}
+CONSERVATIVE_SLOTS = {"on_play", "per_turn"}
+
 
 def _build_effect_docs() -> str:
     """Build documentation of all effect types and their params."""
@@ -31,7 +42,23 @@ def _build_effect_docs() -> str:
     return "\n".join(lines)
 
 
+def _build_conservative_effect_docs() -> str:
+    """Build documentation of only the conservative-subset effect types."""
+    lines = []
+    for type_name, cls in TYPE_MAP.items():
+        if type_name not in CONSERVATIVE_TYPES:
+            continue
+        params = {f.name: f.type for f in dc_fields(cls)}
+        if params:
+            param_str = ", ".join(f"{k}: {v}" for k, v in params.items())
+            lines.append(f"  - {type_name}: params({param_str})")
+        else:
+            lines.append(f"  - {type_name}: no params")
+    return "\n".join(lines)
+
+
 _EFFECT_DOCS = _build_effect_docs()
+_CONSERVATIVE_EFFECT_DOCS = _build_conservative_effect_docs()
 
 SYSTEM_PROMPT = f"""\
 You are a Magic: The Gathering card analyst for a mana curve simulator.
@@ -140,6 +167,125 @@ Return a JSON object keyed by card name. Each value has "effects" and "metadata"
 You MUST include an entry for every card listed in the prompt, using the exact card name.
 """
 
+CONSERVATIVE_SYSTEM_PROMPT = f"""\
+You are a Magic: The Gathering card analyst for a mana curve simulator.
+Your job is to label cards with machine-interpretable effects.
+
+## Effect Types and Parameters
+{_CONSERVATIVE_EFFECT_DOCS}
+
+## Valid Slots
+Each effect must be assigned to exactly one slot:
+  - on_play: triggers once when the card is played
+  - per_turn: triggers at the start of each turn after the card is in play
+
+Do NOT use cast_trigger or mana_function slots.
+
+## Metadata Fields (all optional)
+  - priority (int): play priority (0 = normal, 2 = high). Use 2 for scaling effects.
+  - ramp (bool): true if this card produces or increases mana
+  - tapped (bool): true if this card enters tapped or has a significant tempo cost
+  - extra_types (list[str]): additional card types for simulation, e.g. ["land", "artifact"]
+  - override_cmc (int): override the mana cost for simulation purposes
+
+## Approximation Guidance
+- If a card draws when other spells are cast, approximate as per_turn_draw with an \
+estimated average draws per turn.
+- If a card produces mana based on board state (creatures, enchantments, etc.), \
+approximate as produce_mana or scaling_mana.
+- Do NOT use tutor effects. Do NOT use cast_trigger or mana_function slots.
+- Do NOT use is_land_tutor metadata.
+
+## Output Schema
+Return a JSON object with exactly two keys:
+{{{{
+  "effects": [
+    {{{{"type": "<effect_type>", "slot": "<slot>", "params": {{{{<key>: <value>}}}}}}}}
+  ],
+  "metadata": {{{{<key>: <value>}}}}
+}}}}
+
+## Important Rules
+- Only label effects using the types listed above
+- Cards that don't fit any effect type should get empty effects: {{{{"effects": [], "metadata": {{{{}}}}}}}}
+- Mana rocks/dorks/ramp spells that add 1 mana: produce_mana amount=1, slot=on_play, ramp=true
+- Mana rocks that add 2 mana: produce_mana amount=2 (e.g. Sol Ring)
+- Cost reducers: use reduce_cost with the appropriate category param
+- Card draw on ETB: draw_cards with amount, slot=on_play
+- Recurring draw: per_turn_draw, slot=per_turn
+- Scaling mana (gains mana over time): scaling_mana, slot=per_turn, priority=2
+
+## Examples
+
+### Sol Ring
+Input: name="Sol Ring", mana_cost="{{1}}", type_line="Artifact", oracle_text="{{T}}: Add {{C}}{{C}}."
+Output: {{{{"effects": [{{{{"type": "produce_mana", "slot": "on_play", "params": {{{{"amount": 2}}}}}}}}], "metadata": {{{{"ramp": true}}}}}}}}
+
+### Phyrexian Arena
+Input: name="Phyrexian Arena", mana_cost="{{1}}{{B}}{{B}}", type_line="Enchantment", oracle_text="At the beginning of your upkeep, you draw a card and you lose 1 life."
+Output: {{{{"effects": [{{{{"type": "per_turn_draw", "slot": "per_turn", "params": {{{{"amount": 1}}}}}}}}], "metadata": {{{{}}}}}}}}
+
+### Beast Whisperer (approximated)
+Input: name="Beast Whisperer", mana_cost="{{2}}{{G}}{{G}}", type_line="Creature — Elf Druid", oracle_text="Whenever you cast a creature spell, draw a card."
+Output: {{{{"effects": [{{{{"type": "per_turn_draw", "slot": "per_turn", "params": {{{{"amount": 1}}}}}}}}], "metadata": {{{{}}}}}}}}
+
+### Lightning Bolt (no simulatable effect)
+Input: name="Lightning Bolt", mana_cost="{{R}}", type_line="Instant", oracle_text="Lightning Bolt deals 3 damage to any target."
+Output: {{{{"effects": [], "metadata": {{{{}}}}}}}}
+"""
+
+CONSERVATIVE_BATCH_SYSTEM_PROMPT = f"""\
+You are a Magic: The Gathering card analyst for a mana curve simulator.
+Your job is to label multiple cards at once with machine-interpretable effects.
+
+## Effect Types and Parameters
+{_CONSERVATIVE_EFFECT_DOCS}
+
+## Valid Slots
+Each effect must be assigned to exactly one slot:
+  - on_play: triggers once when the card is played
+  - per_turn: triggers at the start of each turn after the card is in play
+
+Do NOT use cast_trigger or mana_function slots.
+
+## Metadata Fields (all optional)
+  - priority (int): play priority (0 = normal, 2 = high). Use 2 for scaling effects.
+  - ramp (bool): true if this card produces or increases mana
+  - tapped (bool): true if this card enters tapped or has a significant tempo cost
+  - extra_types (list[str]): additional card types for simulation, e.g. ["land", "artifact"]
+  - override_cmc (int): override the mana cost for simulation purposes
+
+## Approximation Guidance
+- If a card draws when other spells are cast, approximate as per_turn_draw with an \
+estimated average draws per turn.
+- If a card produces mana based on board state (creatures, enchantments, etc.), \
+approximate as produce_mana or scaling_mana.
+- Do NOT use tutor effects. Do NOT use cast_trigger or mana_function slots.
+- Do NOT use is_land_tutor metadata.
+
+## Important Rules
+- Only label effects using the types listed above
+- Cards that don't fit any effect type should get empty effects: {{{{"effects": [], "metadata": {{{{}}}}}}}}
+- Mana rocks/dorks/ramp spells that add 1 mana: produce_mana amount=1, slot=on_play, ramp=true
+- Mana rocks that add 2 mana: produce_mana amount=2 (e.g. Sol Ring)
+- Cost reducers: use reduce_cost with the appropriate category param
+- Card draw on ETB: draw_cards with amount, slot=on_play
+- Recurring draw: per_turn_draw, slot=per_turn
+- Scaling mana (gains mana over time): scaling_mana, slot=per_turn, priority=2
+
+## Output Schema
+Return a JSON object keyed by card name. Each value has "effects" and "metadata":
+{{{{
+  "Card Name": {{{{
+    "effects": [{{{{"type": "<type>", "slot": "<slot>", "params": {{{{...}}}}}}}}],
+    "metadata": {{{{...}}}}
+  }}}},
+  ...
+}}}}
+
+You MUST include an entry for every card listed in the prompt, using the exact card name.
+"""
+
 _LABEL_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -212,6 +358,7 @@ def label_card_batch(
     cards: list[ScryfallCard],
     model: str = "llama4:16x17b",
     max_retries: int = 3,
+    conservative: bool = True,
 ) -> dict[str, dict]:
     """Label a batch of cards in a single Ollama call.
 
@@ -223,8 +370,9 @@ def label_card_batch(
     card_names = [c.name for c in cards]
     schema = batch_json_schema(card_names)
 
+    system_prompt = CONSERVATIVE_BATCH_SYSTEM_PROMPT if conservative else BATCH_SYSTEM_PROMPT
     messages = [
-        {"role": "system", "content": BATCH_SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": build_batch_prompt(cards)},
     ]
 
@@ -267,6 +415,7 @@ def label_card(
     card: ScryfallCard,
     model: str = "llama4:16x17b",
     max_retries: int = 3,
+    conservative: bool = True,
 ) -> dict:
     """Label a single card using an Ollama LLM.
 
@@ -275,8 +424,9 @@ def label_card(
     """
     import ollama
 
+    system_prompt = CONSERVATIVE_SYSTEM_PROMPT if conservative else SYSTEM_PROMPT
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": build_card_prompt(card)},
     ]
 
@@ -331,6 +481,7 @@ def label_cards(
     resume: bool = True,
     concurrency: int = 1,
     batch_size: int = 1,
+    conservative: bool = True,
 ) -> dict[str, dict]:
     """Label multiple cards with LLM, with incremental saving and resume support.
 
@@ -341,6 +492,7 @@ def label_cards(
         resume: If True, skip cards already in the output file.
         concurrency: Number of parallel Ollama requests.
         batch_size: Number of cards per LLM call (>1 uses batch mode).
+        conservative: If True, use conservative prompts with simpler effect types.
 
     Returns:
         Dict mapping card name to label dict.
@@ -372,11 +524,11 @@ def label_cards(
             # Single card — use single-card path
             card = batch[0]
             try:
-                label = label_card(card, model=model)
+                label = label_card(card, model=model, conservative=conservative)
             except ValueError:
                 logger.error("Failed to label %s, skipping", card.name)
                 return batch_results
-            errors = validate_label(card.name, label)
+            errors = validate_label(card.name, label, conservative=conservative)
             if errors:
                 logger.warning("Validation errors for %s: %s", card.name, errors)
             batch_results[card.name] = label
@@ -384,17 +536,23 @@ def label_cards(
 
         # Multi-card batch
         try:
-            batch_labels = label_card_batch(batch, model=model)
+            batch_labels = label_card_batch(
+                batch, model=model, conservative=conservative,
+            )
         except ValueError:
             # Batch failed — fall back to single-card for each
             logger.warning("Batch failed, falling back to single-card labeling")
             for card in batch:
                 try:
-                    label = label_card(card, model=model)
+                    label = label_card(
+                        card, model=model, conservative=conservative,
+                    )
                 except ValueError:
                     logger.error("Failed to label %s, skipping", card.name)
                     continue
-                errors = validate_label(card.name, label)
+                errors = validate_label(
+                    card.name, label, conservative=conservative,
+                )
                 if errors:
                     logger.warning("Validation errors for %s: %s", card.name, errors)
                 batch_results[card.name] = label
@@ -404,7 +562,9 @@ def label_cards(
         for card in batch:
             if card.name in batch_labels:
                 label = batch_labels[card.name]
-                errors = validate_label(card.name, label)
+                errors = validate_label(
+                    card.name, label, conservative=conservative,
+                )
                 if errors:
                     logger.warning("Validation errors for %s: %s", card.name, errors)
                 batch_results[card.name] = label
@@ -412,11 +572,15 @@ def label_cards(
                 # Card missing from batch — fall back to single
                 logger.warning("%s missing from batch, trying single-card", card.name)
                 try:
-                    label = label_card(card, model=model)
+                    label = label_card(
+                        card, model=model, conservative=conservative,
+                    )
                 except ValueError:
                     logger.error("Failed to label %s, skipping", card.name)
                     continue
-                errors = validate_label(card.name, label)
+                errors = validate_label(
+                    card.name, label, conservative=conservative,
+                )
                 if errors:
                     logger.warning("Validation errors for %s: %s", card.name, errors)
                 batch_results[card.name] = label
