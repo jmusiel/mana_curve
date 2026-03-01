@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 
-from flask import Blueprint, abort, flash, jsonify, make_response, render_template, request
+from flask import Blueprint, abort, flash, jsonify, render_template, request
 
 from mana_curve.decklist.loader import get_deckpath, load_decklist, load_overrides, save_overrides
 from mana_curve.effects.card_database import DEFAULT_REGISTRY
@@ -195,9 +195,7 @@ def status(job_id: str):
         abort(404)
 
     if status["status"] == "completed":
-        resp = make_response(render_template("partials/job_status.html", **status))
-        resp.headers["HX-Redirect"] = f"/sim/results/{job_id}"
-        return resp
+        return render_template("partials/results_content.html", **status)
 
     return render_template("partials/job_status.html", **status)
 

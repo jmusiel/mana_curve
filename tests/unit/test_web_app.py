@@ -320,7 +320,7 @@ class TestSimulationRoutes:
         assert response.status_code == 200
         assert b"2" in response.data
 
-    def test_status_completed_redirects(self, client, monkeypatch):
+    def test_status_completed_returns_inline_results(self, client, monkeypatch):
         from mana_curve.web.routes import simulation as sim_mod
 
         mock_runner = type("MockRunner", (), {
@@ -328,10 +328,10 @@ class TestSimulationRoutes:
                 "job_id": jid,
                 "deck_name": "test",
                 "status": "completed",
-                "progress": 4,
-                "total": 4,
+                "progress": 2,
+                "total": 2,
                 "config": {},
-                "results": [{"land_count": 36}],
+                "results": _make_mock_results(),
                 "error": None,
             },
         })()
@@ -339,7 +339,11 @@ class TestSimulationRoutes:
 
         response = client.get("/sim/status/abc123")
         assert response.status_code == 200
-        assert response.headers.get("HX-Redirect") == "/sim/results/abc123"
+        # Should NOT redirect — results are rendered inline
+        assert "HX-Redirect" not in response.headers
+        # Should contain results content
+        assert b"results-content" in response.data
+        assert b"Summary Statistics" in response.data
 
     def test_status_unknown_job_404(self, client, monkeypatch):
         from mana_curve.web.routes import simulation as sim_mod

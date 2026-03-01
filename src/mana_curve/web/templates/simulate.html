@@ -15,7 +15,7 @@
     {% if card_effects is defined and card_effects %}
     {% set with_effects = card_effects | selectattr('has_effects') | list %}
     {% set without_effects = card_effects | rejectattr('has_effects') | list %}
-    <details class="effects-editor" open>
+    <details class="effects-editor">
         <summary class="effects-summary">
             <h2>Card Effects</h2>
             <span class="effects-count">{{ with_effects | length }} of {{ card_effects | length }} non-land cards have effects</span>
