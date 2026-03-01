@@ -9,7 +9,7 @@ from flask import Blueprint, abort, flash, jsonify, make_response, render_templa
 
 from mana_curve.decklist.loader import get_deckpath, load_decklist, load_overrides, save_overrides
 from mana_curve.effects.card_database import DEFAULT_REGISTRY
-from mana_curve.effects.json_loader import get_effect_schema
+from mana_curve.effects.json_loader import TYPE_MAP, get_effect_schema
 from mana_curve.web.services.simulation_runner import SimulationRunner
 
 # Web UI compute limits (CLI remains unrestricted)
@@ -25,6 +25,28 @@ _runner = SimulationRunner()
 
 def get_runner() -> SimulationRunner:
     return _runner
+
+
+_CLASS_TO_TYPE_KEY = {cls: key for key, cls in TYPE_MAP.items()}
+_SLOT_FIELDS = ["on_play", "per_turn", "cast_trigger", "mana_function"]
+
+
+def _effects_to_override(card_effects):
+    """Convert a CardEffects instance to the JSON override format used by the UI."""
+    effects = []
+    for slot in _SLOT_FIELDS:
+        for effect in getattr(card_effects, slot, []):
+            type_key = _CLASS_TO_TYPE_KEY.get(type(effect))
+            if type_key is None:
+                continue
+            params = dict(vars(effect)) if vars(effect) else {}
+            effects.append({"type": type_key, "slot": slot, "params": params})
+    result = {"effects": effects}
+    if card_effects.ramp:
+        result["ramp"] = True
+    if card_effects.priority:
+        result["priority"] = card_effects.priority
+    return result
 
 
 def _describe_effects(card_effects):
@@ -67,6 +89,7 @@ def config(deck_name: str):
             "types": types,
             "has_effects": effects is not None,
             "effects_display": _describe_effects(effects) if effects else "",
+            "registry_override": _effects_to_override(effects) if effects else None,
         }
         # If this card has a saved override, attach override data for the template
         if name in saved_overrides:

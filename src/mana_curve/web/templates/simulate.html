@@ -226,6 +226,19 @@ const EFFECT_SCHEMA = {{ effect_schema | tojson }};
 const CARD_EFFECTS = {{ card_effects | tojson }};
 const SAVED_OVERRIDES = {{ saved_overrides | tojson }};
 
+// Dropdown order: draw effects, then mana production, then exotic
+const EFFECT_TYPE_ORDER = [
+    'draw_cards', 'draw_discard', 'per_turn_draw', 'per_cast_draw',
+    'produce_mana', 'scaling_mana', 'reduce_cost',
+    'tutor_to_hand', 'cryptolith_rites_mana', 'enchantment_sanctum_mana',
+].filter(k => k in EFFECT_SCHEMA);
+
+function buildTypeOptions(selectedType) {
+    return EFFECT_TYPE_ORDER.map(k =>
+        `<option value="${k}"${k === selectedType ? ' selected' : ''}>${EFFECT_SCHEMA[k].label} (${EFFECT_SCHEMA[k].slot})</option>`
+    ).join('');
+}
+
 function toggleOverride(btn) {
     const card = btn.closest('.effects-card');
     const panel = card.querySelector('.override-panel');
@@ -237,23 +250,32 @@ function toggleOverride(btn) {
         panel.style.display = 'block';
         btn.textContent = 'Hide';
         if (panel.querySelector('.override-effects-list').children.length === 0) {
-            addEffectRow(panel.querySelector('.override-effects-list').nextElementSibling);
+            const cardName = card.dataset.cardName;
+            const cardData = CARD_EFFECTS.find(c => c.name === cardName);
+            const regOverride = cardData && cardData.registry_override;
+            if (regOverride && regOverride.effects && regOverride.effects.length > 0) {
+                regOverride.effects.forEach(eff => addEffectRowWithData(panel, eff));
+                if (regOverride.ramp) panel.querySelector('.meta-ramp').checked = true;
+                if (regOverride.priority) panel.querySelector('.meta-priority').value = regOverride.priority;
+                collectOverrides();
+            } else {
+                addEffectRow(panel.querySelector('.override-effects-list').nextElementSibling, 'draw_cards');
+            }
         }
     }
 }
 
-function addEffectRow(btn) {
+function addEffectRow(btn, defaultType) {
     const panel = btn.closest('.override-panel');
     const list = panel.querySelector('.override-effects-list');
     const row = document.createElement('div');
     row.className = 'override-effect-row';
 
-    const typeKeys = Object.keys(EFFECT_SCHEMA);
-    let typeOpts = typeKeys.map(k => `<option value="${k}">${EFFECT_SCHEMA[k].label} (${EFFECT_SCHEMA[k].slot})</option>`).join('');
+    const selected = defaultType || EFFECT_TYPE_ORDER[0];
 
     row.innerHTML = `
         <select class="effect-type-select" onchange="onTypeChange(this)">
-            ${typeOpts}
+            ${buildTypeOptions(selected)}
         </select>
         <div class="effect-params"></div>
         <button type="button" class="btn-remove-effect" onclick="this.parentElement.remove(); collectOverrides();">&times;</button>
@@ -392,12 +414,9 @@ function addEffectRowWithData(panel, effectData) {
     const row = document.createElement('div');
     row.className = 'override-effect-row';
 
-    const typeKeys = Object.keys(EFFECT_SCHEMA);
-    let typeOpts = typeKeys.map(k => `<option value="${k}"${k === effectData.type ? ' selected' : ''}>${EFFECT_SCHEMA[k].label} (${EFFECT_SCHEMA[k].slot})</option>`).join('');
-
     row.innerHTML = `
         <select class="effect-type-select" onchange="onTypeChange(this)">
-            ${typeOpts}
+            ${buildTypeOptions(effectData.type)}
         </select>
         <div class="effect-params"></div>
         <button type="button" class="btn-remove-effect" onclick="this.parentElement.remove(); collectOverrides();">&times;</button>
