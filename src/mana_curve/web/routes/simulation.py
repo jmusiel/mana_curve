@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 
 from flask import Blueprint, abort, flash, jsonify, make_response, render_template, request
 
 from mana_curve.decklist.loader import get_deckpath, load_decklist
+from mana_curve.effects.card_database import DEFAULT_REGISTRY
+from mana_curve.effects.json_loader import get_effect_schema
 from mana_curve.web.services.simulation_runner import SimulationRunner
 
 # Web UI compute limits (CLI remains unrestricted)
@@ -24,15 +27,49 @@ def get_runner() -> SimulationRunner:
     return _runner
 
 
+def _describe_effects(card_effects):
+    """Build a human-readable description of a CardEffects instance."""
+    parts = []
+    for effect in card_effects.on_play:
+        parts.append(f"{type(effect).__name__}({', '.join(f'{k}={v}' for k, v in vars(effect).items())})" if vars(effect) else type(effect).__name__)
+    for effect in card_effects.per_turn:
+        parts.append(f"{type(effect).__name__}({', '.join(f'{k}={v}' for k, v in vars(effect).items())})" if vars(effect) else type(effect).__name__)
+    for effect in card_effects.cast_trigger:
+        parts.append(f"{type(effect).__name__}({', '.join(f'{k}={v}' for k, v in vars(effect).items())})" if vars(effect) else type(effect).__name__)
+    for effect in card_effects.mana_function:
+        parts.append(type(effect).__name__)
+    return ", ".join(parts) if parts else ""
+
+
 @bp.route("/<deck_name>")
 def config(deck_name: str):
     path = get_deckpath(deck_name)
     if not os.path.isfile(path):
         abort(404)
-    cards = load_decklist(deck_name)
+
+    deck_list = load_decklist(deck_name)
     land_count = sum(
-        c.get("quantity", 1) for c in cards if "Land" in c.get("types", [])
+        c.get("quantity", 1) for c in deck_list if "Land" in c.get("types", [])
     )
+
+    card_effects_list = []
+    for card_dict in deck_list:
+        name = card_dict.get("name", "")
+        types = card_dict.get("types", [])
+        if "Land" in types:
+            continue
+        effects = DEFAULT_REGISTRY.get(name)
+        card_effects_list.append({
+            "name": name,
+            "cmc": card_dict.get("cmc", 0),
+            "types": types,
+            "has_effects": effects is not None,
+            "effects_display": _describe_effects(effects) if effects else "",
+        })
+    card_effects_list.sort(key=lambda c: (not c["has_effects"], c["cmc"], c["name"]))
+
+    effect_schema = get_effect_schema()
+
     return render_template(
         "simulate.html",
         deck_name=deck_name,
@@ -40,6 +77,8 @@ def config(deck_name: str):
         max_sims=MAX_SIMS,
         max_turns=MAX_TURNS,
         max_land_sweep=MAX_LAND_SWEEP,
+        card_effects=card_effects_list,
+        effect_schema=effect_schema,
     )
 
 
@@ -51,6 +90,13 @@ def run(deck_name: str):
 
     seed_val = request.form.get("seed", "").strip()
     workers_val = int(request.form.get("workers", 0))
+
+    # Parse effect overrides JSON (empty dict if missing or invalid)
+    overrides_raw = request.form.get("effect_overrides", "{}").strip()
+    try:
+        effect_overrides = json.loads(overrides_raw) if overrides_raw else {}
+    except (json.JSONDecodeError, TypeError):
+        effect_overrides = {}
 
     turns = int(request.form.get("turns", 10))
     sims = int(request.form.get("sims", 1000))
@@ -81,6 +127,7 @@ def run(deck_name: str):
         "seed": int(seed_val) if seed_val else None,
         "workers": workers_val if workers_val > 0 else (os.cpu_count() or 1),
         "mulligan": request.form.get("mulligan", "default"),
+        "effect_overrides": effect_overrides,
     }
 
     runner = get_runner()

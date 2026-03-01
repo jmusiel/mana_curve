@@ -2,7 +2,7 @@
 
 import json
 import os
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -670,3 +670,147 @@ class TestResultsPage:
         assert all("mean_mana" in d for d in data)
         assert all("distribution_stats" in d for d in data)
         assert all("consistency" in d for d in data)
+
+
+class TestEffectOverrides:
+    def test_config_page_includes_card_effects(self, client, tmp_path, monkeypatch):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.load_decklist",
+            lambda name: json.loads(
+                open(os.path.join(root, "decks", name, f"{name}.json")).read()
+            ),
+        )
+        response = client.get("/sim/testdeck")
+        assert response.status_code == 200
+        assert b"EFFECT_SCHEMA" in response.data
+        assert b"CARD_EFFECTS" in response.data
+        assert b"Sol Ring" in response.data
+
+    def test_config_page_shows_effects_section(self, client, tmp_path, monkeypatch):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.load_decklist",
+            lambda name: json.loads(
+                open(os.path.join(root, "decks", name, f"{name}.json")).read()
+            ),
+        )
+        response = client.get("/sim/testdeck")
+        assert b"Card Effects" in response.data
+
+    def test_run_with_overrides_passes_to_config(self, client, tmp_path, monkeypatch):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        from mana_curve.web.routes import simulation as sim_mod
+
+        submitted_configs = []
+
+        class CapturingRunner:
+            def submit(self, name, cfg):
+                submitted_configs.append(cfg)
+                return "abc123"
+
+            def get_status(self, jid):
+                return {
+                    "job_id": "abc123",
+                    "deck_name": "testdeck",
+                    "status": "running",
+                    "progress": 0,
+                    "total": 4,
+                    "config": {},
+                    "results": [],
+                    "error": None,
+                }
+
+        monkeypatch.setattr(sim_mod, "get_runner", lambda: CapturingRunner())
+
+        overrides = {"Sol Ring": {"effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 5}}], "ramp": True}}
+        response = client.post("/sim/testdeck/run", data={
+            "turns": "10", "sims": "100", "min_lands": "36", "max_lands": "39",
+            "effect_overrides": json.dumps(overrides),
+        })
+        assert response.status_code == 200
+        assert len(submitted_configs) == 1
+        assert submitted_configs[0]["effect_overrides"] == overrides
+
+    def test_run_with_invalid_json_overrides_uses_empty(self, client, tmp_path, monkeypatch):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        from mana_curve.web.routes import simulation as sim_mod
+
+        submitted_configs = []
+
+        class CapturingRunner:
+            def submit(self, name, cfg):
+                submitted_configs.append(cfg)
+                return "abc123"
+
+            def get_status(self, jid):
+                return {
+                    "job_id": "abc123",
+                    "deck_name": "testdeck",
+                    "status": "running",
+                    "progress": 0,
+                    "total": 4,
+                    "config": {},
+                    "results": [],
+                    "error": None,
+                }
+
+        monkeypatch.setattr(sim_mod, "get_runner", lambda: CapturingRunner())
+
+        response = client.post("/sim/testdeck/run", data={
+            "turns": "10", "sims": "100", "min_lands": "36", "max_lands": "39",
+            "effect_overrides": "{invalid json",
+        })
+        assert response.status_code == 200
+        assert submitted_configs[0]["effect_overrides"] == {}
+
+    def test_run_without_overrides_has_empty_dict(self, client, tmp_path, monkeypatch):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "mana_curve.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        from mana_curve.web.routes import simulation as sim_mod
+
+        submitted_configs = []
+
+        class CapturingRunner:
+            def submit(self, name, cfg):
+                submitted_configs.append(cfg)
+                return "abc123"
+
+            def get_status(self, jid):
+                return {
+                    "job_id": "abc123",
+                    "deck_name": "testdeck",
+                    "status": "running",
+                    "progress": 0,
+                    "total": 4,
+                    "config": {},
+                    "results": [],
+                    "error": None,
+                }
+
+        monkeypatch.setattr(sim_mod, "get_runner", lambda: CapturingRunner())
+
+        response = client.post("/sim/testdeck/run", data={
+            "turns": "10", "sims": "100", "min_lands": "36", "max_lands": "39",
+        })
+        assert response.status_code == 200
+        assert submitted_configs[0]["effect_overrides"] == {}

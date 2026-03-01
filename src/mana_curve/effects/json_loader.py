@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from typing import Any, Dict
@@ -109,3 +110,106 @@ def load_registry_from_json(path: Path | str | None = None) -> EffectRegistry:
             registry.register(card_name, card_effects)
 
     return registry
+
+
+def build_overridden_registry(
+    base: EffectRegistry, overrides: Dict[str, Dict[str, Any]]
+) -> EffectRegistry:
+    """Create a copy of *base* with user overrides applied.
+
+    *overrides* maps card names to dicts matching the per-card JSON structure::
+
+        {"Sol Ring": {"effects": [{"type": "produce_mana", "slot": "on_play",
+                                   "params": {"amount": 3}}], "ramp": true}}
+    """
+    registry = base.copy()
+    for card_name, card_data in overrides.items():
+        effect_list = card_data.get("effects", [])
+        slots: Dict[str, list] = {s: [] for s in VALID_SLOTS}
+        for effect_data in effect_list:
+            slot = effect_data["slot"]
+            if slot not in VALID_SLOTS:
+                raise ValueError(
+                    f"Invalid slot {slot!r} for override card {card_name!r}"
+                )
+            slots[slot].append(_hydrate_effect(effect_data))
+
+        metadata = _merge_metadata({}, card_data)
+        card_effects = CardEffects(
+            on_play=slots["on_play"],
+            per_turn=slots["per_turn"],
+            cast_trigger=slots["cast_trigger"],
+            mana_function=slots["mana_function"],
+            **metadata,
+        )
+        registry.register(card_name, card_effects)
+    return registry
+
+
+# Maps effect classes to their canonical slot based on which protocol they implement.
+_CLASS_SLOT_MAP: Dict[type, str] = {}
+for _type_str, _cls in TYPE_MAP.items():
+    for _method, _slot in [
+        ("on_play", "on_play"),
+        ("per_turn", "per_turn"),
+        ("cast_trigger", "cast_trigger"),
+        ("mana_function", "mana_function"),
+    ]:
+        if hasattr(_cls, _method) and callable(getattr(_cls, _method)):
+            _CLASS_SLOT_MAP[_cls] = _slot
+            break
+
+
+def _python_type_name(t: Any) -> str:
+    """Return a JSON-friendly type name for a dataclass field type.
+
+    Handles both real types and string annotations (from __future__ annotations).
+    """
+    if isinstance(t, str):
+        t_lower = t.strip().lower()
+        for name in ("int", "float", "bool", "str"):
+            if t_lower == name:
+                return name
+        if t_lower.startswith("list"):
+            return "list"
+        return "str"
+    if t is int:
+        return "int"
+    if t is float:
+        return "float"
+    if t is bool:
+        return "bool"
+    if t is str:
+        return "str"
+    origin = getattr(t, "__origin__", None)
+    if origin is list:
+        return "list"
+    return "str"
+
+
+def get_effect_schema() -> Dict[str, Any]:
+    """Return a JSON-serializable schema describing all available effect types.
+
+    Example output::
+
+        {"produce_mana": {"label": "ProduceMana", "slot": "on_play",
+                          "params": {"amount": {"type": "int", "default": 1}}}}
+    """
+    schema: Dict[str, Any] = {}
+    for type_str, cls in TYPE_MAP.items():
+        slot = _CLASS_SLOT_MAP.get(cls, "on_play")
+        params: Dict[str, Any] = {}
+        if dataclasses.is_dataclass(cls):
+            for f in dataclasses.fields(cls):
+                param_info: Dict[str, Any] = {"type": _python_type_name(f.type)}
+                if f.default is not dataclasses.MISSING:
+                    param_info["default"] = f.default
+                elif f.default_factory is not dataclasses.MISSING:
+                    param_info["default"] = f.default_factory()
+                params[f.name] = param_info
+        schema[type_str] = {
+            "label": cls.__name__,
+            "slot": slot,
+            "params": params,
+        }
+    return schema

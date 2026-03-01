@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from mana_curve.decklist.loader import load_decklist
+from mana_curve.effects.card_database import DEFAULT_REGISTRY
+from mana_curve.effects.json_loader import build_overridden_registry
 from mana_curve.engine.goldfisher import Goldfisher
 from mana_curve.engine.mulligan import CurveAwareMulligan
 from mana_curve.metrics.reporter import result_to_dict
@@ -90,6 +92,12 @@ class SimulationRunner:
             if job.config.get("mulligan") == "curve_aware":
                 mulligan_strategy = CurveAwareMulligan()
 
+            # Build custom registry if overrides provided
+            effect_overrides = job.config.get("effect_overrides", {})
+            registry = None
+            if effect_overrides:
+                registry = build_overridden_registry(DEFAULT_REGISTRY, effect_overrides)
+
             goldfisher = Goldfisher(
                 deck_list,
                 turns=job.config.get("turns", 10),
@@ -100,6 +108,7 @@ class SimulationRunner:
                 seed=job.config.get("seed"),
                 workers=job.config.get("workers", 1),
                 mulligan_strategy=mulligan_strategy,
+                registry=registry,
             )
 
             min_lands = job.config.get("min_lands", goldfisher.land_count)
