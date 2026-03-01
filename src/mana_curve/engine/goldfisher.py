@@ -81,10 +81,6 @@ class SimulationResult:
 # Module-level helpers (used by effects via import)
 # ---------------------------------------------------------------------------
 
-# Reference to the decklist -- set by the engine before each game
-_active_decklist: List[Card] = []
-_active_deckdict: Dict[str, Card] = {}
-
 
 def _draw(state: GameState) -> None:
     """Draw a card from the deck into the hand."""
@@ -94,7 +90,7 @@ def _draw(state: GameState) -> None:
         state.draws += 1
         return
     drawn_i = state.deck.pop()
-    drawn = _active_decklist[drawn_i]
+    drawn = state.decklist[drawn_i]
     drawn.zone = state.hand
     state.hand.append(drawn_i)
     state.draws += 1
@@ -105,7 +101,7 @@ def _draw(state: GameState) -> None:
 def _random_discard(state: GameState) -> None:
     """Discard a random card from hand."""
     discarded_i = random.choice(state.hand)
-    discarded = _active_decklist[discarded_i]
+    discarded = state.decklist[discarded_i]
     discarded.change_zone(state.yard)
     if state.should_log:
         state.log.append(f"Discarded {discarded.printable}")
@@ -113,7 +109,7 @@ def _random_discard(state: GameState) -> None:
 
 def _find_card_by_name(state: GameState, name: str) -> Card | None:
     """Find a card in the decklist by name."""
-    return _active_deckdict.get(name)
+    return state.deckdict.get(name)
 
 
 # ---------------------------------------------------------------------------
@@ -250,11 +246,8 @@ class Goldfisher:
         state = GameState()
         state.should_log = self._should_log
         state.card_cast_turn = [None] * len(self.decklist)
-
-        # Set up module-level references for effects
-        global _active_decklist, _active_deckdict
-        _active_decklist = self.decklist
-        _active_deckdict = self.deckdict
+        state.decklist = self.decklist
+        state.deckdict = self.deckdict
 
         # Place commanders in command zone
         for card in self.commanders:
