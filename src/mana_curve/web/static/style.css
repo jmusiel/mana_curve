@@ -213,6 +213,58 @@ a:hover { text-decoration: underline; }
     color: #b45309;
 }
 
+/* Metric descriptions */
+.metric-descriptions {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    margin-bottom: 1rem;
+    background: #fff;
+}
+.metric-descriptions summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: #475569;
+}
+.metric-list { margin-top: 0.5rem; }
+.metric-list dt {
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-top: 0.5rem;
+}
+.metric-list dd {
+    margin-left: 1rem;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+/* Card performance */
+.card-perf-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+.card-perf-summary {
+    color: #64748b;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+.score-positive { color: #16a34a; font-weight: 600; }
+.score-negative { color: #dc2626; font-weight: 600; }
+
+/* Card links with hover preview */
+#card-preview-tooltip {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    pointer-events: none;
+}
+#card-preview-tooltip img {
+    width: 250px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
 /* Headings */
 h1 { font-size: 1.5rem; margin-bottom: 1rem; }
 h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }

@@ -20,6 +20,15 @@ class CardEffects:
     mana_function: List[Any] = field(default_factory=list)
     priority: int = 0
     ramp: bool = False
+
+    def describe_effects(self) -> str:
+        """Return a human-readable summary of all effects on this card."""
+        descriptions = []
+        for effect_list in [self.on_play, self.per_turn, self.cast_trigger, self.mana_function]:
+            for effect in effect_list:
+                if hasattr(effect, 'describe'):
+                    descriptions.append(effect.describe())
+        return "; ".join(descriptions) if descriptions else ""
     is_land_tutor: bool = False
     extra_types: List[str] | None = None
     override_cmc: int | None = None

@@ -26,6 +26,9 @@ class ProduceMana:
     def on_play(self, card: Card, state: GameState) -> None:
         state.mana_production += self.amount
 
+    def describe(self) -> str:
+        return f"+{self.amount} mana"
+
 
 @dataclass
 class DrawCards:
@@ -36,6 +39,9 @@ class DrawCards:
         from mana_curve.engine.goldfisher import _draw
         for _ in range(self.amount):
             _draw(state)
+
+    def describe(self) -> str:
+        return f"Draw {self.amount} card{'s' if self.amount != 1 else ''}"
 
 
 @dataclass
@@ -59,6 +65,18 @@ class DrawDiscard:
             _draw(state)
         state.treasure += self.make_treasures
 
+    def describe(self) -> str:
+        parts = []
+        if self.first_draw:
+            parts.append(f"Draw {self.first_draw}")
+        if self.discard:
+            parts.append(f"discard {self.discard}")
+        if self.second_draw:
+            parts.append(f"draw {self.second_draw}")
+        if self.make_treasures:
+            parts.append(f"{self.make_treasures} treasure{'s' if self.make_treasures != 1 else ''}")
+        return ", ".join(parts) if parts else "Draw/discard"
+
 
 @dataclass
 class ReduceCost:
@@ -75,6 +93,14 @@ class ReduceCost:
         state.spell_cost_reduction += self.spell
         state.creature_cost_reduction += self.creature
         state.enchantment_cost_reduction += self.enchantment
+
+    def describe(self) -> str:
+        reductions = []
+        for attr in ("creature", "enchantment", "permanent", "nonpermanent", "spell"):
+            val = getattr(self, attr)
+            if val:
+                reductions.append(f"{attr.capitalize()} costs -{val}")
+        return "; ".join(reductions) if reductions else "Cost reduction"
 
 
 @dataclass
@@ -95,6 +121,12 @@ class TutorToHand:
                 if state.should_log:
                     state.log.append(f"Failed to find {target.printable}")
 
+    def describe(self) -> str:
+        names = ", ".join(self.targets[:3])
+        if len(self.targets) > 3:
+            names += ", ..."
+        return f"Tutor: {names}"
+
 
 # ---------------------------------------------------------------------------
 # PerTurn effects
@@ -110,6 +142,9 @@ class PerTurnDraw:
         for _ in range(self.amount):
             _draw(state)
 
+    def describe(self) -> str:
+        return f"Draw {self.amount} per turn"
+
 
 @dataclass
 class ScalingMana:
@@ -118,6 +153,9 @@ class ScalingMana:
 
     def per_turn(self, card: Card, state: GameState) -> None:
         state.mana_production += self.amount
+
+    def describe(self) -> str:
+        return f"+{self.amount} mana per turn (scaling)"
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +184,14 @@ class PerCastDraw:
         for _ in range(draws):
             _draw(state)
 
+    def describe(self) -> str:
+        triggers = []
+        for attr in ("creature", "enchantment", "nonpermanent", "spell"):
+            val = getattr(self, attr)
+            if val:
+                triggers.append(f"Draw {val} on {attr} cast")
+        return "; ".join(triggers) if triggers else "Draw on cast"
+
 
 # ---------------------------------------------------------------------------
 # ManaFunction effects
@@ -160,6 +206,9 @@ class CryptolithRitesMana:
         state.tapped_creatures_this_turn = state.creatures_played
         return mana
 
+    def describe(self) -> str:
+        return "Tap creatures for mana"
+
 
 @dataclass
 class EnchantmentSanctumMana:
@@ -167,3 +216,6 @@ class EnchantmentSanctumMana:
 
     def mana_function(self, state: GameState) -> int:
         return state.enchantments_played
+
+    def describe(self) -> str:
+        return "Mana from enchantments"

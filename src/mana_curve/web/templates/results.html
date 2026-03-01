@@ -4,6 +4,23 @@
 <h1>Results: {{ deck_name }}</h1>
 
 <h2>Summary Statistics</h2>
+<details class="metric-descriptions">
+    <summary>Metric Definitions</summary>
+    <dl class="metric-list">
+        <dt>Mana (EV)</dt>
+        <dd>Total mana spent on non-ramp spells over all turns. Ramp cards excluded because they pay for themselves. Higher = more resources deployed.</dd>
+        <dt>Consistency</dt>
+        <dd>How reliably the deck avoids low-mana games (0&ndash;1.2 scale). 1.0 = perfectly consistent. Computed from cumulative mana distribution.</dd>
+        <dt>Bad Turns</dt>
+        <dd>Average turns where no spells were cast and the deck wasn&rsquo;t empty. Lower = better.</dd>
+        <dt>Mid Turns</dt>
+        <dd>Average turns with fewer than 2 spells and mana spent below the turn number. Lower = better.</dd>
+        <dt>Avg Lands / Avg Mulls</dt>
+        <dd>Average lands played and mulligans taken per game.</dd>
+        <dt>25th / 50th / 75th</dt>
+        <dd>Percentiles of total mana spent showing distribution spread.</dd>
+    </dl>
+</details>
 <div class="table-wrap">
 <table class="stats-table">
     <thead>
@@ -43,6 +60,13 @@
 
 {% if results and results[0].distribution_stats %}
 <h2>Distribution Statistics</h2>
+<details class="metric-descriptions">
+    <summary>Distribution Definitions</summary>
+    <dl class="metric-list">
+        <dt>Distribution Stats</dt>
+        <dd>Fraction of games in calibrated performance buckets. Thresholds set from first 10% of simulations. Values above the nominal percentage indicate overperformance.</dd>
+    </dl>
+</details>
 <div class="table-wrap">
 <table class="stats-table">
     <thead>
@@ -74,6 +98,78 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
+{% endif %}
+
+{% if results[0].card_performance and results[0].card_performance.high_performing %}
+<h2>Card Performance</h2>
+<p class="card-perf-summary">
+    Based on {{ results[0].card_performance.total_top_games }} top-quartile and
+    {{ results[0].card_performance.total_low_games }} low-quartile games.
+</p>
+<div class="card-perf-grid">
+    <div>
+        <h3>Top Performers</h3>
+        <div class="table-wrap">
+        <table class="stats-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Card</th>
+                    <th>Cost</th>
+                    <th>Effects</th>
+                    <th>Top Rate</th>
+                    <th>Low Rate</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for card in results[0].card_performance.high_performing %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td style="text-align:left"><a href="https://scryfall.com/search?exact={{ card.name|urlencode }}" target="_blank" class="card-link" data-card-name="{{ card.name }}">{{ card.name }}</a></td>
+                    <td>{{ card.cost }}</td>
+                    <td style="text-align:left">{{ card.effects }}</td>
+                    <td>{{ "%.1f"|format(card.top_rate * 100) }}%</td>
+                    <td>{{ "%.1f"|format(card.low_rate * 100) }}%</td>
+                    <td class="score-positive">{{ "%+.2f"|format(card.score) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    <div>
+        <h3>Low Performers</h3>
+        <div class="table-wrap">
+        <table class="stats-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Card</th>
+                    <th>Cost</th>
+                    <th>Effects</th>
+                    <th>Top Rate</th>
+                    <th>Low Rate</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for card in results[0].card_performance.low_performing %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td style="text-align:left"><a href="https://scryfall.com/search?exact={{ card.name|urlencode }}" target="_blank" class="card-link" data-card-name="{{ card.name }}">{{ card.name }}</a></td>
+                    <td>{{ card.cost }}</td>
+                    <td style="text-align:left">{{ card.effects }}</td>
+                    <td>{{ "%.1f"|format(card.top_rate * 100) }}%</td>
+                    <td>{{ "%.1f"|format(card.low_rate * 100) }}%</td>
+                    <td class="score-negative">{{ "%+.2f"|format(card.score) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
 </div>
 {% endif %}
 
@@ -204,6 +300,45 @@
                 }
             });
         });
+})();
+
+// Shared tooltip for Scryfall card image hover
+(function() {
+    const tooltip = document.createElement('div');
+    tooltip.id = 'card-preview-tooltip';
+    document.body.appendChild(tooltip);
+
+    const cache = {};
+
+    document.querySelectorAll('.card-link').forEach(link => {
+        link.addEventListener('mouseenter', function(e) {
+            const name = this.dataset.cardName;
+            if (!cache[name]) {
+                const img = document.createElement('img');
+                img.src = 'https://api.scryfall.com/cards/named?exact='
+                    + encodeURIComponent(name) + '&format=image&version=normal';
+                img.alt = name;
+                cache[name] = img;
+            }
+            tooltip.innerHTML = '';
+            tooltip.appendChild(cache[name]);
+            tooltip.style.display = 'block';
+            positionTooltip(e);
+        });
+
+        link.addEventListener('mousemove', positionTooltip);
+
+        link.addEventListener('mouseleave', function() {
+            tooltip.style.display = 'none';
+        });
+    });
+
+    function positionTooltip(e) {
+        const x = e.clientX + 15;
+        const y = Math.max(10, e.clientY - 180);
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+    }
 })();
 </script>
 {% endblock %}

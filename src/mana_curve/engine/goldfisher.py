@@ -51,6 +51,7 @@ class SimulationResult:
     threshold_mana: float = 0.0
     con_threshold: float = 0.25
     distribution_stats: Dict[str, float] = field(default_factory=dict)
+    card_performance: Dict[str, Any] = field(default_factory=dict)
     game_records: Dict[str, Dict[str, list]] = field(default_factory=dict)
 
     # 95% confidence intervals (low, high)
@@ -152,6 +153,7 @@ def _worker_run_batch(
     bad_turns = []
     mid_turns = []
     card_cast_turns: list[list] = [[] for _ in gf.decklist]
+    played_cards_per_game: list[set] = []
 
     for j in range(n_games):
         global_j = game_offset + j
@@ -189,9 +191,13 @@ def _worker_run_batch(
         bad_turns.append(game_bad)
         mid_turns.append(game_mid)
 
+        game_played = set()
         for k, turn in enumerate(state.card_cast_turn):
             if turn is not None and not gf.decklist[k].land:
                 card_cast_turns[k].append(turn)
+                if gf.decklist[k].spell:
+                    game_played.add(k)
+        played_cards_per_game.append(game_played)
 
     return {
         "mana_spent": mana_spent,
@@ -201,6 +207,7 @@ def _worker_run_batch(
         "bad_turns": bad_turns,
         "mid_turns": mid_turns,
         "card_cast_turns": card_cast_turns,
+        "played_cards_per_game": played_cards_per_game,
     }
 
 
@@ -688,6 +695,89 @@ class Goldfisher:
         total = len(evaluation)
         return {k: v / total for k, v in counts.items()}
 
+    def _compute_card_performance(
+        self,
+        mana_spent_list: list,
+        played_cards_per_game: list[set],
+    ) -> Dict[str, Any]:
+        """Compute which cards are overrepresented in high/low performance games.
+
+        Uses calibration sample (first 10%, min 100) to set quartile thresholds,
+        then classifies remaining games.
+        """
+        if len(mana_spent_list) < 100:
+            return {}
+
+        sample_size = int(max(len(mana_spent_list) / 10, 100))
+        if sample_size >= len(mana_spent_list):
+            return {}
+
+        calibration = mana_spent_list[:sample_size]
+        top_threshold = float(np.percentile(calibration, 75))
+        low_threshold = float(np.percentile(calibration, 25))
+
+        # Classify evaluation games
+        top_games = []
+        low_games = []
+        for i in range(sample_size, len(mana_spent_list)):
+            mana = mana_spent_list[i]
+            if mana >= top_threshold:
+                top_games.append(i)
+            if mana <= low_threshold:
+                low_games.append(i)
+
+        if not top_games or not low_games:
+            return {}
+
+        # Count card appearances in each bucket
+        card_top_count: Dict[int, int] = defaultdict(int)
+        card_low_count: Dict[int, int] = defaultdict(int)
+
+        for gi in top_games:
+            for card_idx in played_cards_per_game[gi]:
+                card_top_count[card_idx] += 1
+
+        for gi in low_games:
+            for card_idx in played_cards_per_game[gi]:
+                card_low_count[card_idx] += 1
+
+        n_top = len(top_games)
+        n_low = len(low_games)
+
+        # Score each non-land spell card
+        scores = []
+        for k, card in enumerate(self.decklist):
+            if card.land or not card.spell:
+                continue
+            top_rate = card_top_count.get(k, 0) / n_top
+            low_rate = card_low_count.get(k, 0) / n_low
+            score = top_rate - low_rate
+
+            effects_desc = ""
+            if card._cached_effects:
+                effects_desc = card._cached_effects.describe_effects()
+
+            scores.append({
+                "name": card.name,
+                "cost": card.cost,
+                "cmc": card.cmc,
+                "effects": effects_desc,
+                "top_rate": round(top_rate, 4),
+                "low_rate": round(low_rate, 4),
+                "score": round(score, 4),
+            })
+
+        # Sort and pick top/bottom 10
+        high_performing = sorted(scores, key=lambda x: x["score"], reverse=True)[:10]
+        low_performing = sorted(scores, key=lambda x: x["score"])[:10]
+
+        return {
+            "high_performing": high_performing,
+            "low_performing": low_performing,
+            "total_top_games": n_top,
+            "total_low_games": n_low,
+        }
+
     def _get_deck_dicts(self) -> list[dict]:
         """Serialize current decklist + commanders to dicts for workers."""
         dicts = [_card_to_dict(c) for c in self.commanders]
@@ -718,6 +808,7 @@ class Goldfisher:
         merged = {
             "mana_spent": [], "mulls": [], "lands_played": [],
             "cards_drawn": [], "bad_turns": [], "mid_turns": [],
+            "played_cards_per_game": [],
         }
         card_cast_turns: list[list] = [[] for _ in self.decklist]
 
@@ -728,6 +819,7 @@ class Goldfisher:
                 merged[key].extend(batch[key])
             for k, turns_list in enumerate(batch["card_cast_turns"]):
                 card_cast_turns[k].extend(turns_list)
+            merged["played_cards_per_game"].extend(batch["played_cards_per_game"])
 
         merged["card_cast_turns"] = card_cast_turns
         return merged
@@ -791,6 +883,10 @@ class Goldfisher:
         # Compute distribution stats (same calibration approach as sequential path)
         distribution_stats = self._compute_distribution_stats(mana_spent_list)
 
+        # Compute card performance
+        played_cards_per_game = raw.get("played_cards_per_game", [])
+        card_performance = self._compute_card_performance(mana_spent_list, played_cards_per_game)
+
         return SimulationResult(
             land_count=self.land_count,
             mean_mana=mean_mana,
@@ -810,6 +906,7 @@ class Goldfisher:
             ci_consistency=ci_consistency,
             ci_mean_bad_turns=ci_mean_bad_turns,
             distribution_stats=distribution_stats,
+            card_performance=card_performance,
         )
 
     def simulate(self) -> SimulationResult:
@@ -836,6 +933,7 @@ class Goldfisher:
         bad_turns_list = []
         mid_turns_list = []
         card_cast_turn_list: list[list] = [[] for _ in self.decklist]
+        played_cards_per_game: list[set] = []
 
         for j in tqdm(range(self.sims), leave=False):
             if self.seed is not None:
@@ -876,9 +974,13 @@ class Goldfisher:
             bad_turns_list.append(bad_turns)
             mid_turns_list.append(mid_turns)
 
+            game_played = set()
             for k, turn in enumerate(state.card_cast_turn):
                 if turn is not None and not self.decklist[k].land:
                     card_cast_turn_list[k].append(turn)
+                    if self.decklist[k].spell:
+                        game_played.add(k)
+            played_cards_per_game.append(game_played)
 
             # Record games in buckets
             if j > sample_games:
@@ -1006,6 +1108,7 @@ class Goldfisher:
         )
 
         distribution_stats = self._compute_distribution_stats(mana_spent_list)
+        card_performance = self._compute_card_performance(mana_spent_list, played_cards_per_game)
 
         return SimulationResult(
             land_count=self.land_count,
@@ -1023,6 +1126,7 @@ class Goldfisher:
             threshold_mana=threshold_mana,
             con_threshold=con_threshold,
             distribution_stats=distribution_stats,
+            card_performance=card_performance,
             game_records=dict(game_records),
             ci_mean_mana=ci_mean_mana,
             ci_consistency=ci_consistency,

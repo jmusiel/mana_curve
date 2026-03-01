@@ -419,6 +419,80 @@ class TestEdgeCases:
 # Game records (sequential only — parallel doesn't record game logs)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Card performance
+# ---------------------------------------------------------------------------
+
+class TestCardPerformance:
+    """Tests for card_performance tracking."""
+
+    def test_card_performance_populated(self, sequential_result):
+        cp = sequential_result.card_performance
+        assert "high_performing" in cp
+        assert "low_performing" in cp
+        assert "total_top_games" in cp
+        assert "total_low_games" in cp
+
+    def test_high_performing_has_required_fields(self, sequential_result):
+        for entry in sequential_result.card_performance["high_performing"]:
+            assert "name" in entry
+            assert "cost" in entry
+            assert "cmc" in entry
+            assert "effects" in entry
+            assert "top_rate" in entry
+            assert "low_rate" in entry
+            assert "score" in entry
+
+    def test_high_performing_scores_nonnegative(self, sequential_result):
+        for entry in sequential_result.card_performance["high_performing"]:
+            assert entry["score"] >= 0
+
+    def test_low_performing_scores_nonpositive(self, sequential_result):
+        for entry in sequential_result.card_performance["low_performing"]:
+            assert entry["score"] <= 0
+
+    def test_high_sorted_descending(self, sequential_result):
+        scores = [e["score"] for e in sequential_result.card_performance["high_performing"]]
+        assert scores == sorted(scores, reverse=True)
+
+    def test_low_sorted_ascending(self, sequential_result):
+        scores = [e["score"] for e in sequential_result.card_performance["low_performing"]]
+        assert scores == sorted(scores)
+
+    def test_max_10_entries(self, sequential_result):
+        assert len(sequential_result.card_performance["high_performing"]) <= 10
+        assert len(sequential_result.card_performance["low_performing"]) <= 10
+
+    def test_rates_between_0_and_1(self, sequential_result):
+        for entries in (
+            sequential_result.card_performance["high_performing"],
+            sequential_result.card_performance["low_performing"],
+        ):
+            for entry in entries:
+                assert 0 <= entry["top_rate"] <= 1
+                assert 0 <= entry["low_rate"] <= 1
+
+    def test_no_land_cards(self, sequential_result):
+        """Card performance should not include land cards."""
+        for entries in (
+            sequential_result.card_performance["high_performing"],
+            sequential_result.card_performance["low_performing"],
+        ):
+            for entry in entries:
+                assert "Island" not in entry["name"]
+
+    def test_parallel_has_card_performance(self, parallel_result):
+        cp = parallel_result.card_performance
+        assert "high_performing" in cp
+        assert "low_performing" in cp
+
+    def test_few_sims_returns_empty_dict(self):
+        deck = _simple_deck()
+        gf = Goldfisher(deck, turns=5, sims=50, record_results="quartile", seed=1)
+        result = gf.simulate()
+        assert result.card_performance == {}
+
+
 class TestGameRecords:
     """Tests for game_records populated in sequential path."""
 
