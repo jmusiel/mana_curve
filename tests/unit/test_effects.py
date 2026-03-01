@@ -2,12 +2,15 @@
 
 from mana_curve.effects.builtin import (
     CryptolithRitesMana,
+    DrawCards,
+    DrawDiscard,
     EnchantmentSanctumMana,
     PerCastDraw,
     PerTurnDraw,
     ProduceMana,
     ReduceCost,
     ScalingMana,
+    TutorToHand,
 )
 from mana_curve.effects.registry import CardEffects, EffectRegistry
 from mana_curve.effects.types import (
@@ -122,3 +125,100 @@ class TestRegistry:
         reg = EffectRegistry()
         assert reg.get("Nonexistent") is None
         assert not reg.has("Nonexistent")
+
+
+class TestDescribe:
+    """Tests for describe() methods on effect classes."""
+
+    def test_produce_mana_describe(self):
+        assert ProduceMana(2).describe() == "+2 mana"
+
+    def test_produce_mana_describe_one(self):
+        assert ProduceMana(1).describe() == "+1 mana"
+
+    def test_draw_cards_describe(self):
+        assert DrawCards(3).describe() == "Draw 3 cards"
+
+    def test_draw_cards_describe_one(self):
+        assert DrawCards(1).describe() == "Draw 1 card"
+
+    def test_draw_discard_describe(self):
+        desc = DrawDiscard(2, 1, 0, 0).describe()
+        assert "Draw 2" in desc
+        assert "discard 1" in desc
+
+    def test_draw_discard_with_treasures(self):
+        desc = DrawDiscard(0, 0, 0, 2).describe()
+        assert "treasure" in desc
+
+    def test_reduce_cost_creature(self):
+        desc = ReduceCost(creature=1).describe()
+        assert "Creature costs -1" in desc
+
+    def test_reduce_cost_multiple(self):
+        desc = ReduceCost(creature=1, enchantment=2).describe()
+        assert "Creature" in desc
+        assert "Enchantment" in desc
+
+    def test_tutor_to_hand_describe(self):
+        desc = TutorToHand(["Sol Ring"]).describe()
+        assert "Tutor: Sol Ring" == desc
+
+    def test_tutor_to_hand_multiple_targets(self):
+        desc = TutorToHand(["Sol Ring", "Mana Crypt"]).describe()
+        assert "Sol Ring" in desc
+        assert "Mana Crypt" in desc
+
+    def test_per_turn_draw_describe(self):
+        assert PerTurnDraw(1).describe() == "Draw 1 per turn"
+
+    def test_scaling_mana_describe(self):
+        assert ScalingMana(1).describe() == "+1 mana per turn (scaling)"
+
+    def test_per_cast_draw_describe(self):
+        desc = PerCastDraw(creature=1).describe()
+        assert "Draw 1 on creature cast" == desc
+
+    def test_per_cast_draw_multiple_types(self):
+        desc = PerCastDraw(creature=1, enchantment=1).describe()
+        assert "creature" in desc
+        assert "enchantment" in desc
+
+    def test_cryptolith_rites_describe(self):
+        assert CryptolithRitesMana().describe() == "Tap creatures for mana"
+
+    def test_enchantment_sanctum_describe(self):
+        assert EnchantmentSanctumMana().describe() == "Mana from enchantments"
+
+
+class TestDescribeEffects:
+    """Tests for CardEffects.describe_effects() method."""
+
+    def test_empty_card_effects(self):
+        ce = CardEffects()
+        assert ce.describe_effects() == ""
+
+    def test_single_effect(self):
+        ce = CardEffects(on_play=[ProduceMana(2)])
+        assert ce.describe_effects() == "+2 mana"
+
+    def test_multiple_effects(self):
+        ce = CardEffects(
+            on_play=[ProduceMana(2)],
+            cast_trigger=[PerCastDraw(creature=1)],
+        )
+        desc = ce.describe_effects()
+        assert "+2 mana" in desc
+        assert "Draw 1 on creature cast" in desc
+        assert "; " in desc
+
+    def test_effects_across_all_lists(self):
+        ce = CardEffects(
+            on_play=[ProduceMana(1)],
+            per_turn=[PerTurnDraw(1)],
+            cast_trigger=[PerCastDraw(creature=1)],
+            mana_function=[CryptolithRitesMana()],
+        )
+        desc = ce.describe_effects()
+        parts = desc.split("; ")
+        assert len(parts) == 4

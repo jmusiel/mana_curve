@@ -452,6 +452,25 @@ class TestSimulationValidation:
         assert response.status_code == 200
 
 
+def _make_card_performance():
+    return {
+        "high_performing": [
+            {"name": "Creature 0", "cost": "{1}", "cmc": 1, "effects": "",
+             "top_rate": 0.8, "low_rate": 0.2, "score": 0.6},
+            {"name": "Creature 1", "cost": "{2}", "cmc": 2, "effects": "",
+             "top_rate": 0.7, "low_rate": 0.3, "score": 0.4},
+        ],
+        "low_performing": [
+            {"name": "Creature 5", "cost": "{6}", "cmc": 6, "effects": "",
+             "top_rate": 0.1, "low_rate": 0.5, "score": -0.4},
+            {"name": "Creature 4", "cost": "{5}", "cmc": 5, "effects": "",
+             "top_rate": 0.2, "low_rate": 0.4, "score": -0.2},
+        ],
+        "total_top_games": 100,
+        "total_low_games": 100,
+    }
+
+
 def _make_mock_results():
     return [
         {
@@ -478,6 +497,7 @@ def _make_mock_results():
                 "low_decile": 0.10,
                 "low_centile": 0.01,
             },
+            "card_performance": _make_card_performance(),
         },
         {
             "land_count": 37,
@@ -503,6 +523,7 @@ def _make_mock_results():
                 "low_decile": 0.09,
                 "low_centile": 0.01,
             },
+            "card_performance": _make_card_performance(),
         },
     ]
 
@@ -546,6 +567,22 @@ class TestResultsPage:
         response = client.get("/sim/results/abc123")
         assert b"Distribution" in response.data
         assert b"Top 1%" in response.data
+
+    def test_results_page_has_metric_definitions(self, client, monkeypatch):
+        from mana_curve.web.routes import simulation as sim_mod
+
+        monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
+        response = client.get("/sim/results/abc123")
+        assert b"Metric Definitions" in response.data
+
+    def test_results_page_has_card_performance(self, client, monkeypatch):
+        from mana_curve.web.routes import simulation as sim_mod
+
+        monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
+        response = client.get("/sim/results/abc123")
+        assert b"Card Performance" in response.data
+        assert b"Top Performers" in response.data
+        assert b"Low Performers" in response.data
 
     def test_results_page_has_chart_canvases(self, client, monkeypatch):
         from mana_curve.web.routes import simulation as sim_mod
