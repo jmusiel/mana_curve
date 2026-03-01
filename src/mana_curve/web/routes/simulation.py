@@ -10,7 +10,7 @@ from mana_curve.decklist.loader import get_deckpath, load_decklist
 from mana_curve.web.services.simulation_runner import SimulationRunner
 
 # Web UI compute limits (CLI remains unrestricted)
-MAX_SIMS = 2000
+MAX_SIMS = 10000
 MAX_TURNS = 14
 MAX_LAND_SWEEP = 10
 

@@ -414,9 +414,9 @@ class TestSimulationValidation:
         assert response.status_code == 200
 
     def test_sims_over_limit_returns_400(self, client, tmp_path, monkeypatch):
-        response = self._post_sim(client, monkeypatch, tmp_path, sims="5000")
+        response = self._post_sim(client, monkeypatch, tmp_path, sims="20000")
         assert response.status_code == 400
-        assert b"2000" in response.data
+        assert b"10000" in response.data
 
     def test_turns_over_limit_returns_400(self, client, tmp_path, monkeypatch):
         response = self._post_sim(client, monkeypatch, tmp_path, turns="20")
