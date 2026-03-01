@@ -83,7 +83,8 @@ def test_as_row():
     result = SimulationResult(land_count=37, mean_mana=15.5, consistency=0.9)
     row = result.as_row()
     assert row[0] == 37
-    assert row[1] == 15.5
+    assert "15.50" in row[1]  # formatted with CI margin
+    assert "0.9000" in row[2]  # consistency with CI margin
     assert len(row) == 13
 
 
@@ -122,6 +123,21 @@ def test_different_seeds_differ():
 
     # Very unlikely to be exactly equal with different seeds
     assert r1.mean_mana != r2.mean_mana
+
+
+def test_confidence_intervals():
+    """Confidence intervals are computed and make sense."""
+    deck = _simple_deck()
+    gf = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=42)
+    result = gf.simulate()
+
+    # CI should bracket the mean
+    assert result.ci_mean_mana[0] <= result.mean_mana <= result.ci_mean_mana[1]
+    assert result.ci_mean_bad_turns[0] <= result.mean_bad_turns <= result.ci_mean_bad_turns[1]
+    # Consistency CI should be within reasonable bounds
+    assert result.ci_consistency[0] <= result.consistency <= result.ci_consistency[1]
+    # CI width should be positive (non-degenerate)
+    assert result.ci_mean_mana[1] > result.ci_mean_mana[0]
 
 
 def test_crn_across_land_counts():

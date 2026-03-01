@@ -9,7 +9,7 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from tqdm import tqdm
@@ -51,12 +51,19 @@ class SimulationResult:
     distribution_stats: Dict[str, float] = field(default_factory=dict)
     game_records: Dict[str, Dict[str, list]] = field(default_factory=dict)
 
+    # 95% confidence intervals (low, high)
+    ci_mean_mana: Tuple[float, float] = (0.0, 0.0)
+    ci_consistency: Tuple[float, float] = (0.0, 0.0)
+    ci_mean_bad_turns: Tuple[float, float] = (0.0, 0.0)
+
     def as_row(self) -> list:
         """Return a flat list for tabulate (without distribution_stats)."""
+        mana_margin = (self.ci_mean_mana[1] - self.ci_mean_mana[0]) / 2
+        con_margin = (self.ci_consistency[1] - self.ci_consistency[0]) / 2
         return [
             self.land_count,
-            self.mean_mana,
-            self.consistency,
+            f"{self.mean_mana:.2f} +/-{mana_margin:.2f}",
+            f"{self.consistency:.4f} +/-{con_margin:.4f}",
             self.mean_bad_turns,
             self.mean_mid_turns,
             self.mean_lands,
@@ -705,6 +712,33 @@ class Goldfisher:
         threshold_mana = float(sorted_mana[threshold_index])
         consistency = (1 - threshold_percent) / (1 - con_threshold)
 
+        # Compute 95% confidence intervals (normal approximation)
+        n = len(mana_spent_list)
+        z = 1.96
+
+        mana_se = float(np.std(mana_spent_list, ddof=1) / np.sqrt(n))
+        ci_mean_mana = (mean_mana - z * mana_se, mean_mana + z * mana_se)
+
+        bad_se = float(np.std(bad_turns_list, ddof=1) / np.sqrt(n))
+        ci_mean_bad_turns = (mean_bad_turns - z * bad_se, mean_bad_turns + z * bad_se)
+
+        # Bootstrap CI for consistency (not directly a sample mean)
+        n_boot = min(1000, n)
+        boot_consistencies = []
+        mana_arr = np.array(mana_spent_list)
+        for _ in range(n_boot):
+            boot_sample = np.random.choice(mana_arr, size=n, replace=True)
+            boot_total = float(np.sum(boot_sample))
+            boot_sorted = np.sort(boot_sample)
+            boot_cum = np.cumsum(boot_sorted)
+            boot_idx = int(np.searchsorted(boot_cum, boot_total * con_threshold))
+            boot_pct = boot_idx / n
+            boot_consistencies.append((1 - boot_pct) / (1 - con_threshold))
+        ci_consistency = (
+            float(np.percentile(boot_consistencies, 2.5)),
+            float(np.percentile(boot_consistencies, 97.5)),
+        )
+
         total_recorded = self.sims - sample_games
         distribution_stats = {
             "top_centile": len(game_records["top_centile"]["mana"]) / total_recorded if self.record_centile else 0,
@@ -734,4 +768,7 @@ class Goldfisher:
             con_threshold=con_threshold,
             distribution_stats=distribution_stats,
             game_records=dict(game_records),
+            ci_mean_mana=ci_mean_mana,
+            ci_consistency=ci_consistency,
+            ci_mean_bad_turns=ci_mean_bad_turns,
         )
