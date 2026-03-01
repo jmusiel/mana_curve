@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Results - {{ deck_name }} - Mana Curve{% endblock %}
+{% block content %}
+<h1>Results: {{ deck_name }}</h1>
+
+<h2>Summary Statistics</h2>
+<div class="table-wrap">
+<table class="stats-table">
+    <thead>
+        <tr>
+            <th>Lands</th>
+            <th>Mana (EV)</th>
+            <th>Consistency</th>
+            <th>Bad Turns</th>
+            <th>Mid Turns</th>
+            <th>Avg Lands</th>
+            <th>Avg Mulls</th>
+            <th>25th</th>
+            <th>50th</th>
+            <th>75th</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in results %}
+        <tr>
+            <td>{{ r.land_count }}</td>
+            <td>{{ "%.2f"|format(r.mean_mana) }}</td>
+            <td>{{ "%.3f"|format(r.consistency) }}</td>
+            <td>{{ "%.2f"|format(r.mean_bad_turns) }}</td>
+            <td>{{ "%.2f"|format(r.mean_mid_turns) }}</td>
+            <td>{{ "%.2f"|format(r.mean_lands) }}</td>
+            <td>{{ "%.2f"|format(r.mean_mulls) }}</td>
+            <td>{{ "%.1f"|format(r.percentile_25) }}</td>
+            <td>{{ "%.1f"|format(r.percentile_50) }}</td>
+            <td>{{ "%.1f"|format(r.percentile_75) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% if results and results[0].distribution_stats %}
+<h2>Distribution Statistics</h2>
+<div class="table-wrap">
+<table class="stats-table">
+    <thead>
+        <tr>
+            <th>Lands</th>
+            <th>Top 1%</th>
+            <th>Top 10%</th>
+            <th>Top 25%</th>
+            <th>Top 50%</th>
+            <th>Low 50%</th>
+            <th>Low 25%</th>
+            <th>Low 10%</th>
+            <th>Low 1%</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in results %}
+        <tr>
+            <td>{{ r.land_count }}</td>
+            <td>{{ "%.1f"|format(r.distribution_stats.get('top_centile', 0) * 100) }}%</td>
+            <td>{{ "%.1f"|format(r.distribution_stats.get('top_decile', 0) * 100) }}%</td>
+            <td>{{ "%.1f"|format(r.distribution_stats.get('top_quartile', 0) * 100) }}%</td>
+            <td>{{ "%.1f"|format(r.distribution_stats.get('top_half', 0) * 100) }}%</td>
+            <td>{{ "%.1f"|format(r.distribution_stats.get('low_half', 0) * 100) }}%</td>
+            <td>{{ "%.1f"|format(r.distribution_stats.get('low_quartile', 0) * 100) }}%</td>
+            <td>{{ "%.1f"|format(r.distribution_stats.get('low_decile', 0) * 100) }}%</td>
+            <td>{{ "%.1f"|format(r.distribution_stats.get('low_centile', 0) * 100) }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+
+<h2>Charts</h2>
+<div class="charts-grid">
+    <div class="chart-container">
+        <canvas id="manaChart"></canvas>
+    </div>
+    <div class="chart-container">
+        <canvas id="distributionChart"></canvas>
+    </div>
+    <div class="chart-container">
+        <canvas id="consistencyChart"></canvas>
+    </div>
+</div>
+
+<script>
+(function() {
+    const apiUrl = "{{ url_for('simulation.api_results', job_id=job_id) }}";
+
+    fetch(apiUrl)
+        .then(r => r.json())
+        .then(data => {
+            const labels = data.map(d => d.land_count);
+
+            // Mana EV line chart with percentile bands
+            new Chart(document.getElementById('manaChart'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Mean Mana',
+                            data: data.map(d => d.mean_mana),
+                            borderColor: '#2563eb',
+                            backgroundColor: '#2563eb',
+                            borderWidth: 2,
+                            fill: false,
+                        },
+                        {
+                            label: '75th Percentile',
+                            data: data.map(d => d.percentile_75),
+                            borderColor: 'rgba(37, 99, 235, 0.3)',
+                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                            borderWidth: 1,
+                            fill: '+1',
+                        },
+                        {
+                            label: '50th Percentile',
+                            data: data.map(d => d.percentile_50),
+                            borderColor: 'rgba(37, 99, 235, 0.5)',
+                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                            borderWidth: 1,
+                            fill: false,
+                            borderDash: [5, 5],
+                        },
+                        {
+                            label: '25th Percentile',
+                            data: data.map(d => d.percentile_25),
+                            borderColor: 'rgba(37, 99, 235, 0.3)',
+                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                            borderWidth: 1,
+                            fill: '-1',
+                        },
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { title: { display: true, text: 'Mana EV by Land Count' } },
+                    scales: {
+                        x: { title: { display: true, text: 'Land Count' } },
+                        y: { title: { display: true, text: 'Total Mana Spent' } }
+                    }
+                }
+            });
+
+            // Distribution stats bar chart
+            if (data[0].distribution_stats) {
+                const distKeys = ['top_centile', 'top_decile', 'top_quartile', 'top_half',
+                                  'low_half', 'low_quartile', 'low_decile', 'low_centile'];
+                const distLabels = ['Top 1%', 'Top 10%', 'Top 25%', 'Top 50%',
+                                    'Low 50%', 'Low 25%', 'Low 10%', 'Low 1%'];
+                const colors = ['#16a34a', '#22c55e', '#4ade80', '#86efac',
+                                '#fca5a5', '#f87171', '#ef4444', '#dc2626'];
+
+                new Chart(document.getElementById('distributionChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: distKeys.map((key, i) => ({
+                            label: distLabels[i],
+                            data: data.map(d => (d.distribution_stats[key] || 0) * 100),
+                            backgroundColor: colors[i],
+                        }))
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { title: { display: true, text: 'Distribution Stats (%)' } },
+                        scales: {
+                            x: { title: { display: true, text: 'Land Count' } },
+                            y: { title: { display: true, text: 'Percentage' } }
+                        }
+                    }
+                });
+            }
+
+            // Consistency line chart
+            new Chart(document.getElementById('consistencyChart'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Consistency',
+                        data: data.map(d => d.consistency),
+                        borderColor: '#16a34a',
+                        backgroundColor: '#16a34a',
+                        borderWidth: 2,
+                        fill: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { title: { display: true, text: 'Consistency Score by Land Count' } },
+                    scales: {
+                        x: { title: { display: true, text: 'Land Count' } },
+                        y: { title: { display: true, text: 'Consistency' }, min: 0, max: 1.2 }
+                    }
+                }
+            });
+        });
+})();
+</script>
+{% endblock %}

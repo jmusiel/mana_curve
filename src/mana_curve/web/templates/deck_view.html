@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} - Mana Curve{% endblock %}
+{% block content %}
+<div class="deck-header">
+    <h1>{{ name }}</h1>
+    <p class="deck-stats">{{ total_cards }} cards &middot; {{ land_count }} lands</p>
+    <a href="{{ url_for('simulation.config', deck_name=name) }}" class="btn btn-primary">Simulate</a>
+</div>
+
+{% if commanders %}
+<div class="card-group">
+    <h2>Commander ({{ commanders | length }})</h2>
+    <ul class="card-list">
+        {% for card in commanders %}
+        <li>
+            <span class="card-name">{{ card.name }}</span>
+            <span class="card-cost">{{ card.cost }}</span>
+            <span class="card-cmc">({{ card.cmc }})</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% for category, cards in groups %}
+<div class="card-group">
+    <h2>{{ category }} ({{ cards | length }})</h2>
+    <ul class="card-list">
+        {% for card in cards | sort(attribute='name') %}
+        <li>
+            <span class="card-name">{{ card.name }}</span>
+            {% if card.cost %}
+            <span class="card-cost">{{ card.cost }}</span>
+            {% endif %}
+            <span class="card-cmc">({{ card.cmc }})</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endfor %}
+{% endblock %}

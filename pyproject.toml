@@ -14,12 +14,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+web = ["flask>=3.1"]
 dev = [
     "pytest>=9.0.2",
+    "flask>=3.1",
 ]
 
 [project.scripts]
 mana-curve = "mana_curve.cli.main:main"
+mana-curve-web = "mana_curve.web:create_app"
 
 [build-system]
 requires = ["hatchling"]
