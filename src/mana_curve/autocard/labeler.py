@@ -196,6 +196,7 @@ def label_cards(
     model: str = "llama4:16x17b",
     output_path: Path | None = None,
     resume: bool = True,
+    concurrency: int = 1,
 ) -> dict[str, dict]:
     """Label multiple cards with LLM, with incremental saving and resume support.
 
@@ -204,10 +205,14 @@ def label_cards(
         model: Ollama model name.
         output_path: Path to save results (default: data/labeled_cards.json).
         resume: If True, skip cards already in the output file.
+        concurrency: Number of parallel Ollama requests.
 
     Returns:
         Dict mapping card name to label dict.
     """
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     from tqdm import tqdm
 
     if output_path is None:
@@ -215,26 +220,35 @@ def label_cards(
 
     # Load existing results for resume
     results = load_labeled(output_path) if resume else {}
+    lock = threading.Lock()
 
-    for card in tqdm(cards, desc="Labeling cards"):
-        if card.name in results:
-            logger.info("Skipping %s (already labeled)", card.name)
-            continue
+    # Filter to cards that still need labeling
+    to_label = [c for c in cards if c.name not in results]
 
+    def _process(card: ScryfallCard) -> tuple[str, dict | None]:
         try:
             label = label_card(card, model=model)
         except ValueError:
             logger.error("Failed to label %s, skipping", card.name)
-            continue
+            return card.name, None
 
-        # Validate
         errors = validate_label(card.name, label)
         if errors:
             logger.warning("Validation errors for %s: %s", card.name, errors)
 
-        results[card.name] = label
+        return card.name, label
 
-        # Save incrementally
-        save_labeled(results, output_path)
+    with tqdm(total=len(to_label), desc="Labeling cards") as pbar:
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = {
+                pool.submit(_process, card): card for card in to_label
+            }
+            for future in as_completed(futures):
+                name, label = future.result()
+                if label is not None:
+                    with lock:
+                        results[name] = label
+                        save_labeled(results, output_path)
+                pbar.update(1)
 
     return results

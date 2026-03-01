@@ -13,14 +13,17 @@ from .schemas import ScryfallCard
 _DEFAULT_DATA_DIR = Path(__file__).parent / "data"
 
 
-def fetch_top_cards(count: int = 1000) -> List[ScryfallCard]:
+def fetch_top_cards(
+    count: int = 1000,
+    query: str = "f:commander",
+) -> List[ScryfallCard]:
     """Fetch the top `count` commander cards ranked by EDHREC popularity.
 
-    Uses scrython's Search with ``f:commander`` and ``order=edhrec``.
+    Uses scrython's Search with the given query and ``order=edhrec``.
     Paginates automatically via ``iter_all()`` and stops after collecting
     the requested number of cards.
     """
-    search = scrython.cards.Search(q="f:commander", order="edhrec", dir="asc")
+    search = scrython.cards.Search(q=query, order="edhrec", dir="asc")
     cards: List[ScryfallCard] = []
 
     for card_obj in search.iter_all():

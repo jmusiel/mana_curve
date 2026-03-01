@@ -12,8 +12,8 @@ def cmd_fetch(args: argparse.Namespace) -> None:
     from .scryfall import fetch_top_cards, save_cards
 
     output = Path(args.output) if args.output else None
-    print(f"Fetching top {args.count} commander cards from Scryfall...")
-    cards = fetch_top_cards(count=args.count)
+    print(f"Fetching top {args.count} cards with query: {args.query!r}")
+    cards = fetch_top_cards(count=args.count, query=args.query)
     path = save_cards(cards, output)
     print(f"Saved {len(cards)} cards to {path}")
 
@@ -51,13 +51,14 @@ def cmd_label(args: argparse.Namespace) -> None:
         print("All cards are already labeled!")
         return
 
-    print(f"Labeling {len(unlabeled)} cards with model {args.model}...")
+    print(f"Labeling {len(unlabeled)} cards with model {args.model} (concurrency={args.concurrency})...")
     output_path = Path(args.output) if args.output else None
     results = label_cards(
         unlabeled,
         model=args.model,
         output_path=output_path,
         resume=args.resume,
+        concurrency=args.concurrency,
     )
     print(f"Labeled {len(results)} cards total.")
 
@@ -121,6 +122,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of cards to fetch (default: 1000)",
     )
     fetch_parser.add_argument(
+        "--query", type=str, default="f:commander",
+        help="Scryfall search query (default: 'f:commander')",
+    )
+    fetch_parser.add_argument(
         "--output", type=str, default=None,
         help="Output JSON path (default: autocard/data/top_cards.json)",
     )
@@ -159,6 +164,10 @@ def build_parser() -> argparse.ArgumentParser:
     label_parser.add_argument(
         "--output", type=str, default=None,
         help="Path to labeled_cards.json output",
+    )
+    label_parser.add_argument(
+        "--concurrency", type=int, default=1,
+        help="Number of parallel Ollama requests (default: 1)",
     )
     label_parser.set_defaults(func=cmd_label)
 
