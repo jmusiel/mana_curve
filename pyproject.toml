@@ -19,10 +19,14 @@ dev = [
     "pytest>=9.0.2",
     "flask>=3.1",
 ]
+autocard = [
+    "ollama>=0.4.0",
+]
 
 [project.scripts]
 mana-curve = "mana_curve.cli.main:main"
 mana-curve-web = "mana_curve.web:create_app"
+autocard = "mana_curve.autocard.cli:main"
 
 [build-system]
 requires = ["hatchling"]
