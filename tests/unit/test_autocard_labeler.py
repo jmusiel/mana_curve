@@ -26,8 +26,10 @@ def _patch_ollama():
 
 
 from mana_curve.autocard.labeler import (
+    build_batch_prompt,
     build_card_prompt,
     label_card,
+    label_card_batch,
     label_cards,
     load_labeled,
     save_labeled,
@@ -127,6 +129,56 @@ class TestLabelCard:
         assert call_kwargs.kwargs["model"] == "llama3:8b"
 
 
+class TestBuildBatchPrompt:
+    def test_includes_all_card_names(self):
+        cards = [_make_card("Sol Ring"), _make_card("Arcane Signet")]
+        prompt = build_batch_prompt(cards)
+        assert "Sol Ring" in prompt
+        assert "Arcane Signet" in prompt
+        assert "Card 1:" in prompt
+        assert "Card 2:" in prompt
+
+    def test_includes_oracle_text(self):
+        cards = [_make_card("Sol Ring", "{T}: Add {C}{C}.")]
+        prompt = build_batch_prompt(cards)
+        assert "{T}: Add {C}{C}." in prompt
+
+
+class TestLabelCardBatch:
+    def test_valid_batch_response(self):
+        batch_result = {
+            "Sol Ring": _VALID_LABEL,
+            "Lightning Bolt": _EMPTY_LABEL,
+        }
+        _mock_ollama.chat.return_value = _mock_chat_response(batch_result)
+
+        cards = [_make_card("Sol Ring"), _make_card("Lightning Bolt")]
+        result = label_card_batch(cards)
+
+        assert result["Sol Ring"] == _VALID_LABEL
+        assert result["Lightning Bolt"] == _EMPTY_LABEL
+        _mock_ollama.chat.assert_called_once()
+
+    def test_retry_on_invalid_json(self):
+        batch_result = {"Card A": _VALID_LABEL}
+        _mock_ollama.chat.side_effect = [
+            {"message": {"content": "not json"}},
+            _mock_chat_response(batch_result),
+        ]
+
+        result = label_card_batch([_make_card("Card A")], max_retries=3)
+        assert result["Card A"] == _VALID_LABEL
+
+    def test_raises_after_max_retries(self):
+        _mock_ollama.chat.side_effect = [
+            {"message": {"content": "bad"}},
+            {"message": {"content": "bad"}},
+        ]
+
+        with pytest.raises(ValueError, match="Failed to get valid JSON for batch"):
+            label_card_batch([_make_card("Card A")], max_retries=2)
+
+
 class TestLabelCards:
     @patch("mana_curve.autocard.labeler.label_card")
     def test_labels_all_cards(self, mock_label_card):
@@ -172,6 +224,40 @@ class TestLabelCards:
             # File should exist with Card A
             saved = load_labeled(out)
             assert "Card A" in saved
+
+
+    @patch("mana_curve.autocard.labeler.label_card_batch")
+    def test_batch_mode(self, mock_batch):
+        """With batch_size > 1, cards are batched into a single call."""
+        mock_batch.return_value = {
+            "Card A": _VALID_LABEL,
+            "Card B": _EMPTY_LABEL,
+        }
+        cards = [_make_card("Card A"), _make_card("Card B")]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out = Path(tmpdir) / "labeled.json"
+            results = label_cards(cards, output_path=out, resume=False, batch_size=10)
+
+        assert results["Card A"] == _VALID_LABEL
+        assert results["Card B"] == _EMPTY_LABEL
+        mock_batch.assert_called_once()
+
+    @patch("mana_curve.autocard.labeler.label_card_batch")
+    @patch("mana_curve.autocard.labeler.label_card")
+    def test_batch_fallback_on_failure(self, mock_single, mock_batch):
+        """If batch fails, falls back to single-card labeling."""
+        mock_batch.side_effect = ValueError("batch failed")
+        mock_single.return_value = _VALID_LABEL
+        cards = [_make_card("Card A"), _make_card("Card B")]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out = Path(tmpdir) / "labeled.json"
+            results = label_cards(cards, output_path=out, resume=False, batch_size=10)
+
+        assert "Card A" in results
+        assert "Card B" in results
+        assert mock_single.call_count == 2
 
 
 class TestLoadSaveLabeled:

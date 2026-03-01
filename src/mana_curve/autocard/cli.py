@@ -51,7 +51,10 @@ def cmd_label(args: argparse.Namespace) -> None:
         print("All cards are already labeled!")
         return
 
-    print(f"Labeling {len(unlabeled)} cards with model {args.model} (concurrency={args.concurrency})...")
+    print(
+        f"Labeling {len(unlabeled)} cards with model {args.model}"
+        f" (concurrency={args.concurrency}, batch_size={args.batch_size})..."
+    )
     output_path = Path(args.output) if args.output else None
     results = label_cards(
         unlabeled,
@@ -59,6 +62,7 @@ def cmd_label(args: argparse.Namespace) -> None:
         output_path=output_path,
         resume=args.resume,
         concurrency=args.concurrency,
+        batch_size=args.batch_size,
     )
     print(f"Labeled {len(results)} cards total.")
 
@@ -168,6 +172,10 @@ def build_parser() -> argparse.ArgumentParser:
     label_parser.add_argument(
         "--concurrency", type=int, default=1,
         help="Number of parallel Ollama requests (default: 1)",
+    )
+    label_parser.add_argument(
+        "--batch-size", type=int, default=1,
+        help="Cards per LLM call (default: 1, try 10 for speed)",
     )
     label_parser.set_defaults(func=cmd_label)
 
