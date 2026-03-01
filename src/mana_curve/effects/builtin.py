@@ -87,11 +87,13 @@ class TutorToHand:
         for target_name in self.targets:
             target = _find_card_by_name(state, target_name)
             if target is not None and target.zone is state.deck:
-                state.log.append(f"Tutored {target.printable}")
+                if state.should_log:
+                    state.log.append(f"Tutored {target.printable}")
                 target.change_zone(state.hand)
                 return
             elif target is not None:
-                state.log.append(f"Failed to find {target.printable}")
+                if state.should_log:
+                    state.log.append(f"Failed to find {target.printable}")
 
 
 # ---------------------------------------------------------------------------

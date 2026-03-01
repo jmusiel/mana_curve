@@ -33,12 +33,18 @@ def run(deck_name: str):
     if not os.path.isfile(path):
         abort(404)
 
+    seed_val = request.form.get("seed", "").strip()
+    workers_val = int(request.form.get("workers", 0))
+
     sim_config = {
         "turns": int(request.form.get("turns", 10)),
         "sims": int(request.form.get("sims", 1000)),
         "min_lands": int(request.form.get("min_lands", 36)),
         "max_lands": int(request.form.get("max_lands", 39)),
         "record_results": request.form.get("record_results", "quartile"),
+        "seed": int(seed_val) if seed_val else None,
+        "workers": workers_val if workers_val > 0 else (os.cpu_count() or 1),
+        "mulligan": request.form.get("mulligan", "default"),
     }
 
     runner = get_runner()

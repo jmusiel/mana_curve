@@ -25,13 +25,32 @@
             <input type="number" id="max_lands" name="max_lands" value="39" min="20" max="50">
         </div>
     </div>
-    <div class="form-group">
-        <label for="record_results">Record Detail Level</label>
-        <select id="record_results" name="record_results">
-            <option value="quartile" selected>Quartile</option>
-            <option value="decile">Decile</option>
-            <option value="centile">Centile</option>
-        </select>
+    <div class="form-row">
+        <div class="form-group">
+            <label for="seed">Seed (optional)</label>
+            <input type="number" id="seed" name="seed" placeholder="Random">
+        </div>
+        <div class="form-group">
+            <label for="workers">Workers (0 = all CPUs)</label>
+            <input type="number" id="workers" name="workers" value="0" min="0" max="32">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label for="mulligan">Mulligan Strategy</label>
+            <select id="mulligan" name="mulligan">
+                <option value="default" selected>Default (3-4 lands)</option>
+                <option value="curve_aware">Curve Aware</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="record_results">Record Detail Level</label>
+            <select id="record_results" name="record_results">
+                <option value="quartile" selected>Quartile</option>
+                <option value="decile">Decile</option>
+                <option value="centile">Centile</option>
+            </select>
+        </div>
     </div>
     <button type="submit" class="btn btn-primary">Run Simulation</button>
 </form>

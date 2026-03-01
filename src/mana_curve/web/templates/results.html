@@ -22,10 +22,12 @@
     </thead>
     <tbody>
         {% for r in results %}
+        {% set mana_margin = ((r.ci_mean_mana[1] - r.ci_mean_mana[0]) / 2) if r.ci_mean_mana else 0 %}
+        {% set con_margin = ((r.ci_consistency[1] - r.ci_consistency[0]) / 2) if r.ci_consistency else 0 %}
         <tr>
             <td>{{ r.land_count }}</td>
-            <td>{{ "%.2f"|format(r.mean_mana) }}</td>
-            <td>{{ "%.3f"|format(r.consistency) }}</td>
+            <td>{{ "%.2f"|format(r.mean_mana) }} <small>&plusmn;{{ "%.2f"|format(mana_margin) }}</small></td>
+            <td>{{ "%.3f"|format(r.consistency) }} <small>&plusmn;{{ "%.4f"|format(con_margin) }}</small></td>
             <td>{{ "%.2f"|format(r.mean_bad_turns) }}</td>
             <td>{{ "%.2f"|format(r.mean_mid_turns) }}</td>
             <td>{{ "%.2f"|format(r.mean_lands) }}</td>

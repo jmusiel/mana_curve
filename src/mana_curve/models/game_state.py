@@ -63,3 +63,8 @@ class GameState:
 
     # Game log
     log: List[str] = field(default_factory=list)
+    should_log: bool = True
+
+    # References to the decklist (set by engine, used by module-level helpers)
+    decklist: List[Card] = field(default_factory=list, repr=False)
+    deckdict: dict = field(default_factory=dict, repr=False)

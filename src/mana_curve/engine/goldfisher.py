@@ -6,10 +6,12 @@ No CLI code here -- returns structured ``SimulationResult``.
 
 from __future__ import annotations
 
+import os
 import random
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from tqdm import tqdm
@@ -51,12 +53,19 @@ class SimulationResult:
     distribution_stats: Dict[str, float] = field(default_factory=dict)
     game_records: Dict[str, Dict[str, list]] = field(default_factory=dict)
 
+    # 95% confidence intervals (low, high)
+    ci_mean_mana: Tuple[float, float] = (0.0, 0.0)
+    ci_consistency: Tuple[float, float] = (0.0, 0.0)
+    ci_mean_bad_turns: Tuple[float, float] = (0.0, 0.0)
+
     def as_row(self) -> list:
         """Return a flat list for tabulate (without distribution_stats)."""
+        mana_margin = (self.ci_mean_mana[1] - self.ci_mean_mana[0]) / 2
+        con_margin = (self.ci_consistency[1] - self.ci_consistency[0]) / 2
         return [
             self.land_count,
-            self.mean_mana,
-            self.consistency,
+            f"{self.mean_mana:.2f} +/-{mana_margin:.2f}",
+            f"{self.consistency:.4f} +/-{con_margin:.4f}",
             self.mean_bad_turns,
             self.mean_mid_turns,
             self.mean_lands,
@@ -74,36 +83,125 @@ class SimulationResult:
 # Module-level helpers (used by effects via import)
 # ---------------------------------------------------------------------------
 
-# Reference to the decklist -- set by the engine before each game
-_active_decklist: List[Card] = []
-_active_deckdict: Dict[str, Card] = {}
-
 
 def _draw(state: GameState) -> None:
     """Draw a card from the deck into the hand."""
     if not state.deck:
-        state.log.append("Draw failed, deck is empty")
+        if state.should_log:
+            state.log.append("Draw failed, deck is empty")
         state.draws += 1
         return
     drawn_i = state.deck.pop()
-    drawn = _active_decklist[drawn_i]
+    drawn = state.decklist[drawn_i]
     drawn.zone = state.hand
     state.hand.append(drawn_i)
     state.draws += 1
-    state.log.append(f"Draw {drawn.printable}")
+    if state.should_log:
+        state.log.append(f"Draw {drawn.printable}")
 
 
 def _random_discard(state: GameState) -> None:
     """Discard a random card from hand."""
     discarded_i = random.choice(state.hand)
-    discarded = _active_decklist[discarded_i]
+    discarded = state.decklist[discarded_i]
     discarded.change_zone(state.yard)
-    state.log.append(f"Discarded {discarded.printable}")
+    if state.should_log:
+        state.log.append(f"Discarded {discarded.printable}")
 
 
 def _find_card_by_name(state: GameState, name: str) -> Card | None:
     """Find a card in the decklist by name."""
-    return _active_deckdict.get(name)
+    return state.deckdict.get(name)
+
+
+def _card_to_dict(card: Card) -> dict:
+    """Serialize a Card back to a dict for worker reconstruction."""
+    return {
+        "name": card.name, "quantity": card.quantity,
+        "oracle_cmc": card.oracle_cmc, "cmc": card.cmc,
+        "cost": card.cost, "text": card.text,
+        "sub_types": card.sub_types, "super_types": card.super_types,
+        "types": card.types, "identity": card.identity,
+        "default_category": card.default_category,
+        "user_category": card.user_category,
+        "tag": card.tag, "commander": card.commander,
+    }
+
+
+def _worker_run_batch(
+    deck_dicts: list[dict],
+    turns: int,
+    n_games: int,
+    base_seed: int | None,
+    game_offset: int,
+) -> dict:
+    """Top-level function for ProcessPoolExecutor workers.
+
+    Creates a fresh Goldfisher and runs ``n_games`` simulations.
+    Returns raw per-game stats as lists.
+    """
+    gf = Goldfisher(
+        deck_dicts, turns=turns, sims=n_games,
+        record_results=None, seed=base_seed,
+    )
+    # Adjust seed offset so each batch uses the correct per-game seeds
+    mana_spent = []
+    mulls = []
+    lands_played = []
+    cards_drawn = []
+    bad_turns = []
+    mid_turns = []
+    card_cast_turns: list[list] = [[] for _ in gf.decklist]
+
+    for j in range(n_games):
+        global_j = game_offset + j
+        if base_seed is not None:
+            random.seed(base_seed + global_j)
+        state = gf._reset()
+        mulligans = gf._mulligan(state)
+
+        total_mana_spent = 0
+        game_lands = 0
+        game_bad = 0
+        game_mid = 0
+
+        for i in range(turns):
+            turn_mana = 0
+            spells_played = 0
+            played = gf._take_turn(state)
+            for card in played:
+                if not card.ramp:
+                    turn_mana += card.mana_spent_when_played
+                if card.land:
+                    game_lands += 1
+                if card.spell:
+                    spells_played += 1
+            if spells_played == 0 and state.deck:
+                game_bad += 1
+            if spells_played < 2 and state.deck and turn_mana < i + 1:
+                game_mid += 1
+            total_mana_spent += turn_mana
+
+        mana_spent.append(total_mana_spent)
+        lands_played.append(game_lands)
+        mulls.append(mulligans)
+        cards_drawn.append(state.draws)
+        bad_turns.append(game_bad)
+        mid_turns.append(game_mid)
+
+        for k, turn in enumerate(state.card_cast_turn):
+            if turn is not None and not gf.decklist[k].land:
+                card_cast_turns[k].append(turn)
+
+    return {
+        "mana_spent": mana_spent,
+        "mulls": mulls,
+        "lands_played": lands_played,
+        "cards_drawn": cards_drawn,
+        "bad_turns": bad_turns,
+        "mid_turns": mid_turns,
+        "card_cast_turns": card_cast_turns,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +237,8 @@ class Goldfisher:
         mulligan_strategy: MulliganStrategy | None = None,
         record_results: str = "quartile",
         deck_name: str | None = None,
+        seed: int | None = None,
+        workers: int = 1,
         **kwargs,
     ):
         self.registry = registry or DEFAULT_REGISTRY
@@ -146,6 +246,9 @@ class Goldfisher:
         self.turns = turns
         self.sims = sims
         self.verbose = verbose
+        self.seed = seed
+        self.workers = workers
+        self._should_log = verbose or record_results is not None
 
         # Separate commanders from the decklist
         self.commanders: list[Card] = []
@@ -217,6 +320,9 @@ class Goldfisher:
 
         card = Card(**kw)
 
+        # Cache registry effects on the card to avoid repeated lookups
+        card._cached_effects = effects
+
         # Apply card-level flags from registry
         if effects:
             card.ramp = effects.ramp
@@ -232,12 +338,10 @@ class Goldfisher:
     def _reset(self) -> GameState:
         """Create a fresh GameState for a new game."""
         state = GameState()
+        state.should_log = self._should_log
         state.card_cast_turn = [None] * len(self.decklist)
-
-        # Set up module-level references for effects
-        global _active_decklist, _active_deckdict
-        _active_decklist = self.decklist
-        _active_deckdict = self.deckdict
+        state.decklist = self.decklist
+        state.deckdict = self.deckdict
 
         # Place commanders in command zone
         for card in self.commanders:
@@ -295,10 +399,11 @@ class Goldfisher:
                 state.deck.append(card.index)
             random.shuffle(state.deck)
 
-            if mulligans == -1:
-                state.log.append("### Opening hand:")
-            else:
-                state.log.append(f"### Mulligan #{mulligans + 1}")
+            if state.should_log:
+                if mulligans == -1:
+                    state.log.append("### Opening hand:")
+                else:
+                    state.log.append(f"### Mulligan #{mulligans + 1}")
 
             cards = 7
             if mulligans > 0:
@@ -317,7 +422,8 @@ class Goldfisher:
 
         state.starting_hand = [self.decklist[i] for i in state.hand]
         state.starting_hand_land_count = lands_in_hand
-        state.log.append(f"### Kept {lands_in_hand}/{len(state.hand)} lands/cards")
+        if state.should_log:
+            state.log.append(f"### Kept {lands_in_hand}/{len(state.hand)} lands/cards")
         return mulligans
 
     def _get_mana(self, state: GameState) -> int:
@@ -347,13 +453,14 @@ class Goldfisher:
 
         playables = sorted(playables)
 
-        playables_str = []
-        for card in playables:
-            if card.commander:
-                playables_str.append(f"{card.cmc}(c)")
-            else:
-                playables_str.append(f"{card.cmc}")
-        state.log.append(f"--Playable Spells: {playables_str}")
+        if state.should_log:
+            playables_str = []
+            for card in playables:
+                if card.commander:
+                    playables_str.append(f"{card.cmc}(c)")
+                else:
+                    playables_str.append(f"{card.cmc}")
+            state.log.append(f"--Playable Spells: {playables_str}")
 
         return playables
 
@@ -366,7 +473,8 @@ class Goldfisher:
         for land in reversed(playable_lands):
             if state.played_land_this_turn < state.lands_per_turn:
                 land.change_zone(state.lands)
-                state.log.append(f"Played as land {land.printable}")
+                if state.should_log:
+                    state.log.append(f"Played as land {land.printable}")
                 land.mana_spent_when_played = 0
                 played.append(land)
                 state.played_land_this_turn += 1
@@ -374,7 +482,7 @@ class Goldfisher:
                     state.untapped_land_this_turn += 1
 
                 # Apply on_play effects for lands
-                effects = self.registry.get(land.name)
+                effects = land._cached_effects
                 if effects:
                     for eff in effects.on_play:
                         if isinstance(eff, OnPlayEffect):
@@ -411,7 +519,7 @@ class Goldfisher:
                         trigger_eff.cast_trigger(trigger_card, card, state)
 
                     # Register this card's effects
-                    effects = self.registry.get(card.name)
+                    effects = card._cached_effects
                     if effects:
                         for eff in effects.cast_trigger:
                             state.cast_triggers.append((card, eff))
@@ -421,7 +529,8 @@ class Goldfisher:
                             state.mana_functions.append(eff)
 
                     # Execute on_play effects
-                    state.log.append(f"Played {card.printable}")
+                    if state.should_log:
+                        state.log.append(f"Played {card.printable}")
                     card.mana_spent_when_played = card.cmc
                     if card.creature:
                         state.creatures_played += 1
@@ -443,18 +552,20 @@ class Goldfisher:
             playables = self._get_playables(state, mana_available)
 
         if mana_available < state.treasure:
-            state.log.append(f"Spent treasures: [{state.treasure}] -> [{mana_available}]")
+            if state.should_log:
+                state.log.append(f"Spent treasures: [{state.treasure}] -> [{mana_available}]")
             state.treasure = mana_available
 
         return played_effects
 
     def _take_turn(self, state: GameState) -> list[Card]:
         """Execute one turn."""
-        state.log.append(
-            f"### Turn {state.turn + 1} "
-            f"(Lands: {len(state.lands)}, Mana: {self._get_mana(state)}[{state.treasure}], "
-            f"Hand: {len(state.hand)})"
-        )
+        if state.should_log:
+            state.log.append(
+                f"### Turn {state.turn + 1} "
+                f"(Lands: {len(state.lands)}, Mana: {self._get_mana(state)}[{state.treasure}], "
+                f"Hand: {len(state.hand)})"
+            )
         state.played_land_this_turn = 0
         state.untapped_land_this_turn = 0
         state.tapped_creatures_this_turn = 0
@@ -525,8 +636,187 @@ class Goldfisher:
         )
         self.land_count = sum(1 for c in self.decklist if c.land)
 
+    def _compute_distribution_stats(self, mana_spent_list: list) -> Dict[str, float]:
+        """Compute distribution bucket fractions from raw mana data.
+
+        Uses the first 10% (min 100) games to calibrate percentile thresholds,
+        then counts what fraction of remaining games fall into each bucket.
+        """
+        sample_games = int(max(len(mana_spent_list) / 10, 100))
+        if sample_games >= len(mana_spent_list):
+            # Not enough data for calibration
+            return {k: 0.0 for k in [
+                "top_centile", "top_decile", "top_quartile", "top_half",
+                "low_half", "low_quartile", "low_decile", "low_centile",
+            ]}
+
+        calibration = mana_spent_list[:sample_games]
+        evaluation = mana_spent_list[sample_games:]
+
+        top_centile_threshold = float(np.percentile(calibration, 99))
+        low_centile_threshold = float(np.percentile(calibration, 1))
+        top_decile_threshold = float(np.percentile(calibration, 90))
+        low_decile_threshold = float(np.percentile(calibration, 10))
+        top_quartile_threshold = float(np.percentile(calibration, 75))
+        low_quartile_threshold = float(np.percentile(calibration, 25))
+        median_threshold = float(np.percentile(calibration, 50))
+
+        counts = {k: 0 for k in [
+            "top_centile", "top_decile", "top_quartile", "top_half",
+            "low_half", "low_quartile", "low_decile", "low_centile",
+        ]}
+
+        for mana in evaluation:
+            if self.record_centile and mana >= top_centile_threshold:
+                counts["top_centile"] += 1
+            if self.record_decile and mana >= top_decile_threshold:
+                counts["top_decile"] += 1
+            if self.record_quartile and mana >= top_quartile_threshold:
+                counts["top_quartile"] += 1
+            if self.record_half and mana >= median_threshold:
+                counts["top_half"] += 1
+
+            if self.record_centile and mana <= low_centile_threshold:
+                counts["low_centile"] += 1
+            if self.record_decile and mana <= low_decile_threshold:
+                counts["low_decile"] += 1
+            if self.record_quartile and mana <= low_quartile_threshold:
+                counts["low_quartile"] += 1
+            if self.record_half and mana < median_threshold:
+                counts["low_half"] += 1
+
+        total = len(evaluation)
+        return {k: v / total for k, v in counts.items()}
+
+    def _get_deck_dicts(self) -> list[dict]:
+        """Serialize current decklist + commanders to dicts for workers."""
+        dicts = [_card_to_dict(c) for c in self.commanders]
+        dicts.extend(_card_to_dict(c) for c in self.decklist)
+        return dicts
+
+    def _run_parallel(self) -> dict:
+        """Run simulations across multiple worker processes."""
+        deck_dicts = self._get_deck_dicts()
+        num_workers = min(self.workers, self.sims)
+        batch_size = self.sims // num_workers
+        remainder = self.sims % num_workers
+
+        futures = []
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            offset = 0
+            for w in range(num_workers):
+                n = batch_size + (1 if w < remainder else 0)
+                futures.append(
+                    executor.submit(
+                        _worker_run_batch,
+                        deck_dicts, self.turns, n, self.seed, offset,
+                    )
+                )
+                offset += n
+
+        # Merge results from all workers
+        merged = {
+            "mana_spent": [], "mulls": [], "lands_played": [],
+            "cards_drawn": [], "bad_turns": [], "mid_turns": [],
+        }
+        card_cast_turns: list[list] = [[] for _ in self.decklist]
+
+        for future in futures:
+            batch = future.result()
+            for key in ["mana_spent", "mulls", "lands_played",
+                        "cards_drawn", "bad_turns", "mid_turns"]:
+                merged[key].extend(batch[key])
+            for k, turns_list in enumerate(batch["card_cast_turns"]):
+                card_cast_turns[k].extend(turns_list)
+
+        merged["card_cast_turns"] = card_cast_turns
+        return merged
+
+    def _simulate_from_raw(self, raw: dict) -> SimulationResult:
+        """Compute summary stats from raw per-game data (used by parallel path)."""
+        import bisect
+
+        mana_spent_list = raw["mana_spent"]
+        lands_played_list = raw["lands_played"]
+        mulls_list = raw["mulls"]
+        cards_drawn_list = raw["cards_drawn"]
+        bad_turns_list = raw["bad_turns"]
+        mid_turns_list = raw["mid_turns"]
+
+        mean_mana = float(np.mean(mana_spent_list))
+        mean_lands = float(np.mean(lands_played_list))
+        mean_mulls = float(np.mean(mulls_list))
+        mean_draws = float(np.mean(cards_drawn_list))
+        mean_bad_turns = float(np.mean(bad_turns_list))
+        mean_mid_turns = float(np.mean(mid_turns_list))
+        percentile_25 = float(np.percentile(mana_spent_list, 25))
+        percentile_50 = float(np.percentile(mana_spent_list, 50))
+        percentile_75 = float(np.percentile(mana_spent_list, 75))
+
+        total_mana = float(np.sum(mana_spent_list))
+        sorted_mana = sorted(mana_spent_list)
+        cumulative_mana = np.cumsum(sorted_mana)
+
+        con_threshold = 0.25
+        threshold_index = bisect.bisect_left(cumulative_mana, total_mana * con_threshold)
+        threshold_percent = threshold_index / len(mana_spent_list)
+        threshold_mana = float(sorted_mana[threshold_index])
+        consistency = (1 - threshold_percent) / (1 - con_threshold)
+
+        n = len(mana_spent_list)
+        z = 1.96
+
+        mana_se = float(np.std(mana_spent_list, ddof=1) / np.sqrt(n))
+        ci_mean_mana = (mean_mana - z * mana_se, mean_mana + z * mana_se)
+
+        bad_se = float(np.std(bad_turns_list, ddof=1) / np.sqrt(n))
+        ci_mean_bad_turns = (mean_bad_turns - z * bad_se, mean_bad_turns + z * bad_se)
+
+        n_boot = min(1000, n)
+        boot_consistencies = []
+        mana_arr = np.array(mana_spent_list)
+        for _ in range(n_boot):
+            boot_sample = np.random.choice(mana_arr, size=n, replace=True)
+            boot_total = float(np.sum(boot_sample))
+            boot_sorted = np.sort(boot_sample)
+            boot_cum = np.cumsum(boot_sorted)
+            boot_idx = int(np.searchsorted(boot_cum, boot_total * con_threshold))
+            boot_pct = boot_idx / n
+            boot_consistencies.append((1 - boot_pct) / (1 - con_threshold))
+        ci_consistency = (
+            float(np.percentile(boot_consistencies, 2.5)),
+            float(np.percentile(boot_consistencies, 97.5)),
+        )
+
+        # Compute distribution stats (same calibration approach as sequential path)
+        distribution_stats = self._compute_distribution_stats(mana_spent_list)
+
+        return SimulationResult(
+            land_count=self.land_count,
+            mean_mana=mean_mana,
+            consistency=consistency,
+            mean_bad_turns=mean_bad_turns,
+            mean_mid_turns=mean_mid_turns,
+            mean_lands=mean_lands,
+            mean_mulls=mean_mulls,
+            mean_draws=mean_draws,
+            percentile_25=percentile_25,
+            percentile_50=percentile_50,
+            percentile_75=percentile_75,
+            threshold_percent=threshold_percent,
+            threshold_mana=threshold_mana,
+            con_threshold=con_threshold,
+            ci_mean_mana=ci_mean_mana,
+            ci_consistency=ci_consistency,
+            ci_mean_bad_turns=ci_mean_bad_turns,
+            distribution_stats=distribution_stats,
+        )
+
     def simulate(self) -> SimulationResult:
         """Run all simulations and return a ``SimulationResult``."""
+        if self.workers > 1:
+            return self._simulate_from_raw(self._run_parallel())
+
         sample_games = max(self.sims / 10, 100)
         top_centile_threshold = None
         game_records: dict[str, dict[str, list]] = {
@@ -548,6 +838,8 @@ class Goldfisher:
         card_cast_turn_list: list[list] = [[] for _ in self.decklist]
 
         for j in tqdm(range(self.sims), leave=False):
+            if self.seed is not None:
+                random.seed(self.seed + j)
             state = self._reset()
             mulligans = self._mulligan(state)
 
@@ -686,17 +978,34 @@ class Goldfisher:
         threshold_mana = float(sorted_mana[threshold_index])
         consistency = (1 - threshold_percent) / (1 - con_threshold)
 
-        total_recorded = self.sims - sample_games
-        distribution_stats = {
-            "top_centile": len(game_records["top_centile"]["mana"]) / total_recorded if self.record_centile else 0,
-            "top_decile": len(game_records["top_decile"]["mana"]) / total_recorded if self.record_decile else 0,
-            "top_quartile": len(game_records["top_quartile"]["mana"]) / total_recorded if self.record_quartile else 0,
-            "top_half": len(game_records["top_half"]["mana"]) / total_recorded if self.record_half else 0,
-            "low_half": len(game_records["low_half"]["mana"]) / total_recorded if self.record_half else 0,
-            "low_quartile": len(game_records["low_quartile"]["mana"]) / total_recorded if self.record_quartile else 0,
-            "low_decile": len(game_records["low_decile"]["mana"]) / total_recorded if self.record_decile else 0,
-            "low_centile": len(game_records["low_centile"]["mana"]) / total_recorded if self.record_centile else 0,
-        }
+        # Compute 95% confidence intervals (normal approximation)
+        n = len(mana_spent_list)
+        z = 1.96
+
+        mana_se = float(np.std(mana_spent_list, ddof=1) / np.sqrt(n))
+        ci_mean_mana = (mean_mana - z * mana_se, mean_mana + z * mana_se)
+
+        bad_se = float(np.std(bad_turns_list, ddof=1) / np.sqrt(n))
+        ci_mean_bad_turns = (mean_bad_turns - z * bad_se, mean_bad_turns + z * bad_se)
+
+        # Bootstrap CI for consistency (not directly a sample mean)
+        n_boot = min(1000, n)
+        boot_consistencies = []
+        mana_arr = np.array(mana_spent_list)
+        for _ in range(n_boot):
+            boot_sample = np.random.choice(mana_arr, size=n, replace=True)
+            boot_total = float(np.sum(boot_sample))
+            boot_sorted = np.sort(boot_sample)
+            boot_cum = np.cumsum(boot_sorted)
+            boot_idx = int(np.searchsorted(boot_cum, boot_total * con_threshold))
+            boot_pct = boot_idx / n
+            boot_consistencies.append((1 - boot_pct) / (1 - con_threshold))
+        ci_consistency = (
+            float(np.percentile(boot_consistencies, 2.5)),
+            float(np.percentile(boot_consistencies, 97.5)),
+        )
+
+        distribution_stats = self._compute_distribution_stats(mana_spent_list)
 
         return SimulationResult(
             land_count=self.land_count,
@@ -715,4 +1024,7 @@ class Goldfisher:
             con_threshold=con_threshold,
             distribution_stats=distribution_stats,
             game_records=dict(game_records),
+            ci_mean_mana=ci_mean_mana,
+            ci_consistency=ci_consistency,
+            ci_mean_bad_turns=ci_mean_bad_turns,
         )
