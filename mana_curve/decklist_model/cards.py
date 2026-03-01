@@ -782,6 +782,7 @@ class LorienRevealed(Card):
         kwargs['types'] += ['land']
         super().__init__(*args, **kwargs)
         self.draw = 3
+        self.tapped = True
 
     def when_played(self):
         super().when_played()

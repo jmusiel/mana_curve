@@ -23,12 +23,12 @@ def get_parser():
     parser.add_argument(
         "--deck_name",
         type=str, 
-        default="tuvasa",
+        default="vren",
     )
     parser.add_argument(
         "--deck_url",
         type=str, 
-        default=None,
+        default="https://archidekt.com/decks/19226307/vrens_murine_marauders",
     )
     parser.add_argument(
         "--turns",
@@ -38,7 +38,7 @@ def get_parser():
     parser.add_argument(
         "--sims",
         type=int, 
-        default=1000,
+        default=10000,
     )
     parser.add_argument(
         "--verbose",
@@ -47,7 +47,7 @@ def get_parser():
     parser.add_argument(
         "--min_lands",
         type=int,
-        default=35,
+        default=36,
     )
     parser.add_argument(
         "--max_lands",

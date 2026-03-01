@@ -11,6 +11,9 @@ def get_parser():
         type=str, 
         nargs="+",
         default=[
+            # "https://archidekt.com/decks/17320060/paolo_osgir",
+            # "https://archidekt.com/decks/17263094/dawnharts_dauntless_democrats",
+            "https://archidekt.com/decks/17263053/ratadrabiks_renowned_royals",
             "https://archidekt.com/decks/9699790/santas_etb_workshop",
             "https://archidekt.com/decks/7947868/kesss_cozy_cantrips",
             "https://archidekt.com/decks/81320/the_rr_connection",
@@ -24,6 +27,7 @@ def get_parser():
             "https://archidekt.com/decks/1847823/good_ol_superfriends",
             "https://archidekt.com/decks/482754/bantchantress",
             "https://archidekt.com/decks/1856247/lords_landed_libations",
+            "https://archidekt.com/decks/19226307/vrens_murine_marauders"
         ],
     )
     parser.add_argument(
@@ -74,6 +78,7 @@ def main(config):
     spell_counts = []
     land_counts = []
     total_counts = []
+    spells_ge_4 = []
     for deck_url in config['deck_urls']:
         deck_name = deck_url.split('/')[-1]
         decklist = get_decklist({'deck_url': deck_url, 'verbose': False, 'include_cuts_and_adds': config['include_cuts_and_adds']})
@@ -94,17 +99,19 @@ def main(config):
             if not card['cmc'] == card['oracle_cmc']:
                 print(f"{card['name']} cmc: {card['cmc']}")
         avgcmc = np.mean(cmcs)
+        spells_ge_4_count = sum(1 for cmc in cmcs if cmc >= 4)
         avgcmcs.append(avgcmc)
         deck_names.append(deck_name)
         spell_counts.append(nonland_count)
         land_counts.append(land_count)
         total_counts.append(nonland_count + land_count)
+        spells_ge_4.append(spells_ge_4_count)
         print_terminal_histogram(cmcs)
         print(f"{deck_name}: avg_cmc: {avgcmc} ({nonland_count} spells, {land_count} lands)")
         print(f"commander mvs: {commander_mvs}")
         print("\n")
 
-    df = pd.DataFrame({'deck_name': deck_names, 'avg_cmc': avgcmcs, 'spell_counts': spell_counts, 'land_counts': land_counts, 'total': total_counts})
+    df = pd.DataFrame({'deck_name': deck_names, 'avg_cmc': avgcmcs, 'spell_counts': spell_counts, 'land_counts': land_counts, 'total': total_counts, 'spells_ge_4': spells_ge_4})
     # sort by by avg_cmc
     df = df.sort_values('avg_cmc')
     print(df.to_string())
