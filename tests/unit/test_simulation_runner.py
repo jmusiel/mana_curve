@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mana_curve.web.services.simulation_runner import SimJob, SimulationRunner
+from auto_goldfish.web.services.simulation_runner import SimJob, SimulationRunner
 
 
 @pytest.fixture
@@ -40,9 +40,9 @@ class TestSimulationRunner:
             assert status["deck_name"] == "test"
             assert status["total"] == 2
 
-    @patch("mana_curve.web.services.simulation_runner.load_decklist")
-    @patch("mana_curve.web.services.simulation_runner.Goldfisher")
-    @patch("mana_curve.web.services.simulation_runner.result_to_dict")
+    @patch("auto_goldfish.web.services.simulation_runner.load_decklist")
+    @patch("auto_goldfish.web.services.simulation_runner.Goldfisher")
+    @patch("auto_goldfish.web.services.simulation_runner.result_to_dict")
     def test_successful_completion(self, mock_to_dict, mock_goldfisher_cls, mock_load):
         runner = SimulationRunner()
 
@@ -70,7 +70,7 @@ class TestSimulationRunner:
         assert status["results"][0]["land_count"] == 36
         assert status["error"] is None
 
-    @patch("mana_curve.web.services.simulation_runner.load_decklist")
+    @patch("auto_goldfish.web.services.simulation_runner.load_decklist")
     def test_failure_sets_error(self, mock_load):
         runner = SimulationRunner()
         mock_load.side_effect = FileNotFoundError("deck not found")
@@ -87,9 +87,9 @@ class TestSimulationRunner:
         assert status["status"] == "failed"
         assert "deck not found" in status["error"]
 
-    @patch("mana_curve.web.services.simulation_runner.load_decklist")
-    @patch("mana_curve.web.services.simulation_runner.Goldfisher")
-    @patch("mana_curve.web.services.simulation_runner.result_to_dict")
+    @patch("auto_goldfish.web.services.simulation_runner.load_decklist")
+    @patch("auto_goldfish.web.services.simulation_runner.Goldfisher")
+    @patch("auto_goldfish.web.services.simulation_runner.result_to_dict")
     def test_progress_tracking(self, mock_to_dict, mock_goldfisher_cls, mock_load):
         runner = SimulationRunner()
         mock_load.return_value = [{"name": "Island", "types": ["Land"]}]

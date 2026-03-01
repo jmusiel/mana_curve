@@ -1,7 +1,7 @@
 """Tests for metrics system."""
 
-from mana_curve.metrics.collector import GameRecord, MetricsCollector
-from mana_curve.metrics.definitions import consistency, mean_mana_spent
+from auto_goldfish.metrics.collector import GameRecord, MetricsCollector
+from auto_goldfish.metrics.definitions import consistency, mean_mana_spent
 
 
 def _make_records(mana_values: list[int]) -> list[GameRecord]:

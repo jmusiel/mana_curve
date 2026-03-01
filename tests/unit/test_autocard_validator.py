@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from mana_curve.autocard.validator import validate_label
+from auto_goldfish.autocard.validator import validate_label
 
 
 class TestValidateLabel:

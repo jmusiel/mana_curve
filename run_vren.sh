@@ -18,7 +18,7 @@ MAX_LANDS=40
 SEED=42
 WORKERS=0  # use all CPUs
 
-python -m mana_curve.cli.main \
+python -m auto_goldfish.cli.main \
     --deck_name "$DECK_NAME" \
     --deck_url "$DECK_URL" \
     --turns "$TURNS" \

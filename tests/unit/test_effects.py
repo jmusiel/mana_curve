@@ -1,6 +1,6 @@
 """Tests for the effects system."""
 
-from mana_curve.effects.builtin import (
+from auto_goldfish.effects.builtin import (
     CryptolithRitesMana,
     DrawCards,
     DrawDiscard,
@@ -12,15 +12,15 @@ from mana_curve.effects.builtin import (
     ScalingMana,
     TutorToHand,
 )
-from mana_curve.effects.registry import CardEffects, EffectRegistry
-from mana_curve.effects.types import (
+from auto_goldfish.effects.registry import CardEffects, EffectRegistry
+from auto_goldfish.effects.types import (
     CastTriggerEffect,
     ManaFunctionEffect,
     OnPlayEffect,
     PerTurnEffect,
 )
-from mana_curve.models.card import Card
-from mana_curve.models.game_state import GameState
+from auto_goldfish.models.card import Card
+from auto_goldfish.models.game_state import GameState
 
 
 class TestProtocols:

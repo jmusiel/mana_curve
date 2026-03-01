@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from mana_curve.web import create_app
+from auto_goldfish.web import create_app
 
 
 @pytest.fixture
@@ -102,7 +102,7 @@ class TestDashboard:
 
     def test_dashboard_shows_import_link_when_empty(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "mana_curve.web.routes.dashboard.os.path.dirname",
+            "auto_goldfish.web.routes.dashboard.os.path.dirname",
             lambda *a, **kw: str(tmp_path),
         )
         response = client.get("/")
@@ -123,7 +123,7 @@ class TestImportPage:
             captured["url"] = url
             captured["name"] = name
 
-        monkeypatch.setattr("mana_curve.web.routes.decks.fetch_and_save", fake_fetch)
+        monkeypatch.setattr("auto_goldfish.web.routes.decks.fetch_and_save", fake_fetch)
         response = client.post("/decks/import", data={})
         assert captured["url"] == "https://archidekt.com/decks/81320/the_rr_connection"
         assert captured["name"] == "the_rr_connection"
@@ -136,7 +136,7 @@ class TestImportPage:
             captured["url"] = url
             captured["name"] = name
 
-        monkeypatch.setattr("mana_curve.web.routes.decks.fetch_and_save", fake_fetch)
+        monkeypatch.setattr("auto_goldfish.web.routes.decks.fetch_and_save", fake_fetch)
         response = client.post(
             "/decks/import",
             data={"deck_url": "https://archidekt.com/decks/555/my_cool_deck"},
@@ -152,7 +152,7 @@ class TestImportPage:
             captured["url"] = url
             captured["name"] = name
 
-        monkeypatch.setattr("mana_curve.web.routes.decks.fetch_and_save", fake_fetch)
+        monkeypatch.setattr("auto_goldfish.web.routes.decks.fetch_and_save", fake_fetch)
         response = client.post(
             "/decks/import",
             data={
@@ -172,11 +172,11 @@ class TestDeckView:
     def test_view_existing_deck(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.decks.get_deckpath",
+            "auto_goldfish.web.routes.decks.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         monkeypatch.setattr(
-            "mana_curve.web.routes.decks.load_decklist",
+            "auto_goldfish.web.routes.decks.load_decklist",
             lambda name: json.loads(
                 open(os.path.join(root, "decks", name, f"{name}.json")).read()
             ),
@@ -188,11 +188,11 @@ class TestDeckView:
     def test_deck_view_groups_cards(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.decks.get_deckpath",
+            "auto_goldfish.web.routes.decks.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         monkeypatch.setattr(
-            "mana_curve.web.routes.decks.load_decklist",
+            "auto_goldfish.web.routes.decks.load_decklist",
             lambda name: json.loads(
                 open(os.path.join(root, "decks", name, f"{name}.json")).read()
             ),
@@ -206,11 +206,11 @@ class TestDeckView:
     def test_deck_view_shows_simulate_link(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.decks.get_deckpath",
+            "auto_goldfish.web.routes.decks.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         monkeypatch.setattr(
-            "mana_curve.web.routes.decks.load_decklist",
+            "auto_goldfish.web.routes.decks.load_decklist",
             lambda name: json.loads(
                 open(os.path.join(root, "decks", name, f"{name}.json")).read()
             ),
@@ -221,11 +221,11 @@ class TestDeckView:
     def test_deck_view_shows_commander(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.decks.get_deckpath",
+            "auto_goldfish.web.routes.decks.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         monkeypatch.setattr(
-            "mana_curve.web.routes.decks.load_decklist",
+            "auto_goldfish.web.routes.decks.load_decklist",
             lambda name: json.loads(
                 open(os.path.join(root, "decks", name, f"{name}.json")).read()
             ),
@@ -240,11 +240,11 @@ class TestSimulationRoutes:
         """Set up deck path and decklist mocks for simulation routes."""
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.load_decklist",
+            "auto_goldfish.web.routes.simulation.load_decklist",
             lambda name: json.loads(
                 open(os.path.join(root, "decks", name, f"{name}.json")).read()
             ),
@@ -272,11 +272,11 @@ class TestSimulationRoutes:
     def test_run_starts_job(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         # Mock the runner to avoid actually running a sim
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         mock_runner = type("MockRunner", (), {
             "submit": lambda self, name, cfg: "abc123",
@@ -300,7 +300,7 @@ class TestSimulationRoutes:
         assert b"running" in response.data or b"pending" in response.data
 
     def test_status_polling(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         mock_runner = type("MockRunner", (), {
             "get_status": lambda self, jid: {
@@ -321,7 +321,7 @@ class TestSimulationRoutes:
         assert b"2" in response.data
 
     def test_status_completed_returns_inline_results(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         mock_runner = type("MockRunner", (), {
             "get_status": lambda self, jid: {
@@ -346,7 +346,7 @@ class TestSimulationRoutes:
         assert b"Summary Statistics" in response.data
 
     def test_status_unknown_job_404(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         mock_runner = type("MockRunner", (), {
             "get_status": lambda self, jid: None,
@@ -357,7 +357,7 @@ class TestSimulationRoutes:
         assert response.status_code == 404
 
     def test_api_results_json(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         results_data = [
             {"land_count": 36, "mean_mana": 10.5},
@@ -391,10 +391,10 @@ class TestSimulationValidation:
         """POST to /sim/testdeck/run with default valid params, applying overrides."""
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         mock_runner = type("MockRunner", (), {
             "submit": lambda self, name, cfg: "abc123",
@@ -585,7 +585,7 @@ class TestResultsPage:
         })()
 
     def test_results_page_renders(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
         response = client.get("/sim/results/abc123")
@@ -593,7 +593,7 @@ class TestResultsPage:
         assert b"Results" in response.data
 
     def test_results_page_shows_stats_table(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
         response = client.get("/sim/results/abc123")
@@ -602,7 +602,7 @@ class TestResultsPage:
         assert b"36" in response.data  # land count
 
     def test_results_page_shows_distribution_table(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
         response = client.get("/sim/results/abc123")
@@ -610,14 +610,14 @@ class TestResultsPage:
         assert b"Top 1%" in response.data
 
     def test_results_page_has_metric_definitions(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
         response = client.get("/sim/results/abc123")
         assert b"Metric Definitions" in response.data
 
     def test_results_page_has_card_performance(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
         response = client.get("/sim/results/abc123")
@@ -626,7 +626,7 @@ class TestResultsPage:
         assert b"Low Performers" in response.data
 
     def test_results_page_has_chart_canvases(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
         response = client.get("/sim/results/abc123")
@@ -635,14 +635,14 @@ class TestResultsPage:
         assert b"consistencyChart" in response.data
 
     def test_results_page_has_game_replays(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
         response = client.get("/sim/results/abc123")
         assert b"Game Replays" in response.data
 
     def test_results_page_has_quantile_tabs(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(_make_mock_results()))
         response = client.get("/sim/results/abc123")
@@ -651,7 +651,7 @@ class TestResultsPage:
         assert b"Low Quartile" in response.data
 
     def test_results_incomplete_job_404(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         mock_runner = type("MockRunner", (), {
             "get_status": lambda self, jid: {
@@ -670,7 +670,7 @@ class TestResultsPage:
         assert response.status_code == 404
 
     def test_api_results_returns_valid_json(self, client, monkeypatch):
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         results_data = _make_mock_results()
         monkeypatch.setattr(sim_mod, "get_runner", lambda: self._mock_runner(results_data))
@@ -687,11 +687,11 @@ class TestEffectOverrides:
     def test_config_page_includes_card_effects(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.load_decklist",
+            "auto_goldfish.web.routes.simulation.load_decklist",
             lambda name: json.loads(
                 open(os.path.join(root, "decks", name, f"{name}.json")).read()
             ),
@@ -705,11 +705,11 @@ class TestEffectOverrides:
     def test_config_page_shows_effects_section(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.load_decklist",
+            "auto_goldfish.web.routes.simulation.load_decklist",
             lambda name: json.loads(
                 open(os.path.join(root, "decks", name, f"{name}.json")).read()
             ),
@@ -720,10 +720,10 @@ class TestEffectOverrides:
     def test_run_with_overrides_passes_to_config(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         submitted_configs = []
 
@@ -758,10 +758,10 @@ class TestEffectOverrides:
     def test_run_with_invalid_json_overrides_uses_empty(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         submitted_configs = []
 
@@ -794,10 +794,10 @@ class TestEffectOverrides:
     def test_run_without_overrides_has_empty_dict(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         submitted_configs = []
 
@@ -829,15 +829,15 @@ class TestEffectOverrides:
     def test_run_saves_overrides_to_disk(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         overrides_file = str(tmp_path / "testdeck.overrides.json")
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.save_overrides",
+            "auto_goldfish.web.routes.simulation.save_overrides",
             lambda name, data: _write_json(overrides_file, data),
         )
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         mock_runner = type("MockRunner", (), {
             "submit": lambda self, name, cfg: "abc123",
@@ -861,18 +861,18 @@ class TestEffectOverrides:
     def test_config_loads_saved_overrides(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.load_decklist",
+            "auto_goldfish.web.routes.simulation.load_decklist",
             lambda name: json.loads(
                 open(os.path.join(root, "decks", name, f"{name}.json")).read()
             ),
         )
         saved = {"Sol Ring": {"effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 5}}]}}
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.load_overrides",
+            "auto_goldfish.web.routes.simulation.load_overrides",
             lambda name: saved,
         )
         response = client.get("/sim/testdeck")
@@ -882,15 +882,15 @@ class TestEffectOverrides:
     def test_empty_overrides_clears_file(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         overrides_file = str(tmp_path / "testdeck.overrides.json")
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.save_overrides",
+            "auto_goldfish.web.routes.simulation.save_overrides",
             lambda name, data: _write_json(overrides_file, data),
         )
-        from mana_curve.web.routes import simulation as sim_mod
+        from auto_goldfish.web.routes import simulation as sim_mod
 
         mock_runner = type("MockRunner", (), {
             "submit": lambda self, name, cfg: "abc123",
@@ -913,12 +913,12 @@ class TestEffectOverrides:
     def test_overrides_api_saves_to_disk(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         overrides_file = str(tmp_path / "testdeck.overrides.json")
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.save_overrides",
+            "auto_goldfish.web.routes.simulation.save_overrides",
             lambda name, data: _write_json(overrides_file, data),
         )
         overrides = {"Sol Ring": {"effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 3}}]}}
@@ -936,12 +936,12 @@ class TestEffectOverrides:
     def test_overrides_api_clears_with_empty(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: os.path.join(root, "decks", name, f"{name}.json"),
         )
         overrides_file = str(tmp_path / "testdeck.overrides.json")
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.save_overrides",
+            "auto_goldfish.web.routes.simulation.save_overrides",
             lambda name, data: _write_json(overrides_file, data),
         )
         response = client.post(
@@ -956,7 +956,7 @@ class TestEffectOverrides:
 
     def test_overrides_api_nonexistent_deck_404(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "mana_curve.web.routes.simulation.get_deckpath",
+            "auto_goldfish.web.routes.simulation.get_deckpath",
             lambda name: str(tmp_path / "nonexistent" / "nonexistent.json"),
         )
         response = client.post(

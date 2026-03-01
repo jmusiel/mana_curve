@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Auto Goldfish - Dashboard{% endblock %}
+{% block content %}
+<h1>Saved Decks</h1>
+{% if decks %}
+<div class="deck-grid">
+    {% for deck in decks %}
+    <div class="deck-card">
+        <h2><a href="{{ url_for('decks.view_deck', name=deck.name) }}">{{ deck.name }}</a></h2>
+        {% if deck.commanders %}
+        <p class="commanders">{{ deck.commanders | join(', ') }}</p>
+        {% endif %}
+        <p class="deck-stats">{{ deck.card_count }} cards &middot; {{ deck.land_count }} lands</p>
+        <div class="deck-actions">
+            <a href="{{ url_for('decks.view_deck', name=deck.name) }}" class="btn btn-secondary">View</a>
+            <a href="{{ url_for('simulation.config', deck_name=deck.name) }}" class="btn btn-primary">Simulate</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No decks saved yet. <a href="{{ url_for('decks.import_form') }}">Import one from Archidekt</a>.</p>
+{% endif %}
+{% endblock %}

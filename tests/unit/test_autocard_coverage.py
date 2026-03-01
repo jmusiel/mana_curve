@@ -9,9 +9,9 @@ from unittest.mock import patch
 
 import pytest
 
-from mana_curve.autocard.coverage import CoverageReport, analyze_coverage, print_coverage_report
-from mana_curve.autocard.schemas import ScryfallCard
-from mana_curve.effects.registry import CardEffects, EffectRegistry
+from auto_goldfish.autocard.coverage import CoverageReport, analyze_coverage, print_coverage_report
+from auto_goldfish.autocard.schemas import ScryfallCard
+from auto_goldfish.effects.registry import CardEffects, EffectRegistry
 
 
 def _make_card(name: str, rank: int = 1) -> ScryfallCard:
@@ -39,7 +39,7 @@ class TestAnalyzeCoverage:
     def test_full_coverage(self):
         cards = [_make_card("Sol Ring"), _make_card("Arcane Signet")]
         with patch(
-            "mana_curve.autocard.coverage.load_registry_from_json",
+            "auto_goldfish.autocard.coverage.load_registry_from_json",
             return_value=_make_registry(["Sol Ring", "Arcane Signet"]),
         ):
             report = analyze_coverage(cards)
@@ -54,7 +54,7 @@ class TestAnalyzeCoverage:
     def test_no_coverage(self):
         cards = [_make_card("Sol Ring"), _make_card("Arcane Signet")]
         with patch(
-            "mana_curve.autocard.coverage.load_registry_from_json",
+            "auto_goldfish.autocard.coverage.load_registry_from_json",
             return_value=_make_registry([]),
         ):
             report = analyze_coverage(cards)
@@ -71,7 +71,7 @@ class TestAnalyzeCoverage:
             _make_card("Lightning Bolt"),
         ]
         with patch(
-            "mana_curve.autocard.coverage.load_registry_from_json",
+            "auto_goldfish.autocard.coverage.load_registry_from_json",
             return_value=_make_registry(["Sol Ring"]),
         ):
             report = analyze_coverage(cards)
@@ -85,7 +85,7 @@ class TestAnalyzeCoverage:
 
     def test_empty_card_list(self):
         with patch(
-            "mana_curve.autocard.coverage.load_registry_from_json",
+            "auto_goldfish.autocard.coverage.load_registry_from_json",
             return_value=_make_registry(["Sol Ring"]),
         ):
             report = analyze_coverage([])

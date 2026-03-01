@@ -3,7 +3,7 @@
 import json
 import os
 
-from mana_curve.decklist.loader import (
+from auto_goldfish.decklist.loader import (
     get_basic_island,
     get_hare_apparent,
     get_overrides_path,
@@ -30,7 +30,7 @@ def test_hare_apparent():
 def test_load_overrides_missing_file(tmp_path, monkeypatch):
     """load_overrides returns {} when the overrides file doesn't exist."""
     monkeypatch.setattr(
-        "mana_curve.decklist.loader.get_overrides_path",
+        "auto_goldfish.decklist.loader.get_overrides_path",
         lambda name: str(tmp_path / "nonexistent.overrides.json"),
     )
     result = load_overrides("nonexistent")
@@ -41,7 +41,7 @@ def test_save_and_load_overrides_round_trip(tmp_path, monkeypatch):
     """Saving then loading overrides returns the same data."""
     overrides_file = str(tmp_path / "test.overrides.json")
     monkeypatch.setattr(
-        "mana_curve.decklist.loader.get_overrides_path",
+        "auto_goldfish.decklist.loader.get_overrides_path",
         lambda name: overrides_file,
     )
     overrides = {

@@ -1,7 +1,7 @@
 """Tests for engine/mana.py."""
 
-from mana_curve.engine.mana import land_mana, mana_rocks
-from mana_curve.models.game_state import GameState
+from auto_goldfish.engine.mana import land_mana, mana_rocks
+from auto_goldfish.models.game_state import GameState
 
 
 def test_land_mana():

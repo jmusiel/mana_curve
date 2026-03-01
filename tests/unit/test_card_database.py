@@ -1,7 +1,7 @@
 """Tests for the card effects database."""
 
-from mana_curve.effects.card_database import DEFAULT_REGISTRY, build_default_registry
-from mana_curve.effects.types import CastTriggerEffect, ManaFunctionEffect, OnPlayEffect, PerTurnEffect
+from auto_goldfish.effects.card_database import DEFAULT_REGISTRY, build_default_registry
+from auto_goldfish.effects.types import CastTriggerEffect, ManaFunctionEffect, OnPlayEffect, PerTurnEffect
 
 
 def test_registry_is_populated():

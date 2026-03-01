@@ -1,9 +1,9 @@
-"""Shared test fixtures for the mana_curve test suite."""
+"""Shared test fixtures for the auto_goldfish test suite."""
 
 import pytest
 
-from mana_curve.models.card import Card
-from mana_curve.models.game_state import GameState
+from auto_goldfish.models.card import Card
+from auto_goldfish.models.game_state import GameState
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-# mana_curve
+# auto_goldfish
 
 A Magic: The Gathering commander deck simulation tool. Runs "goldfishing" simulations (playing games without an opponent) to evaluate deck performance, mana curves, and consistency metrics across thousands of games.
 
@@ -34,20 +34,20 @@ uv pip install -e ".[dev]"
 
 ```bash
 # Run with a saved deck JSON
-.venv/bin/python -m mana_curve.cli.main --deck_name vren --deck_url https://archidekt.com/decks/19226307/vrens_murine_marauders
+.venv/bin/python -m auto_goldfish.cli.main --deck_name vren --deck_url https://archidekt.com/decks/19226307/vrens_murine_marauders
 
 # Sweep land counts 36-39, 10 turns, 10k sims
-.venv/bin/python -m mana_curve.cli.main --deck_name vren --min_lands 36 --max_lands 39 --turns 10 --sims 10000
+.venv/bin/python -m auto_goldfish.cli.main --deck_name vren --min_lands 36 --max_lands 39 --turns 10 --sims 10000
 
 # See all options
-.venv/bin/python -m mana_curve.cli.main --help
+.venv/bin/python -m auto_goldfish.cli.main --help
 ```
 
 ### Web UI
 
 ```bash
 # Start the Flask development server
-.venv/bin/flask --app src.mana_curve.web:create_app run --debug
+.venv/bin/flask --app src.auto_goldfish.web:create_app run --debug
 ```
 
 Then open http://127.0.0.1:5000 to import decks, run simulations, and explore results including the interactive game replay viewer.
@@ -55,8 +55,8 @@ Then open http://127.0.0.1:5000 to import decks, run simulations, and explore re
 ### As a library
 
 ```python
-from mana_curve.decklist.loader import load_decklist
-from mana_curve.engine.goldfisher import Goldfisher
+from auto_goldfish.decklist.loader import load_decklist
+from auto_goldfish.engine.goldfisher import Goldfisher
 
 deck = load_decklist("vren")
 gf = Goldfisher(deck, turns=10, sims=1000)
@@ -69,7 +69,7 @@ print(f"Bad turns: {result.mean_bad_turns:.2f}")
 
 ### Adding a new card
 
-All card effects live in `src/mana_curve/effects/card_database.py`. No subclasses needed:
+All card effects live in `src/auto_goldfish/effects/card_database.py`. No subclasses needed:
 
 ```python
 # Single mana producer
@@ -86,7 +86,7 @@ reg.register("My Engine", CardEffects(
 ## Project Structure
 
 ```
-src/mana_curve/
+src/auto_goldfish/
 ├── models/          # Card dataclass, GameState dataclass
 ├── effects/         # Effect protocols, registry, builtin effects, card database
 ├── engine/          # Goldfisher simulation, mana calculation, mulligan strategy
