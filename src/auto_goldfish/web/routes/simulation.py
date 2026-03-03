@@ -124,6 +124,18 @@ def config(deck_name: str):
         card_effects_list.append(entry)
     card_effects_list.sort(key=lambda c: (not c["has_effects"], c["cmc"], c["name"]))
 
+    # Cards with no built-in effects AND no saved overrides (for auto-show labeler)
+    unlabeled_cards = [
+        {"name": c["name"], "cmc": c["cmc"], "types": c["types"]}
+        for c in card_effects_list
+        if not DEFAULT_REGISTRY.get(c["name"]) and c["name"] not in saved_overrides
+    ]
+    # All non-land cards (for manual "Label Cards" button)
+    all_nonland_cards = [
+        {"name": c["name"], "cmc": c["cmc"], "types": c["types"]}
+        for c in card_effects_list
+    ]
+
     effect_schema = get_effect_schema()
 
     return render_template(
@@ -136,6 +148,8 @@ def config(deck_name: str):
         card_effects=card_effects_list,
         effect_schema=effect_schema,
         saved_overrides=saved_overrides,
+        unlabeled_cards=unlabeled_cards,
+        all_nonland_cards=all_nonland_cards,
     )
 
 

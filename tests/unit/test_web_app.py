@@ -965,3 +965,84 @@ class TestEffectOverrides:
             content_type="application/json",
         )
         assert response.status_code == 404
+
+
+class TestCardLabeler:
+    def _mock_deck(self, monkeypatch, tmp_path):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.simulation.load_decklist",
+            lambda name: json.loads(
+                open(os.path.join(root, "decks", name, f"{name}.json")).read()
+            ),
+        )
+        return root
+
+    def test_config_includes_labeler_js_variables(self, client, tmp_path, monkeypatch):
+        self._mock_deck(monkeypatch, tmp_path)
+        response = client.get("/sim/testdeck")
+        assert response.status_code == 200
+        assert b"UNLABELED_CARDS" in response.data
+        assert b"ALL_NONLAND_CARDS" in response.data
+
+    def test_registry_cards_excluded_from_unlabeled(self, client, tmp_path, monkeypatch):
+        """Sol Ring is in DEFAULT_REGISTRY so should not appear in UNLABELED_CARDS."""
+        self._mock_deck(monkeypatch, tmp_path)
+        response = client.get("/sim/testdeck")
+        html = response.data.decode()
+        # Find UNLABELED_CARDS value - Sol Ring should NOT be in it
+        import re
+        match = re.search(r'UNLABELED_CARDS\s*=\s*(\[.*?\]);', html, re.DOTALL)
+        assert match
+        unlabeled = json.loads(match.group(1))
+        unlabeled_names = [c["name"] for c in unlabeled]
+        assert "Sol Ring" not in unlabeled_names
+
+    def test_overridden_cards_excluded_from_unlabeled(self, client, tmp_path, monkeypatch):
+        """Cards with saved overrides should not appear in UNLABELED_CARDS."""
+        self._mock_deck(monkeypatch, tmp_path)
+        saved = {"Vren, the Relentless": {"categories": [{"category": "draw", "immediate": True, "amount": 1}]}}
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.simulation.load_overrides",
+            lambda name: saved,
+        )
+        response = client.get("/sim/testdeck")
+        html = response.data.decode()
+        import re
+        match = re.search(r'UNLABELED_CARDS\s*=\s*(\[.*?\]);', html, re.DOTALL)
+        assert match
+        unlabeled = json.loads(match.group(1))
+        unlabeled_names = [c["name"] for c in unlabeled]
+        assert "Vren, the Relentless" not in unlabeled_names
+
+    def test_labeler_html_elements_present(self, client, tmp_path, monkeypatch):
+        self._mock_deck(monkeypatch, tmp_path)
+        response = client.get("/sim/testdeck")
+        assert b"card-labeler" in response.data
+        assert b"labeler-step-classify" in response.data
+        assert b"labeler-step-ramp" in response.data
+        assert b"labeler-step-amount" in response.data
+
+    def test_label_cards_button_present(self, client, tmp_path, monkeypatch):
+        self._mock_deck(monkeypatch, tmp_path)
+        response = client.get("/sim/testdeck")
+        assert b"label-cards-btn" in response.data
+        assert b"Label Cards" in response.data
+
+    def test_all_nonland_cards_includes_all(self, client, tmp_path, monkeypatch):
+        """ALL_NONLAND_CARDS should include all non-land cards (Sol Ring + Vren)."""
+        self._mock_deck(monkeypatch, tmp_path)
+        response = client.get("/sim/testdeck")
+        html = response.data.decode()
+        import re
+        match = re.search(r'ALL_NONLAND_CARDS\s*=\s*(\[.*?\]);', html, re.DOTALL)
+        assert match
+        all_cards = json.loads(match.group(1))
+        all_names = [c["name"] for c in all_cards]
+        assert "Sol Ring" in all_names
+        assert "Vren, the Relentless" in all_names
+        assert "Island" not in all_names

@@ -11,6 +11,110 @@
       hx-swap="innerHTML"
       id="sim-form">
 
+    <!-- Card Labeler Wizard -->
+    <div id="card-labeler" style="display:none;" class="labeler-pane">
+        <div class="labeler-header">
+            <h2>Card Labeler</h2>
+            <span class="labeler-progress" id="labeler-progress"></span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="labelerClose()">Close</button>
+        </div>
+        <div class="labeler-body">
+            <div class="labeler-card-display">
+                <img id="labeler-image" class="labeler-image" src="" alt="Card image">
+                <div class="labeler-card-info">
+                    <strong id="labeler-card-name"></strong>
+                    <span id="labeler-card-cmc"></span>
+                </div>
+            </div>
+            <div class="labeler-controls">
+                <div id="labeler-step-classify" class="labeler-step">
+                    <p class="labeler-prompt">What does this card do?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('draw')">Draw</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('ramp')">Ramp</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('both')">Both</button>
+                        <button type="button" class="btn btn-secondary" onclick="labelerChoose('neither')">Neither</button>
+                    </div>
+                </div>
+                <div id="labeler-step-ramp" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">What kind of ramp?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('mana_rock')">Mana Rock</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('mana_dork')">Mana Dork</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('land_ramp')">Land Ramp</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('ritual')">Ritual</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('cost_reducer')">Cost Reducer</button>
+                    </div>
+                </div>
+                <div id="labeler-step-tempo" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">Does it enter tapped or untapped?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('tapped')">Tapped</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('untapped')">Untapped</button>
+                    </div>
+                </div>
+                <div id="labeler-step-spell-type" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">What spell type does it reduce?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('creature')">Creature</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('enchantment')">Enchantment</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('nonpermanent')">Nonpermanent</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('permanent')">Permanent</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('spell')">Spell</button>
+                    </div>
+                </div>
+                <div id="labeler-step-draw-type" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">Does it also discard?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('draw_only')">Draw Only</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('draw_discard')">Draw/Discard</button>
+                    </div>
+                </div>
+                <div id="labeler-step-draw-timing" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">When does it draw?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('immediate')">Immediate (ETB)</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('per_turn')">Per Turn</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('per_cast')">Per Cast</button>
+                    </div>
+                </div>
+                <div id="labeler-step-trigger" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">What triggers the draw?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('creature')">Creature</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('spell')">Spell</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('enchantment')">Enchantment</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('land')">Land</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('artifact')">Artifact</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('nonpermanent')">Nonpermanent</button>
+                    </div>
+                </div>
+                <div id="labeler-step-amount" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt" id="labeler-amount-prompt">How many?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose(1)">1</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose(2)">2</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose(3)">3</button>
+                        <span class="labeler-custom-amount">
+                            <input type="number" id="labeler-custom-amount" min="1" max="20" value="4" style="width:4rem">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="labelerChoose(parseInt(document.getElementById('labeler-custom-amount').value)||1)">OK</button>
+                        </span>
+                    </div>
+                </div>
+                <div class="labeler-nav">
+                    <button type="button" class="btn btn-secondary btn-sm" id="labeler-back-btn" onclick="labelerBack()">Back</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="labelerSkip()">Skip</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if unlabeled_cards is defined and unlabeled_cards %}
+    <button type="button" class="btn btn-primary" id="label-cards-btn" onclick="labelerOpen(ALL_NONLAND_CARDS)" style="margin-bottom:1rem;">Label Cards</button>
+    {% elif all_nonland_cards is defined and all_nonland_cards %}
+    <button type="button" class="btn btn-secondary" id="label-cards-btn" onclick="labelerOpen(ALL_NONLAND_CARDS)" style="margin-bottom:1rem;">Label Cards</button>
+    {% endif %}
+
     <!-- Card Effects Editor -->
     {% if card_effects is defined and card_effects %}
     {% set with_effects = card_effects | selectattr('has_effects') | list %}
@@ -454,7 +558,8 @@ function removeOverride(btn) {
 }
 
 function collectOverrides() {
-    const overrides = {};
+    let overrides = {};
+    try { overrides = JSON.parse(document.getElementById('effect-overrides-input').value); } catch(e) {}
     document.querySelectorAll('.effects-card').forEach(card => {
         const panel = card.querySelector('.override-panel');
         if (panel.style.display === 'none') return;
@@ -577,6 +682,251 @@ document.getElementById('sim-form').addEventListener('htmx:configRequest', funct
 
 // Load saved overrides on page load
 loadSavedOverrides();
+
+// --- Card Labeler Wizard ---
+const UNLABELED_CARDS = {{ unlabeled_cards | tojson }};
+const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
+
+(function() {
+    let cards = [];
+    let currentIndex = 0;
+    let currentStep = 'classify';
+    let state = {};
+    let history = [];
+    let amountContext = '';  // 'ramp', 'draw', 'discard'
+
+    const STEPS = ['classify','ramp','tempo','spell-type','draw-type','draw-timing','trigger','amount'];
+
+    function showStep(step) {
+        STEPS.forEach(s => {
+            const el = document.getElementById('labeler-step-' + s);
+            if (el) el.style.display = s === step ? '' : 'none';
+        });
+        currentStep = step;
+        document.getElementById('labeler-back-btn').style.display = history.length > 0 ? '' : 'none';
+    }
+
+    function updateDisplay() {
+        if (currentIndex >= cards.length) {
+            labelerClose();
+            return;
+        }
+        const card = cards[currentIndex];
+        document.getElementById('labeler-card-name').textContent = card.name;
+        document.getElementById('labeler-card-cmc').textContent = 'CMC ' + card.cmc;
+        document.getElementById('labeler-image').src =
+            'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(card.name) + '&format=image&version=normal';
+        document.getElementById('labeler-progress').textContent =
+            'Card ' + (currentIndex + 1) + ' of ' + cards.length;
+        state = {};
+        history = [];
+        showStep('classify');
+    }
+
+    function setAmountPrompt(text) {
+        document.getElementById('labeler-amount-prompt').textContent = text;
+    }
+
+    window.labelerOpen = function(cardList) {
+        cards = cardList.slice();
+        currentIndex = 0;
+        document.getElementById('card-labeler').style.display = '';
+        updateDisplay();
+    };
+
+    window.labelerClose = function() {
+        document.getElementById('card-labeler').style.display = 'none';
+    };
+
+    window.labelerSkip = function() {
+        currentIndex++;
+        updateDisplay();
+    };
+
+    window.labelerBack = function() {
+        if (history.length === 0) return;
+        const prev = history.pop();
+        state = prev.state;
+        amountContext = prev.amountContext || amountContext;
+        showStep(prev.step);
+    };
+
+    window.labelerChoose = function(value) {
+        history.push({step: currentStep, state: Object.assign({}, state), amountContext: amountContext});
+
+        if (currentStep === 'classify') {
+            if (value === 'draw') {
+                state.mainType = 'draw';
+                showStep('draw-type');
+            } else if (value === 'ramp') {
+                state.mainType = 'ramp';
+                showStep('ramp');
+            } else if (value === 'both') {
+                state.mainType = 'both';
+                showStep('ramp');
+            } else {
+                // neither - skip, no save
+                currentIndex++;
+                updateDisplay();
+            }
+        } else if (currentStep === 'ramp') {
+            state.rampType = value;
+            if (value === 'cost_reducer') {
+                showStep('spell-type');
+            } else if (value === 'mana_rock') {
+                amountContext = 'ramp';
+                setAmountPrompt('How much mana does it produce?');
+                showStep('amount');
+            } else if (value === 'mana_dork') {
+                amountContext = 'ramp';
+                setAmountPrompt('How much mana does it produce?');
+                showStep('amount');
+            } else if (value === 'land_ramp') {
+                amountContext = 'ramp';
+                setAmountPrompt('How many lands does it fetch?');
+                showStep('amount');
+            } else if (value === 'ritual') {
+                amountContext = 'ramp';
+                setAmountPrompt('How much mana does it produce?');
+                showStep('amount');
+            }
+        } else if (currentStep === 'spell-type') {
+            state.spellType = value;
+            amountContext = 'ramp';
+            setAmountPrompt('How much cost reduction?');
+            showStep('amount');
+        } else if (currentStep === 'amount') {
+            const num = parseInt(value, 10) || 1;
+            if (amountContext === 'ramp') {
+                state.rampAmount = num;
+                if (state.rampType === 'mana_rock' || state.rampType === 'land_ramp') {
+                    showStep('tempo');
+                } else if (state.rampType === 'mana_dork') {
+                    state.tempo = 'summoning_sick';
+                    finishRampOrContinue();
+                } else {
+                    // ritual or cost_reducer
+                    finishRampOrContinue();
+                }
+            } else if (amountContext === 'draw') {
+                state.drawAmount = num;
+                if (state.drawType === 'draw_discard') {
+                    amountContext = 'discard';
+                    setAmountPrompt('How many cards discarded?');
+                    showStep('amount');
+                } else {
+                    saveAndNext();
+                }
+            } else if (amountContext === 'discard') {
+                state.discardAmount = num;
+                saveAndNext();
+            }
+        } else if (currentStep === 'tempo') {
+            state.tempo = value;
+            finishRampOrContinue();
+        } else if (currentStep === 'draw-type') {
+            state.drawType = value;
+            showStep('draw-timing');
+        } else if (currentStep === 'draw-timing') {
+            state.drawTiming = value;
+            if (value === 'per_cast') {
+                showStep('trigger');
+            } else {
+                amountContext = 'draw';
+                setAmountPrompt('How many cards drawn?');
+                showStep('amount');
+            }
+        } else if (currentStep === 'trigger') {
+            state.trigger = value;
+            amountContext = 'draw';
+            setAmountPrompt('How many cards drawn?');
+            showStep('amount');
+        }
+    };
+
+    function finishRampOrContinue() {
+        if (state.mainType === 'both') {
+            // Ramp portion done, now ask draw questions
+            showStep('draw-type');
+        } else {
+            saveAndNext();
+        }
+    }
+
+    function buildRampCategories(cats) {
+        if (state.rampType === 'mana_rock' || state.rampType === 'mana_dork') {
+            const cat = {category: 'ramp', immediate: false, producer: {mana_amount: state.rampAmount || 1}};
+            if (state.tempo === 'tapped') cat.producer.tempo = 'tapped';
+            else if (state.tempo === 'summoning_sick') cat.producer.tempo = 'summoning_sick';
+            cats.push(cat);
+        } else if (state.rampType === 'ritual') {
+            cats.push({category: 'ramp', immediate: true, producer: {mana_amount: state.rampAmount || 1}});
+        } else if (state.rampType === 'land_ramp') {
+            cats.push({category: 'ramp', immediate: true, land_to_battlefield: {count: state.rampAmount || 1, tempo: state.tempo || 'tapped'}});
+        } else if (state.rampType === 'cost_reducer') {
+            cats.push({category: 'ramp', immediate: false, reducer: {spell_type: state.spellType || 'creature', amount: state.rampAmount || 1}});
+        }
+    }
+
+    function buildDrawCategories(cats) {
+        if (state.drawTiming === 'immediate') {
+            cats.push({category: 'draw', immediate: true, amount: state.drawAmount || 1});
+        } else if (state.drawTiming === 'per_turn') {
+            cats.push({category: 'draw', immediate: false, per_turn: {amount: state.drawAmount || 1}});
+        } else if (state.drawTiming === 'per_cast') {
+            cats.push({category: 'draw', immediate: false, per_cast: {amount: state.drawAmount || 1, trigger: state.trigger || 'spell'}});
+        }
+        if (state.drawType === 'draw_discard' && state.discardAmount) {
+            cats.push({category: 'discard', amount: state.discardAmount});
+        }
+    }
+
+    function buildCategories() {
+        const cats = [];
+        if (state.mainType === 'ramp') {
+            buildRampCategories(cats);
+        } else if (state.mainType === 'draw') {
+            buildDrawCategories(cats);
+        } else if (state.mainType === 'both') {
+            buildRampCategories(cats);
+            buildDrawCategories(cats);
+        }
+        return cats;
+    }
+
+    function saveAndNext() {
+        const categories = buildCategories();
+        if (categories.length === 0) {
+            currentIndex++;
+            updateDisplay();
+            return;
+        }
+        const cardName = cards[currentIndex].name;
+        let overrides = {};
+        try { overrides = JSON.parse(document.getElementById('effect-overrides-input').value); } catch(e) {}
+        overrides[cardName] = {categories: categories};
+        document.getElementById('effect-overrides-input').value = JSON.stringify(overrides);
+        persistOverrides();
+
+        // Update the effects editor UI if the card row exists
+        const cardEl = document.querySelector('.effects-card[data-card-name="' + CSS.escape(cardName) + '"]');
+        if (cardEl) {
+            const badges = cardEl.querySelector('.effects-card-badges');
+            if (badges) {
+                badges.textContent = 'User override';
+                badges.classList.remove('no-effects');
+            }
+        }
+
+        currentIndex++;
+        updateDisplay();
+    }
+
+    // Auto-show labeler if there are unlabeled cards
+    if (UNLABELED_CARDS.length > 0) {
+        labelerOpen(UNLABELED_CARDS);
+    }
+})();
 </script>
 {% endif %}
 {% endblock %}
