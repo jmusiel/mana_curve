@@ -56,13 +56,13 @@ def _make_card(name: str = "Sol Ring", oracle_text: str = "{T}: Add {C}{C}.") ->
 
 
 _VALID_LABEL = {
-    "effects": [
-        {"type": "produce_mana", "slot": "on_play", "params": {"amount": 2}},
+    "categories": [
+        {"category": "ramp", "immediate": False, "producer": {"mana_amount": 2}},
     ],
-    "metadata": {"ramp": True},
+    "metadata": {},
 }
 
-_EMPTY_LABEL = {"effects": [], "metadata": {}}
+_EMPTY_LABEL = {"categories": [], "metadata": {}}
 
 
 def _mock_chat_response(label: dict) -> dict:

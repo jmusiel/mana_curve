@@ -746,7 +746,7 @@ class TestEffectOverrides:
 
         monkeypatch.setattr(sim_mod, "get_runner", lambda: CapturingRunner())
 
-        overrides = {"Sol Ring": {"effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 5}}], "ramp": True}}
+        overrides = {"Sol Ring": {"categories": [{"category": "ramp", "immediate": False, "producer": {"mana_amount": 5}}]}}
         response = client.post("/sim/testdeck/run", data={
             "turns": "10", "sims": "100", "min_lands": "36", "max_lands": "39",
             "effect_overrides": json.dumps(overrides),
@@ -849,7 +849,7 @@ class TestEffectOverrides:
         })()
         monkeypatch.setattr(sim_mod, "get_runner", lambda: mock_runner)
 
-        overrides = {"Sol Ring": {"effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 5}}]}}
+        overrides = {"Sol Ring": {"categories": [{"category": "ramp", "immediate": False, "producer": {"mana_amount": 5}}]}}
         client.post("/sim/testdeck/run", data={
             "turns": "10", "sims": "100", "min_lands": "36", "max_lands": "39",
             "effect_overrides": json.dumps(overrides),
@@ -870,7 +870,7 @@ class TestEffectOverrides:
                 open(os.path.join(root, "decks", name, f"{name}.json")).read()
             ),
         )
-        saved = {"Sol Ring": {"effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 5}}]}}
+        saved = {"Sol Ring": {"categories": [{"category": "ramp", "immediate": False, "producer": {"mana_amount": 5}}]}}
         monkeypatch.setattr(
             "auto_goldfish.web.routes.simulation.load_overrides",
             lambda name: saved,
@@ -921,7 +921,7 @@ class TestEffectOverrides:
             "auto_goldfish.web.routes.simulation.save_overrides",
             lambda name, data: _write_json(overrides_file, data),
         )
-        overrides = {"Sol Ring": {"effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 3}}]}}
+        overrides = {"Sol Ring": {"categories": [{"category": "ramp", "immediate": False, "producer": {"mana_amount": 3}}]}}
         response = client.post(
             "/sim/testdeck/overrides",
             data=json.dumps(overrides),

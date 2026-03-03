@@ -8,8 +8,18 @@ import os
 from flask import Blueprint, abort, flash, jsonify, render_template, request
 
 from auto_goldfish.decklist.loader import get_deckpath, load_decklist, load_overrides, save_overrides
+from auto_goldfish.effects.builtin import (
+    DiscardCards,
+    DrawCards,
+    ImmediateMana,
+    LandToBattlefield,
+    PerCastDraw,
+    PerTurnDraw,
+    ProduceMana,
+    ReduceCost,
+)
 from auto_goldfish.effects.card_database import DEFAULT_REGISTRY
-from auto_goldfish.effects.json_loader import TYPE_MAP, get_effect_schema
+from auto_goldfish.effects.json_loader import get_effect_schema
 from auto_goldfish.web.services.simulation_runner import SimulationRunner
 
 # Web UI compute limits (CLI remains unrestricted)
@@ -27,23 +37,37 @@ def get_runner() -> SimulationRunner:
     return _runner
 
 
-_CLASS_TO_TYPE_KEY = {cls: key for key, cls in TYPE_MAP.items()}
-_SLOT_FIELDS = ["on_play", "per_turn", "cast_trigger", "mana_function"]
-
-
 def _effects_to_override(card_effects):
-    """Convert a CardEffects instance to the JSON override format used by the UI."""
-    effects = []
-    for slot in _SLOT_FIELDS:
-        for effect in getattr(card_effects, slot, []):
-            type_key = _CLASS_TO_TYPE_KEY.get(type(effect))
-            if type_key is None:
-                continue
-            params = dict(vars(effect)) if vars(effect) else {}
-            effects.append({"type": type_key, "slot": slot, "params": params})
-    result = {"effects": effects}
-    if card_effects.ramp:
-        result["ramp"] = True
+    """Convert a CardEffects instance to the category-based JSON override format."""
+    categories = []
+    for effect in card_effects.on_play:
+        if isinstance(effect, ProduceMana):
+            categories.append({"category": "ramp", "immediate": False,
+                               "producer": {"mana_amount": effect.amount}})
+        elif isinstance(effect, ImmediateMana):
+            categories.append({"category": "ramp", "immediate": True,
+                               "producer": {"mana_amount": effect.amount}})
+        elif isinstance(effect, LandToBattlefield):
+            tempo = "tapped" if effect.tapped else "untapped"
+            categories.append({"category": "ramp", "immediate": True,
+                               "land_to_battlefield": {"count": effect.count, "tempo": tempo}})
+        elif isinstance(effect, ReduceCost):
+            categories.append({"category": "ramp", "immediate": False,
+                               "reducer": {"spell_type": effect.spell_type, "amount": effect.amount}})
+        elif isinstance(effect, DrawCards):
+            categories.append({"category": "draw", "immediate": True, "amount": effect.amount})
+        elif isinstance(effect, DiscardCards):
+            categories.append({"category": "discard", "amount": effect.amount})
+    for effect in card_effects.per_turn:
+        if isinstance(effect, PerTurnDraw):
+            categories.append({"category": "draw", "immediate": False,
+                               "per_turn": {"amount": effect.amount}})
+    for effect in card_effects.cast_trigger:
+        if isinstance(effect, PerCastDraw):
+            categories.append({"category": "draw", "immediate": False,
+                               "per_cast": {"amount": effect.amount, "trigger": effect.trigger}})
+
+    result = {"categories": categories}
     if card_effects.priority:
         result["priority"] = card_effects.priority
     return result

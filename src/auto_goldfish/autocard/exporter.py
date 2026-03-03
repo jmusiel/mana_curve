@@ -12,19 +12,19 @@ _DEFAULT_OUTPUT = Path(__file__).parent / "data" / "card_effects_expanded.json"
 
 
 def _effect_signature(label: dict) -> str:
-    """Create a hashable signature from a label's effects + metadata."""
-    effects = label.get("effects", [])
+    """Create a hashable signature from a label's categories + metadata."""
+    categories = label.get("categories", [])
     metadata = label.get("metadata", {})
     # Normalize to sorted JSON for stable comparison
-    return json.dumps({"effects": effects, "metadata": metadata}, sort_keys=True)
+    return json.dumps({"categories": categories, "metadata": metadata}, sort_keys=True)
 
 
 def group_by_effects(labeled: dict[str, dict]) -> list[dict]:
-    """Group cards with identical effect signatures into registry groups.
+    """Group cards with identical category signatures into registry groups.
 
-    Returns a list of group dicts in card_effects.json format.
+    Returns a list of group dicts in card_effects.json v2 format.
     """
-    # Bucket cards by their effect signature
+    # Bucket cards by their category signature
     buckets: dict[str, list[str]] = {}
     sig_to_label: dict[str, dict] = {}
 
@@ -36,18 +36,18 @@ def group_by_effects(labeled: dict[str, dict]) -> list[dict]:
     groups = []
     for sig, card_names in buckets.items():
         label = sig_to_label[sig]
-        effects = label.get("effects", [])
+        categories = label.get("categories", [])
         metadata = label.get("metadata", {})
 
         # Build group name
-        if not effects:
+        if not categories:
             group_name = "Unlabeled / No Effect"
         elif len(card_names) == 1:
             group_name = f"Auto-labeled: {card_names[0]}"
         else:
-            # Use the first effect type as the group name hint
-            first_type = effects[0]["type"]
-            group_name = f"Auto-labeled: {first_type} ({len(card_names)} cards)"
+            # Use the first category as the group name hint
+            first_cat = categories[0]["category"]
+            group_name = f"Auto-labeled: {first_cat} ({len(card_names)} cards)"
 
         group: dict = {
             "group": group_name,
@@ -55,9 +55,9 @@ def group_by_effects(labeled: dict[str, dict]) -> list[dict]:
             "cards": {},
         }
 
-        # Put shared effects + metadata in defaults
-        if effects:
-            group["defaults"]["effects"] = effects
+        # Put shared categories + metadata in defaults
+        if categories:
+            group["defaults"]["categories"] = categories
         for key, value in metadata.items():
             group["defaults"][key] = value
 
@@ -111,7 +111,7 @@ def export_to_registry(
 
     # Merge: existing groups first, then new auto-labeled groups
     merged = {
-        "version": 1,
+        "version": 2,
         "groups": existing_groups + new_groups,
     }
 

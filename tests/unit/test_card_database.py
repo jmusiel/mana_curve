@@ -1,7 +1,7 @@
 """Tests for the card effects database."""
 
 from auto_goldfish.effects.card_database import DEFAULT_REGISTRY, build_default_registry
-from auto_goldfish.effects.types import CastTriggerEffect, ManaFunctionEffect, OnPlayEffect, PerTurnEffect
+from auto_goldfish.effects.types import CastTriggerEffect, OnPlayEffect, PerTurnEffect
 
 
 def test_registry_is_populated():
@@ -9,30 +9,22 @@ def test_registry_is_populated():
 
 
 def test_all_names_registered():
-    """All card names from the old cards.py should be in the registry."""
+    """Key card names should be in the registry."""
     expected_names = [
-        # ManaProducer
+        # Repeatable Mana Producers
         "Sol Ring", "Arcane Signet", "Fellwar Stone", "Sakura-Tribe Elder",
         "Cultivate", "Farseek",
-        # ScalingManaProducer
+        # Scaling Mana (approximated)
         "As Foretold", "Smothering Tithe", "Gyre Sage",
-        # CryptolithRite
-        "Gemhide Sliver", "Cryptolith Rite",
-        # Sanctum
-        "Serra's Sanctum", "Sanctum Weaver",
-        # CostReducer
+        # Cost Reducers
         "Thunderclap Drake", "Hamza, Guardian of Arashin", "Jukai Naturalist",
-        # Tutor
-        "Green Sun's Zenith", "Finale of Devastation",
-        # LandTutor
-        "Tolaria West", "Urza's Cave",
         # Draw
         "Rishkar's Expertise", "Flame of Anor", "Read the Bones",
-        # DrawDiscard
+        # Draw + Discard
         "Windfall", "Fact or Fiction", "Brainstorm", "Faithless Looting",
-        # PerTurnDraw
+        # Per-Turn Draw
         "Phyrexian Arena", "Esper Sentinel", "Mystic Remora",
-        # PerCastDraw
+        # Per-Cast Draw
         "Archmage Emeritus", "Beast Whisperer", "The Great Henge",
         "Sythis, Harvest's Hand", "Argothian Enchantress",
         # Special
@@ -40,6 +32,18 @@ def test_all_names_registered():
     ]
     for name in expected_names:
         assert DEFAULT_REGISTRY.has(name), f"{name} not in registry"
+
+
+def test_removed_cards_not_in_registry():
+    """Cards with deleted effects should not be in the registry."""
+    removed = [
+        "Gemhide Sliver", "Cryptolith Rite", "Manaweft Sliver",
+        "Serra's Sanctum", "Sanctum Weaver",
+        "Green Sun's Zenith", "Finale of Devastation",
+        "Urza's Cave",
+    ]
+    for name in removed:
+        assert not DEFAULT_REGISTRY.has(name), f"{name} should not be in registry"
 
 
 def test_sol_ring_effects():
@@ -54,21 +58,23 @@ def test_great_henge_multi_effect():
     effects = DEFAULT_REGISTRY.get("The Great Henge")
     assert effects is not None
     assert len(effects.on_play) == 1  # ProduceMana(2)
-    assert len(effects.cast_trigger) == 1  # PerCastDraw(creature=1)
+    assert len(effects.cast_trigger) == 1  # PerCastDraw(creature)
 
 
-def test_as_foretold_per_turn():
+def test_as_foretold_is_now_producer():
+    """As Foretold was ScalingMana, now approximated as repeatable producer."""
     effects = DEFAULT_REGISTRY.get("As Foretold")
+    assert effects is not None
+    assert len(effects.on_play) == 1
+    assert isinstance(effects.on_play[0], OnPlayEffect)
+    assert effects.ramp is True
+
+
+def test_per_turn_draw():
+    effects = DEFAULT_REGISTRY.get("Phyrexian Arena")
     assert effects is not None
     assert len(effects.per_turn) == 1
     assert isinstance(effects.per_turn[0], PerTurnEffect)
-
-
-def test_cryptolith_rite_mana_function():
-    effects = DEFAULT_REGISTRY.get("Cryptolith Rite")
-    assert effects is not None
-    assert len(effects.mana_function) == 1
-    assert isinstance(effects.mana_function[0], ManaFunctionEffect)
 
 
 def test_build_fresh_registry():

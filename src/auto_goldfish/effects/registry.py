@@ -29,7 +29,6 @@ class CardEffects:
                 if hasattr(effect, 'describe'):
                     descriptions.append(effect.describe())
         return "; ".join(descriptions) if descriptions else ""
-    is_land_tutor: bool = False
     extra_types: List[str] | None = None
     override_cmc: int | None = None
     tapped: bool = False
