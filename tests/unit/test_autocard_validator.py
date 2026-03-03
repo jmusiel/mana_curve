@@ -132,3 +132,121 @@ class TestValidateLabel:
         }
         errors = validate_label("Bad Card", label)
         assert len(errors) == 3
+
+
+class TestConservativeValidation:
+    """Conservative mode rejects disallowed types, slots, and metadata."""
+
+    def test_accepts_valid_conservative_label(self):
+        """A label using only conservative types/slots/metadata passes."""
+        label = {
+            "effects": [
+                {"type": "produce_mana", "slot": "on_play", "params": {"amount": 2}},
+                {"type": "per_turn_draw", "slot": "per_turn", "params": {"amount": 1}},
+            ],
+            "metadata": {"ramp": True, "priority": 2},
+        }
+        errors = validate_label("Good Card", label, conservative=True)
+        assert errors == []
+
+    def test_accepts_empty_label(self):
+        """Empty effects and metadata is always valid."""
+        label = {"effects": [], "metadata": {}}
+        errors = validate_label("Empty Card", label, conservative=True)
+        assert errors == []
+
+    def test_rejects_tutor_to_hand(self):
+        label = {
+            "effects": [
+                {"type": "tutor_to_hand", "slot": "on_play",
+                 "params": {"targets": ["Sol Ring"]}},
+            ],
+            "metadata": {},
+        }
+        errors = validate_label("Tutor Card", label, conservative=True)
+        assert len(errors) == 1
+        assert "disallowed type" in errors[0]
+        assert "tutor_to_hand" in errors[0]
+
+    def test_rejects_per_cast_draw(self):
+        label = {
+            "effects": [
+                {"type": "per_cast_draw", "slot": "cast_trigger",
+                 "params": {"creature": 1}},
+            ],
+            "metadata": {},
+        }
+        errors = validate_label("Cast Draw Card", label, conservative=True)
+        assert any("disallowed type" in e for e in errors)
+
+    def test_rejects_cryptolith_rites_mana(self):
+        label = {
+            "effects": [
+                {"type": "cryptolith_rites_mana", "slot": "mana_function",
+                 "params": {}},
+            ],
+            "metadata": {},
+        }
+        errors = validate_label("Rites Card", label, conservative=True)
+        assert any("disallowed type" in e for e in errors)
+
+    def test_rejects_enchantment_sanctum_mana(self):
+        label = {
+            "effects": [
+                {"type": "enchantment_sanctum_mana", "slot": "mana_function",
+                 "params": {}},
+            ],
+            "metadata": {},
+        }
+        errors = validate_label("Sanctum Card", label, conservative=True)
+        assert any("disallowed type" in e for e in errors)
+
+    def test_rejects_cast_trigger_slot(self):
+        label = {
+            "effects": [
+                {"type": "draw_cards", "slot": "cast_trigger",
+                 "params": {"amount": 1}},
+            ],
+            "metadata": {},
+        }
+        errors = validate_label("Bad Slot Card", label, conservative=True)
+        assert len(errors) == 1
+        assert "disallowed slot" in errors[0]
+        assert "cast_trigger" in errors[0]
+
+    def test_rejects_mana_function_slot(self):
+        label = {
+            "effects": [
+                {"type": "produce_mana", "slot": "mana_function",
+                 "params": {"amount": 1}},
+            ],
+            "metadata": {},
+        }
+        errors = validate_label("Bad Slot Card", label, conservative=True)
+        assert len(errors) == 1
+        assert "disallowed slot" in errors[0]
+        assert "mana_function" in errors[0]
+
+    def test_rejects_is_land_tutor_metadata(self):
+        label = {
+            "effects": [],
+            "metadata": {"is_land_tutor": True},
+        }
+        errors = validate_label("Tutor Meta Card", label, conservative=True)
+        assert len(errors) == 1
+        assert "disallowed metadata" in errors[0]
+        assert "is_land_tutor" in errors[0]
+
+    def test_allows_disallowed_types_when_not_conservative(self):
+        """Non-conservative mode still accepts all types/slots."""
+        label = {
+            "effects": [
+                {"type": "per_cast_draw", "slot": "cast_trigger",
+                 "params": {"creature": 1}},
+                {"type": "cryptolith_rites_mana", "slot": "mana_function",
+                 "params": {}},
+            ],
+            "metadata": {"is_land_tutor": True},
+        }
+        errors = validate_label("Full Card", label, conservative=False)
+        assert errors == []

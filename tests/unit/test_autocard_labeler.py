@@ -26,6 +26,10 @@ def _patch_ollama():
 
 
 from auto_goldfish.autocard.labeler import (
+    BATCH_SYSTEM_PROMPT,
+    CONSERVATIVE_BATCH_SYSTEM_PROMPT,
+    CONSERVATIVE_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
     build_batch_prompt,
     build_card_prompt,
     label_card,
@@ -272,3 +276,75 @@ class TestLoadSaveLabeled:
     def test_load_nonexistent_returns_empty(self):
         result = load_labeled(Path("/nonexistent/file.json"))
         assert result == {}
+
+
+class TestConservativePrompts:
+    """Conservative mode uses restricted prompts by default."""
+
+    def test_conservative_prompt_selected_by_default(self):
+        """label_card uses conservative prompt when conservative=True (default)."""
+        _mock_ollama.chat.return_value = _mock_chat_response(_EMPTY_LABEL)
+
+        label_card(_make_card())
+
+        call_kwargs = _mock_ollama.chat.call_args
+        system_msg = call_kwargs.kwargs["messages"][0]["content"]
+        assert system_msg == CONSERVATIVE_SYSTEM_PROMPT
+
+    def test_full_prompt_when_conservative_false(self):
+        """label_card uses original prompt when conservative=False."""
+        _mock_ollama.chat.return_value = _mock_chat_response(_EMPTY_LABEL)
+
+        label_card(_make_card(), conservative=False)
+
+        call_kwargs = _mock_ollama.chat.call_args
+        system_msg = call_kwargs.kwargs["messages"][0]["content"]
+        assert system_msg == SYSTEM_PROMPT
+
+    def test_batch_conservative_prompt_by_default(self):
+        """label_card_batch uses conservative batch prompt by default."""
+        batch_result = {"Sol Ring": _VALID_LABEL}
+        _mock_ollama.chat.return_value = _mock_chat_response(batch_result)
+
+        label_card_batch([_make_card("Sol Ring")])
+
+        call_kwargs = _mock_ollama.chat.call_args
+        system_msg = call_kwargs.kwargs["messages"][0]["content"]
+        assert system_msg == CONSERVATIVE_BATCH_SYSTEM_PROMPT
+
+    def test_batch_full_prompt_when_conservative_false(self):
+        """label_card_batch uses original batch prompt when conservative=False."""
+        batch_result = {"Sol Ring": _VALID_LABEL}
+        _mock_ollama.chat.return_value = _mock_chat_response(batch_result)
+
+        label_card_batch([_make_card("Sol Ring")], conservative=False)
+
+        call_kwargs = _mock_ollama.chat.call_args
+        system_msg = call_kwargs.kwargs["messages"][0]["content"]
+        assert system_msg == BATCH_SYSTEM_PROMPT
+
+    def test_conservative_prompt_excludes_disallowed_types(self):
+        """Conservative prompts should not mention excluded types."""
+        for excluded in ("tutor_to_hand", "per_cast_draw",
+                         "cryptolith_rites_mana", "enchantment_sanctum_mana"):
+            assert excluded not in CONSERVATIVE_SYSTEM_PROMPT, (
+                f"{excluded} found in CONSERVATIVE_SYSTEM_PROMPT"
+            )
+            assert excluded not in CONSERVATIVE_BATCH_SYSTEM_PROMPT, (
+                f"{excluded} found in CONSERVATIVE_BATCH_SYSTEM_PROMPT"
+            )
+
+    def test_conservative_prompt_excludes_disallowed_slots(self):
+        """Conservative prompts should not list cast_trigger or mana_function as valid."""
+        for prompt in (CONSERVATIVE_SYSTEM_PROMPT, CONSERVATIVE_BATCH_SYSTEM_PROMPT):
+            # The prompts explicitly say "Do NOT use" these slots,
+            # but they should not appear in the "Valid Slots" list
+            valid_slots_section = prompt.split("## Valid Slots")[1].split("##")[0]
+            assert "cast_trigger:" not in valid_slots_section
+            assert "mana_function:" not in valid_slots_section
+
+    def test_conservative_prompt_excludes_is_land_tutor(self):
+        """Conservative prompts should not list is_land_tutor as valid metadata."""
+        for prompt in (CONSERVATIVE_SYSTEM_PROMPT, CONSERVATIVE_BATCH_SYSTEM_PROMPT):
+            metadata_section = prompt.split("## Metadata Fields")[1].split("##")[0]
+            assert "is_land_tutor" not in metadata_section
