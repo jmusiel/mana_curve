@@ -139,89 +139,6 @@ You MUST include an entry for every card listed in the prompt, using the exact c
 Cards with no simulatable effects: {"categories": [], "metadata": {}}
 """
 
-CONSERVATIVE_SYSTEM_PROMPT = """\
-You are a Magic: The Gathering card analyst for a mana curve simulator.
-Your job is to label cards with machine-interpretable categories.
-
-## Categories
-Each card gets a list of categories. A card can have multiple.
-
-### ramp (2 variants only)
-Repeatable mana producer (mana rocks, dorks, land auras):
-  {"category": "ramp", "immediate": false, "producer": {"mana_amount": 1}}
-
-Immediate mana (rituals, one-shot mana):
-  {"category": "ramp", "immediate": true, "producer": {"mana_amount": 3}}
-
-### draw (2 variants only)
-Immediate draw (Harmonize, Night's Whisper):
-  {"category": "draw", "immediate": true, "amount": 3}
-
-Repeatable per-turn draw (Phyrexian Arena):
-  {"category": "draw", "immediate": false, "per_turn": {"amount": 1}}
-
-### discard
-  {"category": "discard", "amount": 2}
-
-Do NOT use any other category variants. If a card doesn't fit the above, use:
-  {"categories": [], "metadata": {}}
-
-## Metadata (all optional)
-  - priority (int): play priority (0 = normal, 2 = high)
-  - override_cmc (int): override the mana cost for simulation purposes
-  - extra_types (list[str]): additional card types
-
-## Output Schema
-Return a JSON object with exactly two keys:
-{
-  "categories": [<category objects>],
-  "metadata": {<key>: <value>}
-}
-
-## Important Rules
-- Only use the category variants listed above
-- Cards that don't fit: {"categories": [], "metadata": {}}
-- Mana rocks/dorks that add 1 mana: ramp, immediate=false, producer, mana_amount=1
-- Sol Ring (adds 2): ramp, immediate=false, producer, mana_amount=2
-- Card draw on ETB: draw, immediate=true
-- Recurring draw each turn: draw, immediate=false, per_turn
-- Draw+discard: use both draw and discard categories
-"""
-
-CONSERVATIVE_BATCH_SYSTEM_PROMPT = """\
-You are a Magic: The Gathering card analyst for a mana curve simulator.
-Your job is to label multiple cards at once with machine-interpretable categories.
-
-## Categories
-Each card gets a list of categories. A card can have multiple.
-
-### ramp (2 variants only)
-  Repeatable producer: {"category": "ramp", "immediate": false, "producer": {"mana_amount": 1}}
-  Immediate producer: {"category": "ramp", "immediate": true, "producer": {"mana_amount": 3}}
-
-### draw (2 variants only)
-  Immediate: {"category": "draw", "immediate": true, "amount": 3}
-  Per-turn: {"category": "draw", "immediate": false, "per_turn": {"amount": 1}}
-
-### discard
-  {"category": "discard", "amount": 2}
-
-Do NOT use any other category variants beyond those listed above.
-
-## Metadata (all optional)
-  priority (int), override_cmc (int), extra_types (list[str])
-
-## Output Schema
-Return a JSON object keyed by card name:
-{
-  "Card Name": {"categories": [...], "metadata": {...}},
-  ...
-}
-
-You MUST include an entry for every card listed in the prompt.
-Cards with no simulatable effects: {"categories": [], "metadata": {}}
-"""
-
 _LABEL_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -292,7 +209,6 @@ def label_card_batch(
     cards: list[ScryfallCard],
     model: str = "llama4:16x17b",
     max_retries: int = 3,
-    conservative: bool = True,
 ) -> dict[str, dict]:
     """Label a batch of cards in a single Ollama call.
 
@@ -304,9 +220,8 @@ def label_card_batch(
     card_names = [c.name for c in cards]
     schema = batch_json_schema(card_names)
 
-    sys_prompt = CONSERVATIVE_BATCH_SYSTEM_PROMPT if conservative else BATCH_SYSTEM_PROMPT
     messages = [
-        {"role": "system", "content": sys_prompt},
+        {"role": "system", "content": BATCH_SYSTEM_PROMPT},
         {"role": "user", "content": build_batch_prompt(cards)},
     ]
 
@@ -349,7 +264,6 @@ def label_card(
     card: ScryfallCard,
     model: str = "llama4:16x17b",
     max_retries: int = 3,
-    conservative: bool = True,
 ) -> dict:
     """Label a single card using an Ollama LLM.
 
@@ -358,9 +272,8 @@ def label_card(
     """
     import ollama
 
-    sys_prompt = CONSERVATIVE_SYSTEM_PROMPT if conservative else SYSTEM_PROMPT
     messages = [
-        {"role": "system", "content": sys_prompt},
+        {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": build_card_prompt(card)},
     ]
 

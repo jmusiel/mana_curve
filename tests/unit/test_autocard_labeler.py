@@ -27,8 +27,6 @@ def _patch_ollama():
 
 from auto_goldfish.autocard.labeler import (
     BATCH_SYSTEM_PROMPT,
-    CONSERVATIVE_BATCH_SYSTEM_PROMPT,
-    CONSERVATIVE_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
     build_batch_prompt,
     build_card_prompt,
@@ -278,31 +276,19 @@ class TestLoadSaveLabeled:
         assert result == {}
 
 
-class TestConservativePrompts:
-    """Conservative mode uses restricted prompts by default."""
+class TestSystemPrompts:
+    """System prompts use the correct prompt for single and batch calls."""
 
-    def test_conservative_prompt_selected_by_default(self):
-        """label_card uses conservative prompt when conservative=True (default)."""
+    def test_single_card_uses_system_prompt(self):
         _mock_ollama.chat.return_value = _mock_chat_response(_EMPTY_LABEL)
 
         label_card(_make_card())
 
         call_kwargs = _mock_ollama.chat.call_args
         system_msg = call_kwargs.kwargs["messages"][0]["content"]
-        assert system_msg == CONSERVATIVE_SYSTEM_PROMPT
-
-    def test_full_prompt_when_conservative_false(self):
-        """label_card uses original prompt when conservative=False."""
-        _mock_ollama.chat.return_value = _mock_chat_response(_EMPTY_LABEL)
-
-        label_card(_make_card(), conservative=False)
-
-        call_kwargs = _mock_ollama.chat.call_args
-        system_msg = call_kwargs.kwargs["messages"][0]["content"]
         assert system_msg == SYSTEM_PROMPT
 
-    def test_batch_conservative_prompt_by_default(self):
-        """label_card_batch uses conservative batch prompt by default."""
+    def test_batch_uses_batch_system_prompt(self):
         batch_result = {"Sol Ring": _VALID_LABEL}
         _mock_ollama.chat.return_value = _mock_chat_response(batch_result)
 
@@ -310,25 +296,4 @@ class TestConservativePrompts:
 
         call_kwargs = _mock_ollama.chat.call_args
         system_msg = call_kwargs.kwargs["messages"][0]["content"]
-        assert system_msg == CONSERVATIVE_BATCH_SYSTEM_PROMPT
-
-    def test_batch_full_prompt_when_conservative_false(self):
-        """label_card_batch uses original batch prompt when conservative=False."""
-        batch_result = {"Sol Ring": _VALID_LABEL}
-        _mock_ollama.chat.return_value = _mock_chat_response(batch_result)
-
-        label_card_batch([_make_card("Sol Ring")], conservative=False)
-
-        call_kwargs = _mock_ollama.chat.call_args
-        system_msg = call_kwargs.kwargs["messages"][0]["content"]
         assert system_msg == BATCH_SYSTEM_PROMPT
-
-    def test_conservative_prompt_excludes_complex_variants(self):
-        """Conservative prompts should not mention complex category variants."""
-        for excluded in ("per_cast", "land_to_battlefield", "reducer"):
-            assert excluded not in CONSERVATIVE_SYSTEM_PROMPT, (
-                f"{excluded} found in CONSERVATIVE_SYSTEM_PROMPT"
-            )
-            assert excluded not in CONSERVATIVE_BATCH_SYSTEM_PROMPT, (
-                f"{excluded} found in CONSERVATIVE_BATCH_SYSTEM_PROMPT"
-            )
