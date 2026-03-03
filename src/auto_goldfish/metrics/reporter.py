@@ -6,7 +6,10 @@ import os
 from collections import Counter
 from typing import Any, Dict, List
 
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = None
 import numpy as np
 
 from auto_goldfish.engine.goldfisher import SimulationResult
@@ -22,6 +25,8 @@ def save_report(
     deck_name: str = "deck",
 ) -> None:
     """Write a text report and mana curve plot to *output_dir*."""
+    if plt is None:
+        raise ImportError("matplotlib is required for save_report")
     os.makedirs(output_dir, exist_ok=True)
 
     cmc_list = [c.cmc for c in decklist]

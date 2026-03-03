@@ -6,10 +6,7 @@
 {% block title %}Simulate {{ deck_name }} - Auto Goldfish{% endblock %}
 {% block content %}
 <h1>Simulate: {{ deck_name }}</h1>
-<form hx-post="{{ url_for('simulation.run', deck_name=deck_name) }}"
-      hx-target="#job-status"
-      hx-swap="innerHTML"
-      id="sim-form">
+<form id="sim-form">
 
     <!-- Card Labeler Wizard -->
     <div id="card-labeler" style="display:none;" class="labeler-pane">
@@ -185,7 +182,7 @@
     </details>
     {% endif %}
 
-    <input type="hidden" name="effect_overrides" id="effect-overrides-input" value="{}">
+    <input type="hidden" id="effect-overrides-input" value="{}">
 
     <!-- Simulation Parameters -->
     <div class="form-row">
@@ -234,18 +231,14 @@
             <input type="number" id="seed" name="seed" placeholder="Random">
         </div>
         <div class="form-group">
-            <label for="workers">Workers (0 = all CPUs)</label>
-            <input type="number" id="workers" name="workers" value="0" min="0" max="32">
-        </div>
-    </div>
-    <div class="form-row">
-        <div class="form-group">
             <label for="mulligan">Mulligan Strategy</label>
             <select id="mulligan" name="mulligan">
                 <option value="default" selected>Default (3-4 lands)</option>
                 <option value="curve_aware">Curve Aware</option>
             </select>
         </div>
+    </div>
+    <div class="form-row">
         <div class="form-group">
             <label for="record_results">Record Detail Level</label>
             <select id="record_results" name="record_results">
@@ -255,16 +248,10 @@
             </select>
         </div>
     </div>
-    <div class="form-group" id="local-sim-group">
-        <label class="toggle-label">
-            <input type="checkbox" id="run-locally" onchange="onLocalToggle()">
-            Run on your computer (experimental)
-        </label>
-        <small class="hint" id="local-sim-hint" style="display:none">
-            Simulation runs in your browser via WebAssembly. First run takes ~10s to load the engine.
-            <span id="local-sim-estimate"></span>
-        </small>
-    </div>
+    <small class="hint" id="local-sim-hint">
+        Simulation runs in your browser via WebAssembly.
+        <span id="local-sim-estimate"></span>
+    </small>
     <button type="submit" class="btn btn-primary" id="submit-btn">Run Simulation</button>
 </form>
 <div id="job-status"></div>
@@ -686,11 +673,6 @@ function loadSavedOverrides() {
     collectOverrides();
 }
 
-// Collect on form submit
-document.getElementById('sim-form').addEventListener('htmx:configRequest', function() {
-    collectOverrides();
-});
-
 // Load saved overrides on page load
 loadSavedOverrides();
 
@@ -942,36 +924,22 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
 {% endif %}
 
 <script>
-// -- Client-side (Pyodide) simulation logic --
+// -- Client-side (Pyodide) simulation --
 (function() {
     const DECK_NAME = {{ deck_name | tojson }};
     const DECK_API_URL = "{{ url_for('simulation.api_deck', deck_name=deck_name) }}";
     const EFFECTS_API_URL = "{{ url_for('simulation.api_effects', deck_name=deck_name) }}";
-    const WHEEL_URL = "{{ url_for('simulation.api_wheel') }}";
+    const WHEEL_META_URL = "{{ url_for('simulation.api_wheel') }}";
     const WORKER_URL = "{{ url_for('static', filename='js/pyodide_worker.js') }}";
 
     let worker = null;
     let pyodideReady = false;
     let pyodideInitializing = false;
+    let resolvedWheelUrl = null;
 
-    const localToggle = document.getElementById('run-locally');
-    const workersGroup = document.getElementById('workers').closest('.form-group');
-    const localHint = document.getElementById('local-sim-hint');
-    const localEstimate = document.getElementById('local-sim-estimate');
     const form = document.getElementById('sim-form');
     const jobStatus = document.getElementById('job-status');
     const localResults = document.getElementById('local-results');
-
-    window.onLocalToggle = function() {
-        const isLocal = localToggle.checked;
-        workersGroup.style.display = isLocal ? 'none' : '';
-        localHint.style.display = isLocal ? 'block' : 'none';
-
-        if (isLocal) {
-            updateEstimate();
-            initWorker();
-        }
-    };
 
     function updateEstimate() {
         const sims = parseInt(document.getElementById('sims').value) || 1000;
@@ -980,17 +948,31 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
         const landCounts = maxLands - minLands + 1;
         // Rough estimate: ~3ms per sim per land count on modern hardware
         const estSeconds = Math.ceil((sims * landCounts * 3) / 1000);
-        localEstimate.textContent = 'Estimated time: ~' + estSeconds + 's for '
+        document.getElementById('local-sim-estimate').textContent =
+            'Estimated time: ~' + estSeconds + 's for '
             + sims + ' sims x ' + landCounts + ' land counts.';
     }
 
-    function initWorker() {
+    async function initWorker() {
         if (worker || pyodideInitializing) return;
         pyodideInitializing = true;
 
+        // Fetch wheel filename so we can build a URL ending in .whl
+        // (micropip requires the .whl extension to recognise it as a wheel)
+        try {
+            const resp = await fetch(WHEEL_META_URL);
+            if (!resp.ok) throw new Error('Wheel not found');
+            const meta = await resp.json();
+            resolvedWheelUrl = window.location.origin + WHEEL_META_URL + '/' + meta.filename;
+        } catch (err) {
+            jobStatus.innerHTML = '<div class="job-status error"><p>Error: Could not find simulation wheel. Run <code>uv build --wheel</code> first.</p></div>';
+            pyodideInitializing = false;
+            return;
+        }
+
         worker = new Worker(WORKER_URL);
         worker.onmessage = handleWorkerMessage;
-        worker.postMessage({type: 'init', wheelUrl: window.location.origin + WHEEL_URL});
+        worker.postMessage({type: 'init', wheelUrl: resolvedWheelUrl});
     }
 
     function handleWorkerMessage(e) {
@@ -1026,17 +1008,13 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
         }
     }
 
-    // Intercept form submission for local mode
+    // Intercept form submission -- always run locally
     form.addEventListener('submit', function(e) {
-        if (!localToggle.checked) return; // Let HTMX handle server-side
-
         e.preventDefault();
-        e.stopPropagation();
 
         if (!pyodideReady) {
             jobStatus.innerHTML = '<div class="job-status"><p>Waiting for engine to load...</p></div>';
             if (!pyodideInitializing) initWorker();
-            // Retry after a short delay
             const retryInterval = setInterval(function() {
                 if (pyodideReady) {
                     clearInterval(retryInterval);
@@ -1060,7 +1038,6 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
         }
 
         try {
-            // Fetch deck and effects data in parallel
             const [deckResp, effectsResp] = await Promise.all([
                 fetch(DECK_API_URL),
                 fetch(EFFECTS_API_URL),
@@ -1106,16 +1083,14 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
         }
     }
 
-    // Update estimate when sims or land range changes
-    document.getElementById('sims').addEventListener('input', function() {
-        if (localToggle.checked) updateEstimate();
-    });
-    document.getElementById('min-slider').addEventListener('input', function() {
-        if (localToggle.checked) updateEstimate();
-    });
-    document.getElementById('max-slider').addEventListener('input', function() {
-        if (localToggle.checked) updateEstimate();
-    });
+    // Update estimate when params change
+    document.getElementById('sims').addEventListener('input', updateEstimate);
+    document.getElementById('min-slider').addEventListener('input', updateEstimate);
+    document.getElementById('max-slider').addEventListener('input', updateEstimate);
+
+    // Initialize Pyodide on page load
+    updateEstimate();
+    initWorker();
 })();
 </script>
 {% endblock %}

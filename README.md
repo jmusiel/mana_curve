@@ -12,7 +12,7 @@ A Magic: The Gathering commander deck simulation tool. Runs "goldfishing" simula
 - **Card performance analysis** -- identifies which cards are overrepresented in high- vs low-performing games
 - **Game replay viewer** -- interactive turn-by-turn replay of sample games from top/mid/low quartiles, showing hand state, played cards, board state, and mana production (works in both sequential and parallel modes)
 - **Web UI** -- Flask-based dashboard for importing decks, running simulations, and viewing inline results with charts and replay viewer. Card effects editor lets you override effects before running, with overrides persisted across sessions. Results appear inline below the form for an iterative tweak-and-rerun workflow
-- **Client-side simulation** -- optional "Run on your computer" mode runs the simulation engine in-browser via Pyodide (CPython compiled to WebAssembly). Simulations run on the user's hardware with no server load, with a progress bar and identical results rendering
+- **Client-side simulation** -- simulations run entirely in-browser via Pyodide (CPython compiled to WebAssembly). The Flask server is a thin data layer; all compute happens on the user's hardware with a progress bar and full results rendering
 - **Reports** -- generates text reports with per-bucket game stats and mana curve scatter plots (PNG)
 
 ## Setup
@@ -53,7 +53,7 @@ uv pip install -e ".[dev]"
 
 Then open http://127.0.0.1:5000 to import decks, run simulations, and explore results including the interactive game replay viewer.
 
-The simulation form includes a "Run on your computer" toggle that runs simulations client-side via Pyodide (WebAssembly). This offloads computation to the browser -- no server resources needed. The first run takes ~10s to load the engine; subsequent runs are fast. Build the wheel first with `uv build --wheel` so the endpoint can serve it.
+Simulations run client-side via Pyodide (WebAssembly) -- the Flask server serves deck data and the UI, but all simulation compute happens in the browser. The first run takes ~10s to load the engine; subsequent runs are fast. Build the wheel first with `uv build --wheel` so the endpoint can serve it.
 
 ### As a library
 

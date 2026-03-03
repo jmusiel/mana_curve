@@ -26,10 +26,21 @@ async function initPyodide(wheelUrl) {
         postMessage({type: "init_progress", message: "Installing numpy..."});
         await pyodide.loadPackage("numpy");
 
+        postMessage({type: "init_progress", message: "Downloading simulation engine..."});
+        // Fetch wheel as bytes and write to Pyodide's virtual filesystem,
+        // then install from there. This avoids micropip URL-fetch issues.
+        const resp = await fetch(wheelUrl);
+        if (!resp.ok) throw new Error("Failed to download wheel: " + resp.status);
+        const wheelBytes = new Uint8Array(await resp.arrayBuffer());
+        const wheelFilename = wheelUrl.split("/").pop();
+        pyodide.FS.writeFile("/" + wheelFilename, wheelBytes);
+
         postMessage({type: "init_progress", message: "Installing simulation engine..."});
         await pyodide.loadPackage("micropip");
-        const micropip = pyodide.pyimport("micropip");
-        await micropip.install(wheelUrl, {deps: false});
+        await pyodide.runPythonAsync(`
+import micropip
+await micropip.install("emfs:/${wheelFilename}", deps=False)
+`);
 
         postMessage({type: "init_progress", message: "Ready"});
         postMessage({type: "ready"});
