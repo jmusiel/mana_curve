@@ -1,6 +1,6 @@
-"""Tests for mana_curve.models.game_state."""
+"""Tests for auto_goldfish.models.game_state."""
 
-from mana_curve.models.game_state import GameState
+from auto_goldfish.models.game_state import GameState
 
 
 def test_default_state():

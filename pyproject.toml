@@ -1,5 +1,5 @@
 [project]
-name = "mana_curve"
+name = "auto_goldfish"
 version = "0.2.0"
 description = "Magic: The Gathering commander deck simulation tool"
 requires-python = ">=3.11"
@@ -24,16 +24,16 @@ autocard = [
 ]
 
 [project.scripts]
-mana-curve = "mana_curve.cli.main:main"
-mana-curve-web = "mana_curve.web:create_app"
-autocard = "mana_curve.autocard.cli:main"
+auto-goldfish = "auto_goldfish.cli.main:main"
+auto-goldfish-web = "auto_goldfish.web:create_app"
+autocard = "auto_goldfish.autocard.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mana_curve"]
+packages = ["src/auto_goldfish"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

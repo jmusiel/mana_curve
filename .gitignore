@@ -11,4 +11,4 @@ uv.lock
 CLAUDE.md
 *DESIGN.md
 **/untracked/**
-src/mana_curve/autocard/data/*.json
+src/auto_goldfish/autocard/data/*.json

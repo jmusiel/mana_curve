@@ -15,9 +15,9 @@ CONCURRENCY="${2:-4}"
 MODEL="${3:-gemma3:12b}"
 
 .venv/bin/python -c "
-from mana_curve.autocard.scryfall import load_cards
-from mana_curve.autocard.coverage import analyze_coverage
-from mana_curve.autocard.labeler import label_cards
+from auto_goldfish.autocard.scryfall import load_cards
+from auto_goldfish.autocard.coverage import analyze_coverage
+from auto_goldfish.autocard.labeler import label_cards
 
 cards = load_cards()
 report = analyze_coverage(cards)

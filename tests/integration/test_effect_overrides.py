@@ -1,8 +1,8 @@
 """Integration tests proving effect overrides change simulation outcomes."""
 
-from mana_curve.effects.card_database import DEFAULT_REGISTRY
-from mana_curve.effects.json_loader import build_overridden_registry
-from mana_curve.engine.goldfisher import Goldfisher, SimulationResult
+from auto_goldfish.effects.card_database import DEFAULT_REGISTRY
+from auto_goldfish.effects.json_loader import build_overridden_registry
+from auto_goldfish.engine.goldfisher import Goldfisher, SimulationResult
 
 
 def _simple_deck(num_lands: int = 37, num_spells: int = 62) -> list[dict]:

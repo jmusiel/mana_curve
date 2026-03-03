@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from mana_curve.effects import builtin
-from mana_curve.effects.json_loader import (
+from auto_goldfish.effects import builtin
+from auto_goldfish.effects.json_loader import (
     METADATA_FIELDS,
     TYPE_MAP,
     VALID_SLOTS,
@@ -20,9 +20,9 @@ from mana_curve.effects.json_loader import (
     get_effect_schema,
     load_registry_from_json,
 )
-from mana_curve.effects.registry import CardEffects, EffectRegistry
+from auto_goldfish.effects.registry import CardEffects, EffectRegistry
 
-_JSON_PATH = Path(__file__).resolve().parents[2] / "src" / "mana_curve" / "effects" / "card_effects.json"
+_JSON_PATH = Path(__file__).resolve().parents[2] / "src" / "auto_goldfish" / "effects" / "card_effects.json"
 
 
 @pytest.fixture

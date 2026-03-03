@@ -1,8 +1,8 @@
 """Tests for engine/mulligan.py."""
 
-from mana_curve.engine.mulligan import CurveAwareMulligan, DefaultMulligan
-from mana_curve.models.card import Card
-from mana_curve.models.game_state import GameState
+from auto_goldfish.engine.mulligan import CurveAwareMulligan, DefaultMulligan
+from auto_goldfish.models.card import Card
+from auto_goldfish.models.game_state import GameState
 
 
 def _make_state_with_hand(cards: list[Card]) -> GameState:

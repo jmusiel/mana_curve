@@ -1,0 +1,486 @@
+{% extends "base.html" %}
+{% set slider_min = [land_count - 10, 0] | max %}
+{% set slider_max = land_count + 10 %}
+{% set default_min = land_count - 2 %}
+{% set default_max = land_count + 2 %}
+{% block title %}Simulate {{ deck_name }} - Auto Goldfish{% endblock %}
+{% block content %}
+<h1>Simulate: {{ deck_name }}</h1>
+<form hx-post="{{ url_for('simulation.run', deck_name=deck_name) }}"
+      hx-target="#job-status"
+      hx-swap="innerHTML"
+      id="sim-form">
+
+    <!-- Card Effects Editor -->
+    {% if card_effects is defined and card_effects %}
+    {% set with_effects = card_effects | selectattr('has_effects') | list %}
+    {% set without_effects = card_effects | rejectattr('has_effects') | list %}
+    <details class="effects-editor">
+        <summary class="effects-summary">
+            <h2>Card Effects</h2>
+            <span class="effects-count">{{ with_effects | length }} of {{ card_effects | length }} non-land cards have effects</span>
+        </summary>
+
+        {% if with_effects %}
+        <details class="effects-group" open>
+            <summary class="effects-group-summary">Cards with Effects ({{ with_effects | length }})</summary>
+            <div class="effects-card-list">
+                {% for card in with_effects %}
+                <div class="effects-card" data-card-name="{{ card.name }}">
+                    <div class="effects-card-header">
+                        <span class="effects-card-name">{{ card.name }}</span>
+                        <span class="effects-card-cmc">CMC {{ card.cmc }}</span>
+                        <span class="effects-card-badges">{{ card.effects_display }}</span>
+                        <button type="button" class="btn btn-secondary btn-sm override-toggle" onclick="toggleOverride(this)">Override</button>
+                    </div>
+                    <div class="override-panel" style="display:none;">
+                        <div class="override-effects-list"></div>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="addEffectRow(this)">+ Add Effect</button>
+                        <div class="override-metadata">
+                            <label><input type="checkbox" class="meta-ramp"> ramp</label>
+                            <label><input type="checkbox" class="meta-tapped"> tapped</label>
+                            <label><input type="checkbox" class="meta-is-land-tutor"> is_land_tutor</label>
+                            <label>priority <input type="number" class="meta-priority" value="0" min="0" max="10" style="width:3rem"></label>
+                            <label>override_cmc <input type="number" class="meta-override-cmc" value="" placeholder="-" min="0" max="20" style="width:3rem"></label>
+                        </div>
+                        <div class="override-actions">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="removeOverride(this)">Remove Override</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
+
+        {% if without_effects %}
+        <details class="effects-group">
+            <summary class="effects-group-summary">Cards without Effects ({{ without_effects | length }})</summary>
+            <div class="effects-card-list">
+                {% for card in without_effects %}
+                <div class="effects-card" data-card-name="{{ card.name }}">
+                    <div class="effects-card-header">
+                        <span class="effects-card-name">{{ card.name }}</span>
+                        <span class="effects-card-cmc">CMC {{ card.cmc }}</span>
+                        <span class="effects-card-badges no-effects">No effects</span>
+                        <button type="button" class="btn btn-secondary btn-sm override-toggle" onclick="toggleOverride(this)">Add Effect</button>
+                    </div>
+                    <div class="override-panel" style="display:none;">
+                        <div class="override-effects-list"></div>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="addEffectRow(this)">+ Add Effect</button>
+                        <div class="override-metadata">
+                            <label><input type="checkbox" class="meta-ramp"> ramp</label>
+                            <label><input type="checkbox" class="meta-tapped"> tapped</label>
+                            <label><input type="checkbox" class="meta-is-land-tutor"> is_land_tutor</label>
+                            <label>priority <input type="number" class="meta-priority" value="0" min="0" max="10" style="width:3rem"></label>
+                            <label>override_cmc <input type="number" class="meta-override-cmc" value="" placeholder="-" min="0" max="20" style="width:3rem"></label>
+                        </div>
+                        <div class="override-actions">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="removeOverride(this)">Remove Override</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
+    </details>
+    {% endif %}
+
+    <input type="hidden" name="effect_overrides" id="effect-overrides-input" value="{}">
+
+    <!-- Simulation Parameters -->
+    <div class="form-row">
+        <div class="form-group">
+            <label for="turns">Turns (max {{ max_turns }})</label>
+            <input type="number" id="turns" name="turns" value="10" min="1" max="{{ max_turns }}">
+        </div>
+        <div class="form-group">
+            <label for="sims">Simulations (max {{ max_sims }})</label>
+            <input type="number" id="sims" name="sims" value="1000" min="100" max="{{ max_sims }}" step="100">
+        </div>
+    </div>
+    <div class="form-group">
+        <label>Land Range <span class="hint">(deck has {{ land_count }} lands, max sweep of {{ max_land_sweep }})</span></label>
+        <div class="range-slider-wrap">
+            <div class="range-row">
+                <div class="range-field">
+                    <label for="min-slider">Min Lands: <strong id="min-label">{{ default_min }}</strong></label>
+                    <input type="range" id="min-slider" list="land-ticks"
+                           min="{{ slider_min }}" max="{{ slider_max }}"
+                           value="{{ default_min }}" class="range-input">
+                </div>
+                <div class="range-field">
+                    <label for="max-slider">Max Lands: <strong id="max-label">{{ default_max }}</strong></label>
+                    <input type="range" id="max-slider" list="land-ticks"
+                           min="{{ slider_min }}" max="{{ slider_max }}"
+                           value="{{ default_max }}" class="range-input">
+                </div>
+            </div>
+            <datalist id="land-ticks">
+                {% for i in range(slider_min, slider_max + 1) %}
+                <option value="{{ i }}"{{ ' label="' ~ i ~ '"' if i == slider_min or i == land_count or i == slider_max or i % 5 == 0 else '' }}>
+                {% endfor %}
+            </datalist>
+            <div class="range-sweep-info">
+                Sweep: <strong id="sweep-label">{{ default_max - default_min }}</strong> land counts
+                ({{ default_min }} &ndash; {{ default_max }})
+            </div>
+            <input type="hidden" id="min_lands" name="min_lands" value="{{ default_min }}">
+            <input type="hidden" id="max_lands" name="max_lands" value="{{ default_max }}">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label for="seed">Seed (optional)</label>
+            <input type="number" id="seed" name="seed" placeholder="Random">
+        </div>
+        <div class="form-group">
+            <label for="workers">Workers (0 = all CPUs)</label>
+            <input type="number" id="workers" name="workers" value="0" min="0" max="32">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label for="mulligan">Mulligan Strategy</label>
+            <select id="mulligan" name="mulligan">
+                <option value="default" selected>Default (3-4 lands)</option>
+                <option value="curve_aware">Curve Aware</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="record_results">Record Detail Level</label>
+            <select id="record_results" name="record_results">
+                <option value="quartile" selected>Quartile</option>
+                <option value="decile">Decile</option>
+                <option value="centile">Centile</option>
+            </select>
+        </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Run Simulation</button>
+</form>
+<div id="job-status"></div>
+
+<script>
+(function() {
+    const MAX_SWEEP = {{ max_land_sweep }};
+    const minSlider = document.getElementById('min-slider');
+    const maxSlider = document.getElementById('max-slider');
+    const minLabel = document.getElementById('min-label');
+    const maxLabel = document.getElementById('max-label');
+    const sweepLabel = document.getElementById('sweep-label');
+    const sweepInfo = document.querySelector('.range-sweep-info');
+    const minInput = document.getElementById('min_lands');
+    const maxInput = document.getElementById('max_lands');
+
+    function update() {
+        let minVal = parseInt(minSlider.value);
+        let maxVal = parseInt(maxSlider.value);
+
+        // Ensure min <= max
+        if (minVal > maxVal) {
+            if (this === minSlider) {
+                maxVal = minVal;
+                maxSlider.value = maxVal;
+            } else {
+                minVal = maxVal;
+                minSlider.value = minVal;
+            }
+        }
+
+        // Enforce max sweep
+        if (maxVal - minVal > MAX_SWEEP) {
+            if (this === minSlider) {
+                maxVal = minVal + MAX_SWEEP;
+                maxSlider.value = maxVal;
+            } else {
+                minVal = maxVal - MAX_SWEEP;
+                minSlider.value = minVal;
+            }
+        }
+
+        const sweep = maxVal - minVal;
+        minLabel.textContent = minVal;
+        maxLabel.textContent = maxVal;
+        sweepLabel.textContent = sweep;
+        sweepInfo.innerHTML = 'Sweep: <strong>' + sweep + '</strong> land counts (' + minVal + ' \u2013 ' + maxVal + ')';
+        minInput.value = minVal;
+        maxInput.value = maxVal;
+
+        // Warn if at limit
+        if (sweep >= MAX_SWEEP) {
+            sweepInfo.classList.add('at-limit');
+        } else {
+            sweepInfo.classList.remove('at-limit');
+        }
+    }
+
+    minSlider.addEventListener('input', update);
+    maxSlider.addEventListener('input', update);
+})();
+</script>
+
+{% if effect_schema is defined and card_effects is defined %}
+<script>
+const EFFECT_SCHEMA = {{ effect_schema | tojson }};
+const CARD_EFFECTS = {{ card_effects | tojson }};
+const SAVED_OVERRIDES = {{ saved_overrides | tojson }};
+
+// Dropdown order: draw effects, then mana production, then exotic
+const EFFECT_TYPE_ORDER = [
+    'draw_cards', 'draw_discard', 'per_turn_draw', 'per_cast_draw',
+    'produce_mana', 'scaling_mana', 'reduce_cost',
+    'tutor_to_hand', 'cryptolith_rites_mana', 'enchantment_sanctum_mana',
+].filter(k => k in EFFECT_SCHEMA);
+
+function buildTypeOptions(selectedType) {
+    return EFFECT_TYPE_ORDER.map(k =>
+        `<option value="${k}"${k === selectedType ? ' selected' : ''}>${EFFECT_SCHEMA[k].label} (${EFFECT_SCHEMA[k].slot})</option>`
+    ).join('');
+}
+
+function toggleOverride(btn) {
+    const card = btn.closest('.effects-card');
+    const panel = card.querySelector('.override-panel');
+    const isVisible = panel.style.display !== 'none';
+    if (isVisible) {
+        panel.style.display = 'none';
+        btn.textContent = card.querySelector('.no-effects') ? 'Add Effect' : 'Override';
+    } else {
+        panel.style.display = 'block';
+        btn.textContent = 'Hide';
+        if (panel.querySelector('.override-effects-list').children.length === 0) {
+            const cardName = card.dataset.cardName;
+            const cardData = CARD_EFFECTS.find(c => c.name === cardName);
+            const regOverride = cardData && cardData.registry_override;
+            if (regOverride && regOverride.effects && regOverride.effects.length > 0) {
+                regOverride.effects.forEach(eff => addEffectRowWithData(panel, eff));
+                if (regOverride.ramp) panel.querySelector('.meta-ramp').checked = true;
+                if (regOverride.priority) panel.querySelector('.meta-priority').value = regOverride.priority;
+                collectOverrides();
+            } else {
+                addEffectRow(panel.querySelector('.override-effects-list').nextElementSibling, 'draw_cards');
+            }
+        }
+    }
+}
+
+function addEffectRow(btn, defaultType) {
+    const panel = btn.closest('.override-panel');
+    const list = panel.querySelector('.override-effects-list');
+    const row = document.createElement('div');
+    row.className = 'override-effect-row';
+
+    const selected = defaultType || EFFECT_TYPE_ORDER[0];
+
+    row.innerHTML = `
+        <select class="effect-type-select" onchange="onTypeChange(this)">
+            ${buildTypeOptions(selected)}
+        </select>
+        <div class="effect-params"></div>
+        <button type="button" class="btn-remove-effect" onclick="this.parentElement.remove(); collectOverrides();">&times;</button>
+    `;
+    list.appendChild(row);
+    onTypeChange(row.querySelector('.effect-type-select'));
+}
+
+function onTypeChange(select) {
+    const typeStr = select.value;
+    const schema = EFFECT_SCHEMA[typeStr];
+    const paramsDiv = select.parentElement.querySelector('.effect-params');
+    paramsDiv.innerHTML = '';
+
+    for (const [pName, pInfo] of Object.entries(schema.params)) {
+        const label = document.createElement('label');
+        label.className = 'effect-param-label';
+        label.textContent = pName + ' ';
+        const input = document.createElement('input');
+        input.className = 'effect-param-input';
+        input.dataset.param = pName;
+        input.dataset.paramType = pInfo.type;
+        if (pInfo.type === 'int' || pInfo.type === 'float') {
+            input.type = 'number';
+            input.value = pInfo.default !== undefined ? pInfo.default : '';
+            input.style.width = '4rem';
+        } else if (pInfo.type === 'bool') {
+            input.type = 'checkbox';
+            input.checked = pInfo.default || false;
+        } else if (pInfo.type === 'list') {
+            input.type = 'text';
+            input.placeholder = 'comma-separated';
+            input.value = pInfo.default ? pInfo.default.join(', ') : '';
+            input.style.width = '12rem';
+        } else {
+            input.type = 'text';
+            input.value = pInfo.default || '';
+        }
+        input.addEventListener('change', collectOverrides);
+        label.appendChild(input);
+        paramsDiv.appendChild(label);
+    }
+    collectOverrides();
+}
+
+function removeOverride(btn) {
+    const card = btn.closest('.effects-card');
+    const panel = card.querySelector('.override-panel');
+    panel.querySelector('.override-effects-list').innerHTML = '';
+    panel.style.display = 'none';
+    const toggleBtn = card.querySelector('.override-toggle');
+    toggleBtn.textContent = card.querySelector('.no-effects') ? 'Add Effect' : 'Override';
+    // Reset the badge text to original
+    const badges = card.querySelector('.effects-card-badges');
+    const cardName = card.dataset.cardName;
+    const orig = CARD_EFFECTS.find(c => c.name === cardName);
+    const originalText = orig && orig.original_effects !== undefined ? orig.original_effects : (orig ? orig.effects_display : '');
+    if (originalText && originalText !== 'User override') {
+        badges.textContent = originalText;
+        badges.classList.remove('no-effects');
+    } else {
+        badges.textContent = 'No effects';
+        badges.classList.add('no-effects');
+    }
+    // Uncheck metadata
+    panel.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+    panel.querySelectorAll('input[type=number]').forEach(inp => {
+        if (inp.classList.contains('meta-priority')) inp.value = '0';
+        else if (inp.classList.contains('meta-override-cmc')) inp.value = '';
+    });
+    collectOverrides();
+    persistOverrides();
+}
+
+function collectOverrides() {
+    const overrides = {};
+    document.querySelectorAll('.effects-card').forEach(card => {
+        const panel = card.querySelector('.override-panel');
+        if (panel.style.display === 'none') return;
+
+        const rows = panel.querySelectorAll('.override-effect-row');
+        if (rows.length === 0) return;
+
+        const cardName = card.dataset.cardName;
+        const effects = [];
+        rows.forEach(row => {
+            const typeStr = row.querySelector('.effect-type-select').value;
+            const slot = EFFECT_SCHEMA[typeStr].slot;
+            const params = {};
+            row.querySelectorAll('.effect-param-input').forEach(inp => {
+                const pType = inp.dataset.paramType;
+                const pName = inp.dataset.param;
+                if (pType === 'int') {
+                    const v = parseInt(inp.value, 10);
+                    if (!isNaN(v)) params[pName] = v;
+                } else if (pType === 'float') {
+                    const v = parseFloat(inp.value);
+                    if (!isNaN(v)) params[pName] = v;
+                } else if (pType === 'bool') {
+                    params[pName] = inp.checked;
+                } else if (pType === 'list') {
+                    const v = inp.value.trim();
+                    if (v) params[pName] = v.split(',').map(s => s.trim()).filter(s => s);
+                } else {
+                    if (inp.value) params[pName] = inp.value;
+                }
+            });
+            effects.push({type: typeStr, slot: slot, params: params});
+        });
+
+        const entry = {effects: effects};
+        if (panel.querySelector('.meta-ramp').checked) entry.ramp = true;
+        if (panel.querySelector('.meta-tapped').checked) entry.tapped = true;
+        if (panel.querySelector('.meta-is-land-tutor').checked) entry.is_land_tutor = true;
+        const prio = parseInt(panel.querySelector('.meta-priority').value, 10);
+        if (prio > 0) entry.priority = prio;
+        const ocmc = panel.querySelector('.meta-override-cmc').value;
+        if (ocmc !== '') entry.override_cmc = parseInt(ocmc, 10);
+
+        overrides[cardName] = entry;
+    });
+    document.getElementById('effect-overrides-input').value = JSON.stringify(overrides);
+}
+
+function persistOverrides() {
+    const data = document.getElementById('effect-overrides-input').value;
+    fetch('{{ url_for("simulation.save_overrides_api", deck_name=deck_name) }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: data,
+    });
+}
+
+function addEffectRowWithData(panel, effectData) {
+    const list = panel.querySelector('.override-effects-list');
+    const row = document.createElement('div');
+    row.className = 'override-effect-row';
+
+    row.innerHTML = `
+        <select class="effect-type-select" onchange="onTypeChange(this)">
+            ${buildTypeOptions(effectData.type)}
+        </select>
+        <div class="effect-params"></div>
+        <button type="button" class="btn-remove-effect" onclick="this.parentElement.remove(); collectOverrides();">&times;</button>
+    `;
+    list.appendChild(row);
+    // Build params UI for the selected type
+    onTypeChange(row.querySelector('.effect-type-select'));
+    // Now populate param values from saved data
+    if (effectData.params) {
+        row.querySelectorAll('.effect-param-input').forEach(inp => {
+            const pName = inp.dataset.param;
+            if (pName in effectData.params) {
+                const val = effectData.params[pName];
+                if (inp.type === 'checkbox') {
+                    inp.checked = !!val;
+                } else if (Array.isArray(val)) {
+                    inp.value = val.join(', ');
+                } else {
+                    inp.value = val;
+                }
+            }
+        });
+    }
+}
+
+function loadSavedOverrides() {
+    if (!SAVED_OVERRIDES || Object.keys(SAVED_OVERRIDES).length === 0) return;
+
+    document.querySelectorAll('.effects-card').forEach(card => {
+        const cardName = card.dataset.cardName;
+        if (!(cardName in SAVED_OVERRIDES)) return;
+
+        const override = SAVED_OVERRIDES[cardName];
+        const panel = card.querySelector('.override-panel');
+        const toggleBtn = card.querySelector('.override-toggle');
+
+        // Open the panel
+        panel.style.display = 'block';
+        toggleBtn.textContent = 'Hide';
+
+        // Add effect rows from saved data
+        if (override.effects && override.effects.length > 0) {
+            override.effects.forEach(eff => addEffectRowWithData(panel, eff));
+        }
+
+        // Set metadata
+        if (override.ramp) panel.querySelector('.meta-ramp').checked = true;
+        if (override.tapped) panel.querySelector('.meta-tapped').checked = true;
+        if (override.is_land_tutor) panel.querySelector('.meta-is-land-tutor').checked = true;
+        if (override.priority) panel.querySelector('.meta-priority').value = override.priority;
+        if (override.override_cmc !== undefined && override.override_cmc !== null) {
+            panel.querySelector('.meta-override-cmc').value = override.override_cmc;
+        }
+    });
+    collectOverrides();
+}
+
+// Collect on form submit
+document.getElementById('sim-form').addEventListener('htmx:configRequest', function() {
+    collectOverrides();
+});
+
+// Load saved overrides on page load
+loadSavedOverrides();
+</script>
+{% endif %}
+{% endblock %}

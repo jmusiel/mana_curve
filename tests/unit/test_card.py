@@ -1,7 +1,7 @@
-"""Tests for mana_curve.models.card."""
+"""Tests for auto_goldfish.models.card."""
 
-from mana_curve.models.card import Card
-from mana_curve.models.game_state import GameState
+from auto_goldfish.models.card import Card
+from auto_goldfish.models.game_state import GameState
 
 
 class TestCardCreation:

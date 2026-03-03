@@ -1,7 +1,7 @@
 """Tests for decklist/builder.py."""
 
-from mana_curve.decklist.builder import adjust_land_count
-from mana_curve.decklist.loader import get_basic_island
+from auto_goldfish.decklist.builder import adjust_land_count
+from auto_goldfish.decklist.loader import get_basic_island
 
 
 def _make_creature(name: str, cmc: int = 2) -> dict:

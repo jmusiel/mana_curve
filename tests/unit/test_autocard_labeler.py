@@ -25,7 +25,7 @@ def _patch_ollama():
         yield
 
 
-from mana_curve.autocard.labeler import (
+from auto_goldfish.autocard.labeler import (
     build_batch_prompt,
     build_card_prompt,
     label_card,
@@ -34,7 +34,7 @@ from mana_curve.autocard.labeler import (
     load_labeled,
     save_labeled,
 )
-from mana_curve.autocard.schemas import ScryfallCard
+from auto_goldfish.autocard.schemas import ScryfallCard
 
 
 def _make_card(name: str = "Sol Ring", oracle_text: str = "{T}: Add {C}{C}.") -> ScryfallCard:
@@ -180,7 +180,7 @@ class TestLabelCardBatch:
 
 
 class TestLabelCards:
-    @patch("mana_curve.autocard.labeler.label_card")
+    @patch("auto_goldfish.autocard.labeler.label_card")
     def test_labels_all_cards(self, mock_label_card):
         mock_label_card.return_value = _VALID_LABEL
         cards = [_make_card("Card A"), _make_card("Card B")]
@@ -193,7 +193,7 @@ class TestLabelCards:
         assert "Card B" in results
         assert mock_label_card.call_count == 2
 
-    @patch("mana_curve.autocard.labeler.label_card")
+    @patch("auto_goldfish.autocard.labeler.label_card")
     def test_resume_skips_existing(self, mock_label_card):
         """Resume skips already-labeled cards."""
         mock_label_card.return_value = _EMPTY_LABEL
@@ -212,7 +212,7 @@ class TestLabelCards:
         # label_card only called for Card B
         assert mock_label_card.call_count == 1
 
-    @patch("mana_curve.autocard.labeler.label_card")
+    @patch("auto_goldfish.autocard.labeler.label_card")
     def test_incremental_save(self, mock_label_card):
         """Results saved after each card."""
         mock_label_card.return_value = _VALID_LABEL
@@ -226,7 +226,7 @@ class TestLabelCards:
             assert "Card A" in saved
 
 
-    @patch("mana_curve.autocard.labeler.label_card_batch")
+    @patch("auto_goldfish.autocard.labeler.label_card_batch")
     def test_batch_mode(self, mock_batch):
         """With batch_size > 1, cards are batched into a single call."""
         mock_batch.return_value = {
@@ -243,8 +243,8 @@ class TestLabelCards:
         assert results["Card B"] == _EMPTY_LABEL
         mock_batch.assert_called_once()
 
-    @patch("mana_curve.autocard.labeler.label_card_batch")
-    @patch("mana_curve.autocard.labeler.label_card")
+    @patch("auto_goldfish.autocard.labeler.label_card_batch")
+    @patch("auto_goldfish.autocard.labeler.label_card")
     def test_batch_fallback_on_failure(self, mock_single, mock_batch):
         """If batch fails, falls back to single-card labeling."""
         mock_batch.side_effect = ValueError("batch failed")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from mana_curve.autocard.schemas import ScryfallCard
+from auto_goldfish.autocard.schemas import ScryfallCard
 
 
 @pytest.fixture

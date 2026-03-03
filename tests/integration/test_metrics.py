@@ -6,7 +6,7 @@ and parallel execution paths, including distribution_stats.
 
 import pytest
 
-from mana_curve.engine.goldfisher import Goldfisher, SimulationResult
+from auto_goldfish.engine.goldfisher import Goldfisher, SimulationResult
 
 
 def _simple_deck(num_lands: int = 37, num_spells: int = 62) -> list[dict]:

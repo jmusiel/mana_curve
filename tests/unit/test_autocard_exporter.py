@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from mana_curve.autocard.exporter import export_to_registry, group_by_effects
-from mana_curve.effects.json_loader import load_registry_from_json
+from auto_goldfish.autocard.exporter import export_to_registry, group_by_effects
+from auto_goldfish.effects.json_loader import load_registry_from_json
 
 
 _RAMP_LABEL = {
