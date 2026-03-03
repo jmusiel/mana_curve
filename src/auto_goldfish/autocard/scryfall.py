@@ -95,6 +95,49 @@ def fetch_top_cards(
     return cards
 
 
+def fetch_top_cards_by_tags(
+    tags: List[str],
+    per_tag_count: int = 500,
+    base_query: str = "-t:land f:commander",
+) -> List[ScryfallCard]:
+    """Fetch top cards for each tag separately, deduplicating and tracking which tags matched.
+
+    Args:
+        tags: Scryfall tag queries, e.g. ["otag:draw", "otag:card-advantage", "otag:ramp"].
+        per_tag_count: Max cards to fetch per tag.
+        base_query: Additional Scryfall query filters appended to each tag query.
+
+    Returns:
+        Combined, deduplicated list of ScryfallCards sorted by edhrec_rank,
+        with each card's ``otags`` field listing the short tag names it matched.
+    """
+    # card name -> ScryfallCard (first seen copy)
+    seen: dict[str, ScryfallCard] = {}
+
+    for tag in tags:
+        query = f"{tag} {base_query}"
+        # Extract short name: "otag:card-advantage" -> "card-advantage"
+        short_name = tag.split(":", 1)[1] if ":" in tag else tag
+
+        print(f"Fetching up to {per_tag_count} cards for {tag!r}...")
+        cards = fetch_top_cards(count=per_tag_count, query=query)
+        print(f"  Got {len(cards)} cards for {tag!r}")
+
+        for card in cards:
+            if card.name in seen:
+                # Card already fetched from another tag — just add this tag
+                if short_name not in seen[card.name].otags:
+                    seen[card.name].otags.append(short_name)
+            else:
+                card.otags = [short_name]
+                seen[card.name] = card
+
+    # Sort by edhrec_rank (None sorts last)
+    combined = sorted(seen.values(), key=lambda c: c.edhrec_rank if c.edhrec_rank is not None else float("inf"))
+    print(f"Total unique cards: {len(combined)}")
+    return combined
+
+
 def save_cards(cards: List[ScryfallCard], path: Path | str | None = None) -> Path:
     """Save a list of ScryfallCards to a JSON file."""
     if path is None:

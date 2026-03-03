@@ -9,13 +9,21 @@ from pathlib import Path
 
 def cmd_fetch(args: argparse.Namespace) -> None:
     """Download top commander cards from Scryfall."""
-    from .scryfall import fetch_top_cards, save_cards
+    from .scryfall import fetch_top_cards, fetch_top_cards_by_tags, save_cards
 
     output = Path(args.output) if args.output else None
-    print(f"Fetching top {args.count} cards with query: {args.query!r}")
-    cards = fetch_top_cards(count=args.count, query=args.query)
+    if args.tags:
+        print(f"Fetching cards by tags: {args.tags} (per_tag_count={args.per_tag_count})", flush=True)
+        cards = fetch_top_cards_by_tags(
+            tags=args.tags,
+            per_tag_count=args.per_tag_count,
+            base_query=args.query,
+        )
+    else:
+        print(f"Fetching top {args.count} cards with query: {args.query!r}", flush=True)
+        cards = fetch_top_cards(count=args.count, query=args.query)
     path = save_cards(cards, output)
-    print(f"Saved {len(cards)} cards to {path}")
+    print(f"Saved {len(cards)} cards to {path}", flush=True)
 
 
 def cmd_coverage(args: argparse.Namespace) -> None:
@@ -48,12 +56,13 @@ def cmd_label(args: argparse.Namespace) -> None:
         unlabeled = unlabeled[: args.count]
 
     if not unlabeled:
-        print("All cards are already labeled!")
+        print("All cards are already labeled!", flush=True)
         return
 
     print(
         f"Labeling {len(unlabeled)} cards with model {args.model}"
-        f" (concurrency={args.concurrency}, batch_size={args.batch_size})..."
+        f" (concurrency={args.concurrency}, batch_size={args.batch_size})...",
+        flush=True,
     )
     output_path = Path(args.output) if args.output else None
     results = label_cards(
@@ -64,7 +73,7 @@ def cmd_label(args: argparse.Namespace) -> None:
         concurrency=args.concurrency,
         batch_size=args.batch_size,
     )
-    print(f"Labeled {len(results)} cards total.")
+    print(f"Labeled {len(results)} cards total.", flush=True)
 
 
 def cmd_validate(args: argparse.Namespace) -> None:
@@ -133,6 +142,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", type=str, default=None,
         help="Output JSON path (default: autocard/data/top_cards.json)",
     )
+    fetch_parser.add_argument(
+        "--tags", nargs="+", default=None,
+        help="Scryfall otags to fetch separately (e.g. otag:draw otag:ramp)",
+    )
+    fetch_parser.add_argument(
+        "--per-tag-count", type=int, default=500,
+        help="Max cards per tag when using --tags (default: 500)",
+    )
     fetch_parser.set_defaults(func=cmd_fetch)
 
     # coverage
@@ -175,7 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     label_parser.add_argument(
         "--batch-size", type=int, default=1,
-        help="Cards per LLM call (default: 1, try 10 for speed)",
+        help="Cards per LLM call (default: 1, max ~5 due to schema size limits)",
     )
     label_parser.set_defaults(func=cmd_label)
 
@@ -217,3 +234,7 @@ def main(argv: list[str] | None = None) -> None:
     except KeyboardInterrupt:
         print("\nAborted.", file=sys.stderr)
         sys.exit(130)
+
+
+if __name__ == "__main__":
+    main()

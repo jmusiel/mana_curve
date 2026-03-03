@@ -90,6 +90,7 @@ class TestBuildCardPrompt:
         assert "produced_mana" in prompt
 
 
+
 class TestLabelCard:
     def test_valid_response(self):
         _mock_ollama.chat.return_value = _mock_chat_response(_VALID_LABEL)
@@ -98,6 +99,35 @@ class TestLabelCard:
 
         assert result == _VALID_LABEL
         _mock_ollama.chat.assert_called_once()
+
+    def test_strips_reasoning_from_response(self):
+        """Reasoning field is used by the LLM but stripped from returned label."""
+        raw_label = {
+            "reasoning": "Sol Ring taps for 2 mana. Repeatable producer.",
+            "categories": [
+                {"category": "ramp", "immediate": False, "producer": {"mana_amount": 2}},
+            ],
+        }
+        _mock_ollama.chat.return_value = _mock_chat_response(raw_label)
+
+        result = label_card(_make_card())
+
+        assert "reasoning" not in result
+        assert result["categories"] == raw_label["categories"]
+        assert result["metadata"] == {}
+
+    def test_defaults_missing_metadata(self):
+        """If LLM omits metadata, it defaults to empty dict."""
+        raw_label = {
+            "reasoning": "Just categories.",
+            "categories": [],
+        }
+        _mock_ollama.chat.return_value = _mock_chat_response(raw_label)
+
+        result = label_card(_make_card())
+
+        assert result["metadata"] == {}
+        assert result["categories"] == []
 
     def test_retry_on_invalid_json(self):
         """First call returns garbage, second returns valid JSON."""
@@ -144,6 +174,7 @@ class TestBuildBatchPrompt:
         cards = [_make_card("Sol Ring", "{T}: Add {C}{C}.")]
         prompt = build_batch_prompt(cards)
         assert "{T}: Add {C}{C}." in prompt
+
 
 
 class TestLabelCardBatch:

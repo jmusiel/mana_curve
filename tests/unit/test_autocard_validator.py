@@ -163,8 +163,16 @@ class TestValidateLabel:
         assert len(errors) == 1
         assert "categories" in errors[0]
 
-    def test_missing_metadata_key(self):
+    def test_missing_metadata_key_defaults_to_empty(self):
+        """Missing metadata is fine — defaults to empty dict."""
         label = {"categories": []}
+        errors = validate_label("Bad Card", label)
+        assert errors == []
+        assert label["metadata"] == {}
+
+    def test_metadata_not_a_dict(self):
+        """metadata present but not a dict is an error."""
+        label = {"categories": [], "metadata": "bad"}
         errors = validate_label("Bad Card", label)
         assert len(errors) == 1
         assert "metadata" in errors[0]

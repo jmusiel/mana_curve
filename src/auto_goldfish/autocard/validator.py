@@ -33,8 +33,11 @@ def validate_label(card_name: str, label: dict) -> list[str]:
     # Top-level keys
     if not isinstance(label.get("categories"), list):
         errors.append(f"{card_name}: missing or invalid 'categories' (must be a list)")
-    if not isinstance(label.get("metadata"), dict):
-        errors.append(f"{card_name}: missing or invalid 'metadata' (must be a dict)")
+    # metadata is optional — default to empty dict
+    if "metadata" not in label:
+        label["metadata"] = {}
+    elif not isinstance(label["metadata"], dict):
+        errors.append(f"{card_name}: 'metadata' must be a dict if provided")
 
     # If top-level structure is broken, can't validate further
     if errors:

@@ -18,143 +18,215 @@ _DEFAULT_LABELED_PATH = Path(__file__).parent / "data" / "labeled_cards.json"
 
 SYSTEM_PROMPT = """\
 You are a Magic: The Gathering card analyst for a mana curve simulator.
-Your job is to label cards with machine-interpretable categories.
 
-## Categories
-Each card gets a list of categories. A card can have multiple.
+## How to respond
+First, write a brief "reasoning" analyzing the card, then fill in "categories".
+Each category is a SELF-CONTAINED object — all variant fields go INSIDE it.
 
-### land
-For lands that enter tapped:
-  {"category": "land", "tapped": true}
-Normal lands need no entry (the simulator handles them automatically).
+## Category Types
 
-### ramp (6 variants)
-Immediate mana (one-shot, like Dark Ritual):
+### ramp
+Repeatable mana producer (mana rocks, signets, dorks):
+  {"category": "ramp", "immediate": false, "producer": {"mana_amount": 1}}
+Immediate mana (rituals, one-shot):
   {"category": "ramp", "immediate": true, "producer": {"mana_amount": 3}}
-
-Immediate land fetch (like Cultivate putting a land onto battlefield):
+Land fetch (Cultivate, Rampant Growth):
   {"category": "ramp", "immediate": true, "land_to_battlefield": {"count": 1, "tempo": "tapped"}}
-
-Repeatable mana producer (like Sol Ring, mana dorks):
-  {"category": "ramp", "immediate": false, "producer": {"mana_amount": 1, "producer_type": "rock", "tempo": "untapped"}}
-
-Cost reducer (like Goblin Warchief):
+Cost reducer (Goblin Warchief):
   {"category": "ramp", "immediate": false, "reducer": {"spell_type": "creature", "amount": 1}}
-  spell_type: "creature", "enchantment", "nonpermanent", "permanent", "spell"
+  Valid spell_type: "creature", "enchantment", "nonpermanent", "permanent", "spell"
 
-### draw (3 variants)
-Immediate draw (like Harmonize):
+### draw
+Immediate (Harmonize):
   {"category": "draw", "immediate": true, "amount": 3}
-
-Repeatable per-turn draw (like Phyrexian Arena):
+Per-turn (Phyrexian Arena):
   {"category": "draw", "immediate": false, "per_turn": {"amount": 1}}
-
-Repeatable per-cast draw (like Beast Whisperer):
+Per-cast (Beast Whisperer):
   {"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "creature"}}
-  trigger: "spell", "creature", "enchantment", "land", "artifact", "nonpermanent"
+  Valid trigger: "spell", "creature", "enchantment", "land", "artifact", "nonpermanent"
 
-### discard (immediate only)
+### discard
   {"category": "discard", "amount": 2}
 
-## Metadata (all optional, per-card)
-  - priority (int): play priority (0 = normal, 2 = high)
-  - override_cmc (int): override the mana cost for simulation purposes
-  - extra_types (list[str]): additional card types, e.g. ["land", "artifact"]
+### land
+  {"category": "land", "tapped": true}
+  (only for lands that enter tapped; normal lands need no entry)
 
-## Output Schema
-Return a JSON object with exactly two keys:
-{
-  "categories": [<category objects>],
-  "metadata": {<key>: <value>}
-}
-
-## Important Rules
-- Only label effects the simulator can model (the categories above)
-- Cards that don't fit any category: {"categories": [], "metadata": {}}
-- Mana rocks/dorks that add 1 mana: ramp, immediate=false, producer, mana_amount=1
-- Sol Ring (adds 2): ramp, immediate=false, producer, mana_amount=2
-- Cost reducers: ramp, immediate=false, reducer
-- Card draw on ETB: draw, immediate=true
-- Recurring draw each turn: draw, immediate=false, per_turn
-- Draw on cast trigger: draw, immediate=false, per_cast
-- Draw+discard (e.g. Faithless Looting draw 2 discard 2): use both draw and discard categories
+## Rules
+- Cards that don't fit any category: {"categories": []}
+- Draw+discard (e.g. Faithless Looting): use BOTH draw and discard categories
+- IMPORTANT: "producer", "per_turn", "per_cast", etc. go INSIDE the category object, NEVER in metadata
 
 ## Examples
 
-### Sol Ring
-Input: name="Sol Ring", mana_cost="{1}", type_line="Artifact", oracle_text="{T}: Add {C}{C}."
-Output: {"categories": [{"category": "ramp", "immediate": false, "producer": {"mana_amount": 2}}], "metadata": {}}
+Rakdos Signet (mana rock, {T}: Add {B}{R}):
+{
+  "reasoning": "Rakdos Signet is a mana rock that taps for 1 mana. Repeatable producer.",
+  "categories": [
+    {"category": "ramp", "immediate": false, "producer": {"mana_amount": 1}}
+  ]
+}
 
-### Phyrexian Arena
-Input: name="Phyrexian Arena", mana_cost="{1}{B}{B}", type_line="Enchantment", oracle_text="At the beginning of your upkeep, you draw a card and you lose 1 life."
-Output: {"categories": [{"category": "draw", "immediate": false, "per_turn": {"amount": 1}}], "metadata": {}}
+Sol Ring ({T}: Add {C}{C}):
+{
+  "reasoning": "Sol Ring taps for 2 colorless mana. Repeatable producer with amount 2.",
+  "categories": [
+    {"category": "ramp", "immediate": false, "producer": {"mana_amount": 2}}
+  ]
+}
 
-### The Great Henge
-Input: name="The Great Henge", mana_cost="{7}{G}{G}", type_line="Legendary Artifact", oracle_text="This spell costs {X} less to cast, where X is the greatest power among creatures you control. {T}: Add {G}{G}. You gain 2 life. Whenever a nontoken creature enters the battlefield under your control, put a +1/+1 counter on it and draw a card."
-Output: {"categories": [{"category": "ramp", "immediate": false, "producer": {"mana_amount": 2}}, {"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "creature"}}], "metadata": {}}
+Cultivate (search for two lands, one to battlefield tapped, one to hand):
+{
+  "reasoning": "Cultivate puts 1 land onto the battlefield tapped. Land fetch ramp.",
+  "categories": [
+    {"category": "ramp", "immediate": true, "land_to_battlefield": {"count": 1, "tempo": "tapped"}}
+  ]
+}
 
-### Lightning Bolt (no simulatable effect)
-Input: name="Lightning Bolt", mana_cost="{R}", type_line="Instant", oracle_text="Lightning Bolt deals 3 damage to any target."
-Output: {"categories": [], "metadata": {}}
+Phyrexian Arena (draw a card and lose 1 life each upkeep):
+{
+  "reasoning": "Draws 1 card per turn. Repeatable per-turn draw. Life loss is irrelevant.",
+  "categories": [
+    {"category": "draw", "immediate": false, "per_turn": {"amount": 1}}
+  ]
+}
+
+The Great Henge ({T}: Add {G}{G}; draw on creature ETB):
+{
+  "reasoning": "Taps for 2 mana (repeatable producer) and draws on each creature cast.",
+  "categories": [
+    {"category": "ramp", "immediate": false, "producer": {"mana_amount": 2}},
+    {"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "creature"}}
+  ]
+}
+
+Path to Exile (exile target creature, its controller searches for a land):
+{
+  "reasoning": "Removal spell. The land goes to the opponent, not us. No simulatable effect.",
+  "categories": []
+}
 """
 
 BATCH_SYSTEM_PROMPT = """\
 You are a Magic: The Gathering card analyst for a mana curve simulator.
 Your job is to label multiple cards at once with machine-interpretable categories.
 
-## Categories
-Each card gets a list of categories (land, ramp, draw, discard). A card can have multiple.
+## How to respond
+For each card, write a brief "reasoning" analyzing the card, then fill in "categories".
+Each category is a SELF-CONTAINED object — all variant fields go INSIDE it.
 
-### land
-  {"category": "land", "tapped": true}  (only for tapped lands)
+## Category Types
 
 ### ramp
-  Immediate producer: {"category": "ramp", "immediate": true, "producer": {"mana_amount": 3}}
-  Land fetch: {"category": "ramp", "immediate": true, "land_to_battlefield": {"count": 1, "tempo": "tapped"}}
-  Repeatable producer: {"category": "ramp", "immediate": false, "producer": {"mana_amount": 1}}
-  Cost reducer: {"category": "ramp", "immediate": false, "reducer": {"spell_type": "creature", "amount": 1}}
+Repeatable mana producer (mana rocks, signets, dorks):
+  {"category": "ramp", "immediate": false, "producer": {"mana_amount": 1}}
+Immediate mana (rituals, one-shot):
+  {"category": "ramp", "immediate": true, "producer": {"mana_amount": 3}}
+Land fetch (Cultivate, Rampant Growth):
+  {"category": "ramp", "immediate": true, "land_to_battlefield": {"count": 1, "tempo": "tapped"}}
+Cost reducer (Goblin Warchief):
+  {"category": "ramp", "immediate": false, "reducer": {"spell_type": "creature", "amount": 1}}
+  Valid spell_type: "creature", "enchantment", "nonpermanent", "permanent", "spell"
 
 ### draw
-  Immediate: {"category": "draw", "immediate": true, "amount": 3}
-  Per-turn: {"category": "draw", "immediate": false, "per_turn": {"amount": 1}}
-  Per-cast: {"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "creature"}}
+Immediate (Harmonize):
+  {"category": "draw", "immediate": true, "amount": 3}
+Per-turn (Phyrexian Arena):
+  {"category": "draw", "immediate": false, "per_turn": {"amount": 1}}
+Per-cast (Beast Whisperer):
+  {"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "creature"}}
+  Valid trigger: "spell", "creature", "enchantment", "land", "artifact", "nonpermanent"
 
 ### discard
   {"category": "discard", "amount": 2}
 
-## Metadata (all optional)
-  priority (int), override_cmc (int), extra_types (list[str])
+### land
+  {"category": "land", "tapped": true}
+  (only for lands that enter tapped; normal lands need no entry)
+
+## Rules
+- Cards that don't fit any category: {"categories": []}
+- Draw+discard (e.g. Faithless Looting): use BOTH draw and discard categories
+- IMPORTANT: "producer", "per_turn", "per_cast", etc. go INSIDE the category object, NEVER in metadata
 
 ## Output Schema
-Return a JSON object keyed by card name. Each value has "categories" and "metadata":
+Return a JSON object keyed by card name. Each entry has "reasoning" and "categories":
 {
-  "Card Name": {
-    "categories": [<category objects>],
-    "metadata": {...}
+  "Sol Ring": {
+    "reasoning": "Sol Ring taps for 2 colorless mana. Repeatable producer with amount 2.",
+    "categories": [
+      {"category": "ramp", "immediate": false, "producer": {"mana_amount": 2}}
+    ]
   },
-  ...
+  "Lightning Bolt": {
+    "reasoning": "Damage only. No mana, draw, or discard effect for the simulator.",
+    "categories": []
+  }
 }
 
 You MUST include an entry for every card listed in the prompt, using the exact card name.
-Cards with no simulatable effects: {"categories": [], "metadata": {}}
 """
+
+# Expanded category item schema — Ollama uses this for constrained decoding,
+# so all possible variant fields must be declared or the model cannot output them.
+_CATEGORY_ITEM_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "category": {"type": "string"},
+        "immediate": {"type": "boolean"},
+        # ramp variants
+        "producer": {
+            "type": "object",
+            "properties": {
+                "mana_amount": {"type": "integer"},
+            },
+        },
+        "land_to_battlefield": {
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer"},
+                "tempo": {"type": "string"},
+            },
+        },
+        "reducer": {
+            "type": "object",
+            "properties": {
+                "spell_type": {"type": "string"},
+                "amount": {"type": "integer"},
+            },
+        },
+        # draw variants
+        "amount": {"type": "integer"},
+        "per_turn": {
+            "type": "object",
+            "properties": {
+                "amount": {"type": "integer"},
+            },
+        },
+        "per_cast": {
+            "type": "object",
+            "properties": {
+                "amount": {"type": "integer"},
+                "trigger": {"type": "string"},
+            },
+        },
+        # land
+        "tapped": {"type": "boolean"},
+    },
+    "required": ["category"],
+}
 
 _LABEL_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
+        "reasoning": {"type": "string"},
         "categories": {
             "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "category": {"type": "string"},
-                },
-                "required": ["category"],
-            },
+            "items": _CATEGORY_ITEM_SCHEMA,
         },
         "metadata": {"type": "object"},
     },
-    "required": ["categories", "metadata"],
+    "required": ["reasoning", "categories"],
 }
 
 # JSON schema for single-card structured output (ollama format parameter).
@@ -235,6 +307,8 @@ def label_card_batch(
             )
             content = response["message"]["content"]
             parsed = json.loads(content)
+            # Normalize each card's label
+            parsed = {name: _normalize_label(lbl) for name, lbl in parsed.items()}
             # Verify all card names are present
             missing = set(card_names) - set(parsed.keys())
             if missing:
@@ -258,6 +332,15 @@ def label_card_batch(
                 ) from exc
 
     raise ValueError("Failed to label batch")  # pragma: no cover
+
+
+def _normalize_label(raw: dict) -> dict:
+    """Strip reasoning and ensure metadata defaults to {}."""
+    result = {
+        "categories": raw.get("categories", []),
+        "metadata": raw.get("metadata", {}),
+    }
+    return result
 
 
 def label_card(
@@ -286,7 +369,8 @@ def label_card(
                 options={"temperature": 0},
             )
             content = response["message"]["content"]
-            return json.loads(content)
+            parsed = json.loads(content)
+            return _normalize_label(parsed)
         except (json.JSONDecodeError, KeyError) as exc:
             logger.warning(
                 "Attempt %d/%d for %s failed: %s",
@@ -362,21 +446,32 @@ def label_cards(
     for i in range(0, len(to_label), batch_size):
         batches.append(to_label[i : i + batch_size])
 
+    skipped = 0
+
+    def _label_and_validate(card: ScryfallCard) -> dict | None:
+        """Label a single card, returning None if it fails validation."""
+        try:
+            label = label_card(card, model=model)
+        except ValueError:
+            logger.error("Failed to label %s, skipping", card.name)
+            return None
+        errors = validate_label(card.name, label)
+        if errors:
+            logger.warning("Skipping %s (validation errors): %s", card.name, errors)
+            return None
+        return label
+
     def _process_batch(batch: list[ScryfallCard]) -> dict[str, dict]:
+        nonlocal skipped
         batch_results: dict[str, dict] = {}
 
         if len(batch) == 1:
-            # Single card — use single-card path
             card = batch[0]
-            try:
-                label = label_card(card, model=model)
-            except ValueError:
-                logger.error("Failed to label %s, skipping", card.name)
-                return batch_results
-            errors = validate_label(card.name, label)
-            if errors:
-                logger.warning("Validation errors for %s: %s", card.name, errors)
-            batch_results[card.name] = label
+            label = _label_and_validate(card)
+            if label is not None:
+                batch_results[card.name] = label
+            else:
+                skipped += 1
             return batch_results
 
         # Multi-card batch
@@ -386,15 +481,11 @@ def label_cards(
             # Batch failed — fall back to single-card for each
             logger.warning("Batch failed, falling back to single-card labeling")
             for card in batch:
-                try:
-                    label = label_card(card, model=model)
-                except ValueError:
-                    logger.error("Failed to label %s, skipping", card.name)
-                    continue
-                errors = validate_label(card.name, label)
-                if errors:
-                    logger.warning("Validation errors for %s: %s", card.name, errors)
-                batch_results[card.name] = label
+                label = _label_and_validate(card)
+                if label is not None:
+                    batch_results[card.name] = label
+                else:
+                    skipped += 1
             return batch_results
 
         # Validate each card in batch results
@@ -403,20 +494,20 @@ def label_cards(
                 label = batch_labels[card.name]
                 errors = validate_label(card.name, label)
                 if errors:
-                    logger.warning("Validation errors for %s: %s", card.name, errors)
-                batch_results[card.name] = label
+                    logger.warning(
+                        "Skipping %s (validation errors): %s", card.name, errors,
+                    )
+                    skipped += 1
+                else:
+                    batch_results[card.name] = label
             else:
                 # Card missing from batch — fall back to single
                 logger.warning("%s missing from batch, trying single-card", card.name)
-                try:
-                    label = label_card(card, model=model)
-                except ValueError:
-                    logger.error("Failed to label %s, skipping", card.name)
-                    continue
-                errors = validate_label(card.name, label)
-                if errors:
-                    logger.warning("Validation errors for %s: %s", card.name, errors)
-                batch_results[card.name] = label
+                label = _label_and_validate(card)
+                if label is not None:
+                    batch_results[card.name] = label
+                else:
+                    skipped += 1
 
         return batch_results
 
@@ -431,5 +522,10 @@ def label_cards(
                     results.update(batch_results)
                     save_labeled(results, output_path)
                 pbar.update(len(futures[future]))
+
+    if skipped:
+        logger.warning(
+            "%d cards skipped due to errors (re-run to retry them)", skipped,
+        )
 
     return results

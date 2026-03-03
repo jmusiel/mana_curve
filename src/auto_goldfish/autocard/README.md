@@ -5,8 +5,11 @@ Autocard fetches popular EDH cards from Scryfall and labels them with machine-in
 ## Quick Start
 
 ```bash
-# 1. Fetch cards from Scryfall
-autocard fetch --count 1000 --query "(otag:draw or otag:card-advantage or otag:ramp) -t:land f:commander"
+# 1. Fetch cards from Scryfall (per-tag fetching with otag tracking)
+autocard fetch --tags otag:draw otag:card-advantage otag:ramp --query "-t:land f:commander"
+
+# Or with a single combined query (no otag tracking)
+# autocard fetch --count 1000 --query "(otag:draw or otag:card-advantage or otag:ramp) -t:land f:commander"
 
 # 2. Check how many are already in the registry
 autocard coverage
@@ -294,10 +297,26 @@ autocard export
 
 ### `autocard fetch`
 
-Download top cards from Scryfall.
+Download top cards from Scryfall. Supports two modes:
+
+- **Tag-based** (recommended): Fetches each tag separately, deduplicates, and tracks which tags each card matched in the `otags` field. This context is included in LLM prompts to improve labeling accuracy.
+- **Query-based**: Classic single-query mode without otag tracking.
 
 ```
 autocard fetch [--count N] [--query QUERY] [--output PATH]
+               [--tags TAG1 TAG2 ...] [--per-tag-count N]
+```
+
+Examples:
+```bash
+# Tag-based (tracks otags per card)
+autocard fetch --tags otag:draw otag:card-advantage otag:ramp
+
+# Tag-based with custom per-tag count and base query
+autocard fetch --tags otag:draw otag:ramp --per-tag-count 300 --query "-t:land f:commander"
+
+# Classic single query (no otag tracking)
+autocard fetch --count 1000 --query "(otag:draw or otag:ramp) -t:land f:commander"
 ```
 
 ### `autocard coverage`
