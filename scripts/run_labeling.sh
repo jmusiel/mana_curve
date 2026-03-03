@@ -15,9 +15,17 @@ CONCURRENCY="${2:-4}"
 MODEL="${3:-gemma3:12b}"
 
 .venv/bin/python -c "
-from auto_goldfish.autocard.scryfall import load_cards
+from pathlib import Path
+from auto_goldfish.autocard.scryfall import load_cards, fetch_top_cards, save_cards, _DEFAULT_DATA_DIR
 from auto_goldfish.autocard.coverage import analyze_coverage
 from auto_goldfish.autocard.labeler import label_cards
+
+cards_path = _DEFAULT_DATA_DIR / 'top_cards.json'
+if not cards_path.exists():
+    print('top_cards.json not found, fetching from Scryfall...')
+    fetched = fetch_top_cards(count=1000)
+    save_cards(fetched, cards_path)
+    print(f'Saved {len(fetched)} cards to {cards_path}')
 
 cards = load_cards()
 report = analyze_coverage(cards)
