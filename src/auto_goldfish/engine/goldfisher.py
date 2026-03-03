@@ -9,12 +9,23 @@ from __future__ import annotations
 import os
 import random
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor
+try:
+    from concurrent.futures import ProcessPoolExecutor
+except ImportError:
+    ProcessPoolExecutor = None  # type: ignore[misc,assignment]
+
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-from tqdm import tqdm
+
+try:
+    from tqdm import tqdm
+except ImportError:
+
+    def tqdm(iterable, **_kwargs):  # type: ignore[misc]
+        """No-op fallback when tqdm is unavailable (e.g. Pyodide)."""
+        return iterable
 
 from auto_goldfish.effects.card_database import DEFAULT_REGISTRY
 from auto_goldfish.effects.registry import CardEffects, EffectRegistry
@@ -1010,9 +1021,13 @@ class Goldfisher:
             replay_data=replay_data,
         )
 
-    def simulate(self) -> SimulationResult:
-        """Run all simulations and return a ``SimulationResult``."""
-        if self.workers > 1:
+    def simulate(self, progress_callback=None) -> SimulationResult:
+        """Run all simulations and return a ``SimulationResult``.
+
+        Args:
+            progress_callback: Optional callable(current, total) for progress updates.
+        """
+        if self.workers > 1 and ProcessPoolExecutor is not None:
             return self._simulate_from_raw(self._run_parallel())
 
         sample_games = max(self.sims / 10, 100)
@@ -1037,7 +1052,13 @@ class Goldfisher:
         played_cards_per_game: list[set] = []
         replay_buckets: dict[str, list] = {"top": [], "mid": [], "low": []}
 
-        for j in tqdm(range(self.sims), leave=False):
+        game_iter = range(self.sims)
+        if progress_callback is None:
+            game_iter = tqdm(game_iter, leave=False)
+
+        for j in game_iter:
+            if progress_callback is not None:
+                progress_callback(j, self.sims)
             if self.seed is not None:
                 random.seed(self.seed + j)
             state = self._reset()

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 
-from flask import Blueprint, abort, flash, jsonify, render_template, request
+from flask import Blueprint, abort, flash, jsonify, render_template, request, send_file
 
 from auto_goldfish.decklist.loader import get_deckpath, load_decklist, load_overrides, save_overrides
 from auto_goldfish.effects.builtin import (
@@ -254,3 +255,54 @@ def api_results(job_id: str):
     if status is None or status["status"] != "completed":
         abort(404)
     return jsonify(status["results"])
+
+
+@bp.route("/api/<deck_name>/deck")
+def api_deck(deck_name: str):
+    """Return the deck card list as JSON."""
+    path = get_deckpath(deck_name)
+    if not os.path.isfile(path):
+        abort(404)
+    deck_list = load_decklist(deck_name)
+    return jsonify(deck_list)
+
+
+@bp.route("/api/<deck_name>/effects")
+def api_effects(deck_name: str):
+    """Return merged effect overrides + default registry as JSON."""
+    path = get_deckpath(deck_name)
+    if not os.path.isfile(path):
+        abort(404)
+
+    saved_overrides = load_overrides(deck_name)
+    deck_list = load_decklist(deck_name)
+
+    # Build effects dict: card name -> override JSON format
+    effects = {}
+    for card_dict in deck_list:
+        name = card_dict.get("name", "")
+        types = card_dict.get("types", [])
+        if "Land" in types:
+            continue
+        # User override takes precedence
+        if name in saved_overrides:
+            effects[name] = saved_overrides[name]
+        else:
+            card_effects = DEFAULT_REGISTRY.get(name)
+            if card_effects is not None:
+                effects[name] = _effects_to_override(card_effects)
+
+    return jsonify(effects)
+
+
+@bp.route("/api/wheel")
+def api_wheel():
+    """Serve the auto_goldfish wheel file for Pyodide installation."""
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    )
+    dist_dir = os.path.join(project_root, "dist")
+    wheels = sorted(glob.glob(os.path.join(dist_dir, "auto_goldfish-*.whl")))
+    if not wheels:
+        abort(404)
+    return send_file(wheels[-1], mimetype="application/zip")

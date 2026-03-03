@@ -255,9 +255,20 @@
             </select>
         </div>
     </div>
-    <button type="submit" class="btn btn-primary">Run Simulation</button>
+    <div class="form-group" id="local-sim-group">
+        <label class="toggle-label">
+            <input type="checkbox" id="run-locally" onchange="onLocalToggle()">
+            Run on your computer (experimental)
+        </label>
+        <small class="hint" id="local-sim-hint" style="display:none">
+            Simulation runs in your browser via WebAssembly. First run takes ~10s to load the engine.
+            <span id="local-sim-estimate"></span>
+        </small>
+    </div>
+    <button type="submit" class="btn btn-primary" id="submit-btn">Run Simulation</button>
 </form>
 <div id="job-status"></div>
+<div id="local-results"></div>
 
 <script>
 (function() {
@@ -929,4 +940,182 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
 })();
 </script>
 {% endif %}
+
+<script>
+// -- Client-side (Pyodide) simulation logic --
+(function() {
+    const DECK_NAME = {{ deck_name | tojson }};
+    const DECK_API_URL = "{{ url_for('simulation.api_deck', deck_name=deck_name) }}";
+    const EFFECTS_API_URL = "{{ url_for('simulation.api_effects', deck_name=deck_name) }}";
+    const WHEEL_URL = "{{ url_for('simulation.api_wheel') }}";
+    const WORKER_URL = "{{ url_for('static', filename='js/pyodide_worker.js') }}";
+
+    let worker = null;
+    let pyodideReady = false;
+    let pyodideInitializing = false;
+
+    const localToggle = document.getElementById('run-locally');
+    const workersGroup = document.getElementById('workers').closest('.form-group');
+    const localHint = document.getElementById('local-sim-hint');
+    const localEstimate = document.getElementById('local-sim-estimate');
+    const form = document.getElementById('sim-form');
+    const jobStatus = document.getElementById('job-status');
+    const localResults = document.getElementById('local-results');
+
+    window.onLocalToggle = function() {
+        const isLocal = localToggle.checked;
+        workersGroup.style.display = isLocal ? 'none' : '';
+        localHint.style.display = isLocal ? 'block' : 'none';
+
+        if (isLocal) {
+            updateEstimate();
+            initWorker();
+        }
+    };
+
+    function updateEstimate() {
+        const sims = parseInt(document.getElementById('sims').value) || 1000;
+        const minLands = parseInt(document.getElementById('min_lands').value) || 36;
+        const maxLands = parseInt(document.getElementById('max_lands').value) || 39;
+        const landCounts = maxLands - minLands + 1;
+        // Rough estimate: ~3ms per sim per land count on modern hardware
+        const estSeconds = Math.ceil((sims * landCounts * 3) / 1000);
+        localEstimate.textContent = 'Estimated time: ~' + estSeconds + 's for '
+            + sims + ' sims x ' + landCounts + ' land counts.';
+    }
+
+    function initWorker() {
+        if (worker || pyodideInitializing) return;
+        pyodideInitializing = true;
+
+        worker = new Worker(WORKER_URL);
+        worker.onmessage = handleWorkerMessage;
+        worker.postMessage({type: 'init', wheelUrl: window.location.origin + WHEEL_URL});
+    }
+
+    function handleWorkerMessage(e) {
+        const msg = e.data;
+
+        if (msg.type === 'init_progress') {
+            jobStatus.innerHTML = '<div class="job-status"><p>' + msg.message + '</p></div>';
+        } else if (msg.type === 'ready') {
+            pyodideReady = true;
+            pyodideInitializing = false;
+            jobStatus.innerHTML = '<div class="job-status"><p>Engine ready.</p></div>';
+            setTimeout(function() {
+                if (jobStatus.textContent.trim() === 'Engine ready.') {
+                    jobStatus.innerHTML = '';
+                }
+            }, 2000);
+        } else if (msg.type === 'progress') {
+            const pct = Math.round((msg.current / msg.total) * 100);
+            jobStatus.innerHTML = '<div class="job-status">'
+                + '<div class="progress-bar-container">'
+                + '<div class="progress-bar" style="width: ' + pct + '%"></div>'
+                + '</div>'
+                + '<p>Simulating... ' + pct + '% (' + msg.current + '/' + msg.total + ')</p>'
+                + '</div>';
+        } else if (msg.type === 'result') {
+            jobStatus.innerHTML = '';
+            localResults.innerHTML = '';
+            ClientResults.render(localResults, msg.data, DECK_NAME);
+            document.getElementById('submit-btn').disabled = false;
+        } else if (msg.type === 'error') {
+            jobStatus.innerHTML = '<div class="job-status error"><p>Error: ' + msg.message + '</p></div>';
+            document.getElementById('submit-btn').disabled = false;
+        }
+    }
+
+    // Intercept form submission for local mode
+    form.addEventListener('submit', function(e) {
+        if (!localToggle.checked) return; // Let HTMX handle server-side
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!pyodideReady) {
+            jobStatus.innerHTML = '<div class="job-status"><p>Waiting for engine to load...</p></div>';
+            if (!pyodideInitializing) initWorker();
+            // Retry after a short delay
+            const retryInterval = setInterval(function() {
+                if (pyodideReady) {
+                    clearInterval(retryInterval);
+                    startLocalSimulation();
+                }
+            }, 500);
+            return;
+        }
+
+        startLocalSimulation();
+    });
+
+    async function startLocalSimulation() {
+        document.getElementById('submit-btn').disabled = true;
+        localResults.innerHTML = '';
+        jobStatus.innerHTML = '<div class="job-status"><p>Fetching deck data...</p></div>';
+
+        // Collect overrides before fetching
+        if (typeof collectOverrides === 'function') {
+            collectOverrides();
+        }
+
+        try {
+            // Fetch deck and effects data in parallel
+            const [deckResp, effectsResp] = await Promise.all([
+                fetch(DECK_API_URL),
+                fetch(EFFECTS_API_URL),
+            ]);
+
+            if (!deckResp.ok || !effectsResp.ok) {
+                throw new Error('Failed to fetch deck data');
+            }
+
+            const deckData = await deckResp.json();
+            const effectsData = await effectsResp.json();
+
+            const overridesInput = document.getElementById('effect-overrides-input');
+            let effectOverrides = {};
+            if (overridesInput && overridesInput.value) {
+                try { effectOverrides = JSON.parse(overridesInput.value); } catch (e) {}
+            }
+            // Merge server effects with user overrides
+            const mergedOverrides = Object.assign({}, effectsData, effectOverrides);
+
+            const config = {
+                turns: parseInt(document.getElementById('turns').value) || 10,
+                sims: parseInt(document.getElementById('sims').value) || 1000,
+                min_lands: parseInt(document.getElementById('min_lands').value),
+                max_lands: parseInt(document.getElementById('max_lands').value),
+                record_results: document.getElementById('record_results').value || 'quartile',
+                mulligan: document.getElementById('mulligan').value || 'default',
+                effect_overrides: mergedOverrides,
+            };
+
+            const seedVal = document.getElementById('seed').value.trim();
+            if (seedVal) config.seed = parseInt(seedVal);
+
+            jobStatus.innerHTML = '<div class="job-status"><p>Starting simulation...</p></div>';
+            worker.postMessage({
+                type: 'run',
+                deckJson: JSON.stringify(deckData),
+                configJson: JSON.stringify(config),
+            });
+        } catch (err) {
+            jobStatus.innerHTML = '<div class="job-status error"><p>Error: ' + err.message + '</p></div>';
+            document.getElementById('submit-btn').disabled = false;
+        }
+    }
+
+    // Update estimate when sims or land range changes
+    document.getElementById('sims').addEventListener('input', function() {
+        if (localToggle.checked) updateEstimate();
+    });
+    document.getElementById('min-slider').addEventListener('input', function() {
+        if (localToggle.checked) updateEstimate();
+    });
+    document.getElementById('max-slider').addEventListener('input', function() {
+        if (localToggle.checked) updateEstimate();
+    });
+})();
+</script>
 {% endblock %}
