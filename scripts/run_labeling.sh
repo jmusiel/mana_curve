@@ -23,7 +23,7 @@ from auto_goldfish.autocard.labeler import label_cards
 cards_path = _DEFAULT_DATA_DIR / 'top_cards.json'
 if not cards_path.exists():
     print('top_cards.json not found, fetching from Scryfall...')
-    fetched = fetch_top_cards(count=1000)
+    fetched = fetch_top_cards(count=1000, query='(otag:draw or otag:card-advantage or otag:ramp) -t:land f:commander')
     save_cards(fetched, cards_path)
     print(f'Saved {len(fetched)} cards to {cards_path}')
 
