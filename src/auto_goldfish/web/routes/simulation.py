@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 
 from flask import Blueprint, abort, jsonify, render_template, request, send_file
+
+logger = logging.getLogger(__name__)
 
 from auto_goldfish.decklist.loader import get_deckpath, load_decklist, load_overrides, save_overrides
 from auto_goldfish.effects.builtin import (
@@ -129,6 +132,13 @@ def config(deck_name: str):
         {"name": c["name"], "cmc": c["cmc"], "types": c["types"]}
         for c in card_effects_list
     ]
+
+    try:
+        from auto_goldfish.db.persistence import persist_deck_cards
+
+        persist_deck_cards(deck_name, card_effects_list, saved_overrides)
+    except Exception:
+        logger.exception("Failed to persist deck cards to DB")
 
     effect_schema = get_effect_schema()
 

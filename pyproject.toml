@@ -22,6 +22,9 @@ dev = [
 autocard = [
     "ollama>=0.4.0",
 ]
+db = [
+    "sqlalchemy>=2.0",
+]
 
 [project.scripts]
 auto-goldfish = "auto_goldfish.cli.main:main"
