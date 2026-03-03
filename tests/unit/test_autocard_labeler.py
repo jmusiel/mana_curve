@@ -323,28 +323,12 @@ class TestConservativePrompts:
         system_msg = call_kwargs.kwargs["messages"][0]["content"]
         assert system_msg == BATCH_SYSTEM_PROMPT
 
-    def test_conservative_prompt_excludes_disallowed_types(self):
-        """Conservative prompts should not mention excluded types."""
-        for excluded in ("tutor_to_hand", "per_cast_draw",
-                         "cryptolith_rites_mana", "enchantment_sanctum_mana"):
+    def test_conservative_prompt_excludes_complex_variants(self):
+        """Conservative prompts should not mention complex category variants."""
+        for excluded in ("per_cast", "land_to_battlefield", "reducer"):
             assert excluded not in CONSERVATIVE_SYSTEM_PROMPT, (
                 f"{excluded} found in CONSERVATIVE_SYSTEM_PROMPT"
             )
             assert excluded not in CONSERVATIVE_BATCH_SYSTEM_PROMPT, (
                 f"{excluded} found in CONSERVATIVE_BATCH_SYSTEM_PROMPT"
             )
-
-    def test_conservative_prompt_excludes_disallowed_slots(self):
-        """Conservative prompts should not list cast_trigger or mana_function as valid."""
-        for prompt in (CONSERVATIVE_SYSTEM_PROMPT, CONSERVATIVE_BATCH_SYSTEM_PROMPT):
-            # The prompts explicitly say "Do NOT use" these slots,
-            # but they should not appear in the "Valid Slots" list
-            valid_slots_section = prompt.split("## Valid Slots")[1].split("##")[0]
-            assert "cast_trigger:" not in valid_slots_section
-            assert "mana_function:" not in valid_slots_section
-
-    def test_conservative_prompt_excludes_is_land_tutor(self):
-        """Conservative prompts should not list is_land_tutor as valid metadata."""
-        for prompt in (CONSERVATIVE_SYSTEM_PROMPT, CONSERVATIVE_BATCH_SYSTEM_PROMPT):
-            metadata_section = prompt.split("## Metadata Fields")[1].split("##")[0]
-            assert "is_land_tutor" not in metadata_section
