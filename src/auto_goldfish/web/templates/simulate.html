@@ -6,10 +6,7 @@
 {% block title %}Simulate {{ deck_name }} - Auto Goldfish{% endblock %}
 {% block content %}
 <h1>Simulate: {{ deck_name }}</h1>
-<form hx-post="{{ url_for('simulation.run', deck_name=deck_name) }}"
-      hx-target="#job-status"
-      hx-swap="innerHTML"
-      id="sim-form">
+<form id="sim-form">
 
     <!-- Card Labeler Wizard -->
     <div id="card-labeler" style="display:none;" class="labeler-pane">
@@ -185,7 +182,7 @@
     </details>
     {% endif %}
 
-    <input type="hidden" name="effect_overrides" id="effect-overrides-input" value="{}">
+    <input type="hidden" id="effect-overrides-input" value="{}">
 
     <!-- Simulation Parameters -->
     <div class="form-row">
@@ -234,18 +231,14 @@
             <input type="number" id="seed" name="seed" placeholder="Random">
         </div>
         <div class="form-group">
-            <label for="workers">Workers (0 = all CPUs)</label>
-            <input type="number" id="workers" name="workers" value="0" min="0" max="32">
-        </div>
-    </div>
-    <div class="form-row">
-        <div class="form-group">
             <label for="mulligan">Mulligan Strategy</label>
             <select id="mulligan" name="mulligan">
                 <option value="default" selected>Default (3-4 lands)</option>
                 <option value="curve_aware">Curve Aware</option>
             </select>
         </div>
+    </div>
+    <div class="form-row">
         <div class="form-group">
             <label for="record_results">Record Detail Level</label>
             <select id="record_results" name="record_results">
@@ -255,9 +248,14 @@
             </select>
         </div>
     </div>
-    <button type="submit" class="btn btn-primary">Run Simulation</button>
+    <small class="hint" id="local-sim-hint">
+        Simulation runs in your browser via WebAssembly.
+        <span id="local-sim-estimate"></span>
+    </small>
+    <button type="submit" class="btn btn-primary" id="submit-btn">Run Simulation</button>
 </form>
 <div id="job-status"></div>
+<div id="local-results"></div>
 
 <script>
 (function() {
@@ -675,11 +673,6 @@ function loadSavedOverrides() {
     collectOverrides();
 }
 
-// Collect on form submit
-document.getElementById('sim-form').addEventListener('htmx:configRequest', function() {
-    collectOverrides();
-});
-
 // Load saved overrides on page load
 loadSavedOverrides();
 
@@ -929,4 +922,175 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
 })();
 </script>
 {% endif %}
+
+<script>
+// -- Client-side (Pyodide) simulation --
+(function() {
+    const DECK_NAME = {{ deck_name | tojson }};
+    const DECK_API_URL = "{{ url_for('simulation.api_deck', deck_name=deck_name) }}";
+    const EFFECTS_API_URL = "{{ url_for('simulation.api_effects', deck_name=deck_name) }}";
+    const WHEEL_META_URL = "{{ url_for('simulation.api_wheel') }}";
+    const WORKER_URL = "{{ url_for('static', filename='js/pyodide_worker.js') }}";
+
+    let worker = null;
+    let pyodideReady = false;
+    let pyodideInitializing = false;
+    let resolvedWheelUrl = null;
+
+    const form = document.getElementById('sim-form');
+    const jobStatus = document.getElementById('job-status');
+    const localResults = document.getElementById('local-results');
+
+    function updateEstimate() {
+        const sims = parseInt(document.getElementById('sims').value) || 1000;
+        const minLands = parseInt(document.getElementById('min_lands').value) || 36;
+        const maxLands = parseInt(document.getElementById('max_lands').value) || 39;
+        const landCounts = maxLands - minLands + 1;
+        // Rough estimate: ~3ms per sim per land count on modern hardware
+        const estSeconds = Math.ceil((sims * landCounts * 3) / 1000);
+        document.getElementById('local-sim-estimate').textContent =
+            'Estimated time: ~' + estSeconds + 's for '
+            + sims + ' sims x ' + landCounts + ' land counts.';
+    }
+
+    async function initWorker() {
+        if (worker || pyodideInitializing) return;
+        pyodideInitializing = true;
+
+        // Fetch wheel filename so we can build a URL ending in .whl
+        // (micropip requires the .whl extension to recognise it as a wheel)
+        try {
+            const resp = await fetch(WHEEL_META_URL);
+            if (!resp.ok) throw new Error('Wheel not found');
+            const meta = await resp.json();
+            resolvedWheelUrl = window.location.origin + WHEEL_META_URL + '/' + meta.filename;
+        } catch (err) {
+            jobStatus.innerHTML = '<div class="job-status error"><p>Error: Could not find simulation wheel. Run <code>uv build --wheel</code> first.</p></div>';
+            pyodideInitializing = false;
+            return;
+        }
+
+        worker = new Worker(WORKER_URL);
+        worker.onmessage = handleWorkerMessage;
+        worker.postMessage({type: 'init', wheelUrl: resolvedWheelUrl});
+    }
+
+    function handleWorkerMessage(e) {
+        const msg = e.data;
+
+        if (msg.type === 'init_progress') {
+            jobStatus.innerHTML = '<div class="job-status"><p>' + msg.message + '</p></div>';
+        } else if (msg.type === 'ready') {
+            pyodideReady = true;
+            pyodideInitializing = false;
+            jobStatus.innerHTML = '<div class="job-status"><p>Engine ready.</p></div>';
+            setTimeout(function() {
+                if (jobStatus.textContent.trim() === 'Engine ready.') {
+                    jobStatus.innerHTML = '';
+                }
+            }, 2000);
+        } else if (msg.type === 'progress') {
+            const pct = Math.round((msg.current / msg.total) * 100);
+            jobStatus.innerHTML = '<div class="job-status">'
+                + '<div class="progress-bar-container">'
+                + '<div class="progress-bar" style="width: ' + pct + '%"></div>'
+                + '</div>'
+                + '<p>Simulating... ' + pct + '% (' + msg.current + '/' + msg.total + ')</p>'
+                + '</div>';
+        } else if (msg.type === 'result') {
+            jobStatus.innerHTML = '';
+            localResults.innerHTML = '';
+            ClientResults.render(localResults, msg.data, DECK_NAME);
+            document.getElementById('submit-btn').disabled = false;
+        } else if (msg.type === 'error') {
+            jobStatus.innerHTML = '<div class="job-status error"><p>Error: ' + msg.message + '</p></div>';
+            document.getElementById('submit-btn').disabled = false;
+        }
+    }
+
+    // Intercept form submission -- always run locally
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        if (!pyodideReady) {
+            jobStatus.innerHTML = '<div class="job-status"><p>Waiting for engine to load...</p></div>';
+            if (!pyodideInitializing) initWorker();
+            const retryInterval = setInterval(function() {
+                if (pyodideReady) {
+                    clearInterval(retryInterval);
+                    startLocalSimulation();
+                }
+            }, 500);
+            return;
+        }
+
+        startLocalSimulation();
+    });
+
+    async function startLocalSimulation() {
+        document.getElementById('submit-btn').disabled = true;
+        localResults.innerHTML = '';
+        jobStatus.innerHTML = '<div class="job-status"><p>Fetching deck data...</p></div>';
+
+        // Collect overrides before fetching
+        if (typeof collectOverrides === 'function') {
+            collectOverrides();
+        }
+
+        try {
+            const [deckResp, effectsResp] = await Promise.all([
+                fetch(DECK_API_URL),
+                fetch(EFFECTS_API_URL),
+            ]);
+
+            if (!deckResp.ok || !effectsResp.ok) {
+                throw new Error('Failed to fetch deck data');
+            }
+
+            const deckData = await deckResp.json();
+            const effectsData = await effectsResp.json();
+
+            const overridesInput = document.getElementById('effect-overrides-input');
+            let effectOverrides = {};
+            if (overridesInput && overridesInput.value) {
+                try { effectOverrides = JSON.parse(overridesInput.value); } catch (e) {}
+            }
+            // Merge server effects with user overrides
+            const mergedOverrides = Object.assign({}, effectsData, effectOverrides);
+
+            const config = {
+                turns: parseInt(document.getElementById('turns').value) || 10,
+                sims: parseInt(document.getElementById('sims').value) || 1000,
+                min_lands: parseInt(document.getElementById('min_lands').value),
+                max_lands: parseInt(document.getElementById('max_lands').value),
+                record_results: document.getElementById('record_results').value || 'quartile',
+                mulligan: document.getElementById('mulligan').value || 'default',
+                effect_overrides: mergedOverrides,
+            };
+
+            const seedVal = document.getElementById('seed').value.trim();
+            if (seedVal) config.seed = parseInt(seedVal);
+
+            jobStatus.innerHTML = '<div class="job-status"><p>Starting simulation...</p></div>';
+            worker.postMessage({
+                type: 'run',
+                deckJson: JSON.stringify(deckData),
+                configJson: JSON.stringify(config),
+            });
+        } catch (err) {
+            jobStatus.innerHTML = '<div class="job-status error"><p>Error: ' + err.message + '</p></div>';
+            document.getElementById('submit-btn').disabled = false;
+        }
+    }
+
+    // Update estimate when params change
+    document.getElementById('sims').addEventListener('input', updateEstimate);
+    document.getElementById('min-slider').addEventListener('input', updateEstimate);
+    document.getElementById('max-slider').addEventListener('input', updateEstimate);
+
+    // Initialize Pyodide on page load
+    updateEstimate();
+    initWorker();
+})();
+</script>
 {% endblock %}

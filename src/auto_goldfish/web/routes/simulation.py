@@ -1,11 +1,12 @@
-"""Simulation routes -- config, run, poll, results."""
+"""Simulation routes -- config page and data APIs for client-side simulation."""
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 
-from flask import Blueprint, abort, flash, jsonify, render_template, request
+from flask import Blueprint, abort, jsonify, render_template, request, send_file
 
 from auto_goldfish.decklist.loader import get_deckpath, load_decklist, load_overrides, save_overrides
 from auto_goldfish.effects.builtin import (
@@ -20,21 +21,14 @@ from auto_goldfish.effects.builtin import (
 )
 from auto_goldfish.effects.card_database import DEFAULT_REGISTRY
 from auto_goldfish.effects.json_loader import get_effect_schema
-from auto_goldfish.web.services.simulation_runner import SimulationRunner
 
-# Web UI compute limits (CLI remains unrestricted)
+# Client-side compute limits (enforced in JS)
 MAX_SIMS = 10000
 MAX_TURNS = 14
 MAX_LAND_SWEEP = 10
 
 bp = Blueprint("simulation", __name__, url_prefix="/sim")
 
-# Single runner shared across requests (app-level singleton)
-_runner = SimulationRunner()
-
-
-def get_runner() -> SimulationRunner:
-    return _runner
 
 
 def _effects_to_override(card_effects):
@@ -153,63 +147,6 @@ def config(deck_name: str):
     )
 
 
-@bp.route("/<deck_name>/run", methods=["POST"])
-def run(deck_name: str):
-    path = get_deckpath(deck_name)
-    if not os.path.isfile(path):
-        abort(404)
-
-    seed_val = request.form.get("seed", "").strip()
-    workers_val = int(request.form.get("workers", 0))
-
-    # Parse effect overrides JSON (empty dict if missing or invalid)
-    overrides_raw = request.form.get("effect_overrides", "{}").strip()
-    try:
-        effect_overrides = json.loads(overrides_raw) if overrides_raw else {}
-    except (json.JSONDecodeError, TypeError):
-        effect_overrides = {}
-
-    # Persist overrides to disk (even if empty, to clear previous overrides)
-    save_overrides(deck_name, effect_overrides)
-
-    turns = int(request.form.get("turns", 10))
-    sims = int(request.form.get("sims", 1000))
-    min_lands = int(request.form.get("min_lands", 36))
-    max_lands = int(request.form.get("max_lands", 39))
-
-    # Server-side validation (web UI limits)
-    errors = []
-    if sims > MAX_SIMS:
-        errors.append(f"Simulations cannot exceed {MAX_SIMS}.")
-    if turns > MAX_TURNS:
-        errors.append(f"Turns cannot exceed {MAX_TURNS}.")
-    if min_lands > max_lands:
-        errors.append("Min lands must be less than or equal to max lands.")
-    if max_lands - min_lands > MAX_LAND_SWEEP:
-        errors.append(f"Land range cannot exceed {MAX_LAND_SWEEP}.")
-    if errors:
-        for e in errors:
-            flash(e, "error")
-        return render_template("partials/validation_error.html", errors=errors), 400
-
-    sim_config = {
-        "turns": turns,
-        "sims": sims,
-        "min_lands": min_lands,
-        "max_lands": max_lands,
-        "record_results": request.form.get("record_results", "quartile"),
-        "seed": int(seed_val) if seed_val else None,
-        "workers": workers_val if workers_val > 0 else (os.cpu_count() or 1),
-        "mulligan": request.form.get("mulligan", "default"),
-        "effect_overrides": effect_overrides,
-    }
-
-    runner = get_runner()
-    job_id = runner.submit(deck_name, sim_config)
-    status = runner.get_status(job_id)
-    return render_template("partials/job_status.html", **status)
-
-
 @bp.route("/<deck_name>/overrides", methods=["POST"])
 def save_overrides_api(deck_name: str):
     path = get_deckpath(deck_name)
@@ -225,32 +162,68 @@ def save_overrides_api(deck_name: str):
     return jsonify({"ok": True})
 
 
-@bp.route("/status/<job_id>")
-def status(job_id: str):
-    runner = get_runner()
-    status = runner.get_status(job_id)
-    if status is None:
+@bp.route("/api/<deck_name>/deck")
+def api_deck(deck_name: str):
+    """Return the deck card list as JSON."""
+    path = get_deckpath(deck_name)
+    if not os.path.isfile(path):
+        abort(404)
+    deck_list = load_decklist(deck_name)
+    return jsonify(deck_list)
+
+
+@bp.route("/api/<deck_name>/effects")
+def api_effects(deck_name: str):
+    """Return merged effect overrides + default registry as JSON."""
+    path = get_deckpath(deck_name)
+    if not os.path.isfile(path):
         abort(404)
 
-    if status["status"] == "completed":
-        return render_template("partials/results_content.html", **status)
+    saved_overrides = load_overrides(deck_name)
+    deck_list = load_decklist(deck_name)
 
-    return render_template("partials/job_status.html", **status)
+    # Build effects dict: card name -> override JSON format
+    effects = {}
+    for card_dict in deck_list:
+        name = card_dict.get("name", "")
+        types = card_dict.get("types", [])
+        if "Land" in types:
+            continue
+        # User override takes precedence
+        if name in saved_overrides:
+            effects[name] = saved_overrides[name]
+        else:
+            card_effects = DEFAULT_REGISTRY.get(name)
+            if card_effects is not None:
+                effects[name] = _effects_to_override(card_effects)
+
+    return jsonify(effects)
 
 
-@bp.route("/results/<job_id>")
-def results(job_id: str):
-    runner = get_runner()
-    status = runner.get_status(job_id)
-    if status is None or status["status"] != "completed":
+@bp.route("/api/wheel")
+def api_wheel():
+    """Return the wheel filename so the client can build the download URL."""
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    )
+    dist_dir = os.path.join(project_root, "dist")
+    wheels = sorted(glob.glob(os.path.join(dist_dir, "auto_goldfish-*.whl")))
+    if not wheels:
         abort(404)
-    return render_template("results.html", **status)
+    filename = os.path.basename(wheels[-1])
+    return jsonify({"filename": filename})
 
 
-@bp.route("/api/results/<job_id>")
-def api_results(job_id: str):
-    runner = get_runner()
-    status = runner.get_status(job_id)
-    if status is None or status["status"] != "completed":
+@bp.route("/api/wheel/<filename>")
+def api_wheel_download(filename: str):
+    """Serve a specific wheel file. The .whl extension in the URL is required
+    for micropip to recognise this as a wheel rather than a package name."""
+    if not filename.endswith(".whl") or "/" in filename or ".." in filename:
+        abort(400)
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    )
+    wheel_path = os.path.join(project_root, "dist", filename)
+    if not os.path.isfile(wheel_path):
         abort(404)
-    return jsonify(status["results"])
+    return send_file(wheel_path, mimetype="application/zip")
