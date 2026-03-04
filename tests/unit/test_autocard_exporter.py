@@ -1,4 +1,4 @@
-"""Tests for autocard exporter."""
+"""Tests for autocard exporter (category format)."""
 
 from __future__ import annotations
 
@@ -13,25 +13,25 @@ from auto_goldfish.effects.json_loader import load_registry_from_json
 
 
 _RAMP_LABEL = {
-    "effects": [
-        {"type": "produce_mana", "slot": "on_play", "params": {"amount": 1}},
-    ],
-    "metadata": {"ramp": True},
-}
-
-_DRAW_LABEL = {
-    "effects": [
-        {"type": "per_turn_draw", "slot": "per_turn", "params": {"amount": 1}},
+    "categories": [
+        {"category": "ramp", "immediate": False, "producer": {"mana_amount": 1}},
     ],
     "metadata": {},
 }
 
-_EMPTY_LABEL = {"effects": [], "metadata": {}}
+_DRAW_LABEL = {
+    "categories": [
+        {"category": "draw", "immediate": False, "per_turn": {"amount": 1}},
+    ],
+    "metadata": {},
+}
+
+_EMPTY_LABEL = {"categories": [], "metadata": {}}
 
 
 class TestGroupByEffects:
-    def test_same_effects_grouped_together(self):
-        """3 cards with identical effects -> 1 group."""
+    def test_same_categories_grouped_together(self):
+        """3 cards with identical categories -> 1 group."""
         labeled = {
             "Arcane Signet": _RAMP_LABEL,
             "Fellwar Stone": _RAMP_LABEL,
@@ -41,8 +41,8 @@ class TestGroupByEffects:
         assert len(groups) == 1
         assert len(groups[0]["cards"]) == 3
 
-    def test_different_effects_separate_groups(self):
-        """Cards with different effects -> separate groups."""
+    def test_different_categories_separate_groups(self):
+        """Cards with different categories -> separate groups."""
         labeled = {
             "Arcane Signet": _RAMP_LABEL,
             "Phyrexian Arena": _DRAW_LABEL,
@@ -60,19 +60,19 @@ class TestGroupByEffects:
         assert len(groups) == 1
         assert groups[0]["group"] == "Unlabeled / No Effect"
 
-    def test_group_defaults_contain_effects_and_metadata(self):
-        """Group defaults should have effects and metadata."""
+    def test_group_defaults_contain_categories(self):
+        """Group defaults should have categories and metadata."""
         labeled = {"Sol Ring": {
-            "effects": [
-                {"type": "produce_mana", "slot": "on_play", "params": {"amount": 2}},
+            "categories": [
+                {"category": "ramp", "immediate": False, "producer": {"mana_amount": 2}},
             ],
-            "metadata": {"ramp": True},
+            "metadata": {"priority": 2},
         }}
         groups = group_by_effects(labeled)
         assert len(groups) == 1
         defaults = groups[0]["defaults"]
-        assert "effects" in defaults
-        assert defaults["ramp"] is True
+        assert "categories" in defaults
+        assert defaults["priority"] == 2
 
     def test_empty_input(self):
         groups = group_by_effects({})
@@ -92,17 +92,17 @@ class TestExportToRegistry:
             with open(out) as f:
                 data = json.load(f)
 
-        assert data["version"] == 1
+        assert data["version"] == 2
         assert len(data["groups"]) == 2
 
     def test_preserves_existing_registry(self):
         """Cards in existing registry are NOT overwritten."""
         existing = {
-            "version": 1,
+            "version": 2,
             "groups": [{
                 "group": "Existing",
-                "defaults": {"ramp": True, "effects": [
-                    {"type": "produce_mana", "slot": "on_play", "params": {"amount": 2}},
+                "defaults": {"categories": [
+                    {"category": "ramp", "immediate": False, "producer": {"mana_amount": 2}},
                 ]},
                 "cards": {"Sol Ring": {}},
             }],

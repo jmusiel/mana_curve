@@ -11,6 +11,110 @@
       hx-swap="innerHTML"
       id="sim-form">
 
+    <!-- Card Labeler Wizard -->
+    <div id="card-labeler" style="display:none;" class="labeler-pane">
+        <div class="labeler-header">
+            <h2>Card Labeler</h2>
+            <span class="labeler-progress" id="labeler-progress"></span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="labelerClose()">Close</button>
+        </div>
+        <div class="labeler-body">
+            <div class="labeler-card-display">
+                <img id="labeler-image" class="labeler-image" src="" alt="Card image">
+                <div class="labeler-card-info">
+                    <strong id="labeler-card-name"></strong>
+                    <span id="labeler-card-cmc"></span>
+                </div>
+            </div>
+            <div class="labeler-controls">
+                <div id="labeler-step-classify" class="labeler-step">
+                    <p class="labeler-prompt">What does this card do?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('draw')">Draw</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('ramp')">Ramp</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('both')">Both</button>
+                        <button type="button" class="btn btn-secondary" onclick="labelerChoose('neither')">Neither</button>
+                    </div>
+                </div>
+                <div id="labeler-step-ramp" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">What kind of ramp?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('mana_rock')">Mana Rock</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('mana_dork')">Mana Dork</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('land_ramp')">Land Ramp</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('ritual')">Ritual</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('cost_reducer')">Cost Reducer</button>
+                    </div>
+                </div>
+                <div id="labeler-step-tempo" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">Does it enter tapped or untapped?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('tapped')">Tapped</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('untapped')">Untapped</button>
+                    </div>
+                </div>
+                <div id="labeler-step-spell-type" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">What spell type does it reduce?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('creature')">Creature</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('enchantment')">Enchantment</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('nonpermanent')">Nonpermanent</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('permanent')">Permanent</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('spell')">Spell</button>
+                    </div>
+                </div>
+                <div id="labeler-step-draw-type" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">Does it also discard?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('draw_only')">Draw Only</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('draw_discard')">Draw/Discard</button>
+                    </div>
+                </div>
+                <div id="labeler-step-draw-timing" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">When does it draw?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('immediate')">Immediate (ETB)</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('per_turn')">Per Turn</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('per_cast')">Per Cast</button>
+                    </div>
+                </div>
+                <div id="labeler-step-trigger" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt">What triggers the draw?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('creature')">Creature</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('spell')">Spell</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('enchantment')">Enchantment</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('land')">Land</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('artifact')">Artifact</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose('nonpermanent')">Nonpermanent</button>
+                    </div>
+                </div>
+                <div id="labeler-step-amount" class="labeler-step" style="display:none;">
+                    <p class="labeler-prompt" id="labeler-amount-prompt">How many?</p>
+                    <div class="labeler-buttons">
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose(1)">1</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose(2)">2</button>
+                        <button type="button" class="btn btn-primary" onclick="labelerChoose(3)">3</button>
+                        <span class="labeler-custom-amount">
+                            <input type="number" id="labeler-custom-amount" min="1" max="20" value="4" style="width:4rem">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="labelerChoose(parseInt(document.getElementById('labeler-custom-amount').value)||1)">OK</button>
+                        </span>
+                    </div>
+                </div>
+                <div class="labeler-nav">
+                    <button type="button" class="btn btn-secondary btn-sm" id="labeler-back-btn" onclick="labelerBack()">Back</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="labelerSkip()">Skip</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if unlabeled_cards is defined and unlabeled_cards %}
+    <button type="button" class="btn btn-primary" id="label-cards-btn" onclick="labelerOpen(ALL_NONLAND_CARDS)" style="margin-bottom:1rem;">Label Cards</button>
+    {% elif all_nonland_cards is defined and all_nonland_cards %}
+    <button type="button" class="btn btn-secondary" id="label-cards-btn" onclick="labelerOpen(ALL_NONLAND_CARDS)" style="margin-bottom:1rem;">Label Cards</button>
+    {% endif %}
+
     <!-- Card Effects Editor -->
     {% if card_effects is defined and card_effects %}
     {% set with_effects = card_effects | selectattr('has_effects') | list %}
@@ -35,11 +139,8 @@
                     </div>
                     <div class="override-panel" style="display:none;">
                         <div class="override-effects-list"></div>
-                        <button type="button" class="btn btn-secondary btn-sm" onclick="addEffectRow(this)">+ Add Effect</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="addEffectRow(this)">+ Add Category</button>
                         <div class="override-metadata">
-                            <label><input type="checkbox" class="meta-ramp"> ramp</label>
-                            <label><input type="checkbox" class="meta-tapped"> tapped</label>
-                            <label><input type="checkbox" class="meta-is-land-tutor"> is_land_tutor</label>
                             <label>priority <input type="number" class="meta-priority" value="0" min="0" max="10" style="width:3rem"></label>
                             <label>override_cmc <input type="number" class="meta-override-cmc" value="" placeholder="-" min="0" max="20" style="width:3rem"></label>
                         </div>
@@ -67,11 +168,8 @@
                     </div>
                     <div class="override-panel" style="display:none;">
                         <div class="override-effects-list"></div>
-                        <button type="button" class="btn btn-secondary btn-sm" onclick="addEffectRow(this)">+ Add Effect</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="addEffectRow(this)">+ Add Category</button>
                         <div class="override-metadata">
-                            <label><input type="checkbox" class="meta-ramp"> ramp</label>
-                            <label><input type="checkbox" class="meta-tapped"> tapped</label>
-                            <label><input type="checkbox" class="meta-is-land-tutor"> is_land_tutor</label>
                             <label>priority <input type="number" class="meta-priority" value="0" min="0" max="10" style="width:3rem"></label>
                             <label>override_cmc <input type="number" class="meta-override-cmc" value="" placeholder="-" min="0" max="20" style="width:3rem"></label>
                         </div>
@@ -226,17 +324,123 @@ const EFFECT_SCHEMA = {{ effect_schema | tojson }};
 const CARD_EFFECTS = {{ card_effects | tojson }};
 const SAVED_OVERRIDES = {{ saved_overrides | tojson }};
 
-// Dropdown order: draw effects, then mana production, then exotic
-const EFFECT_TYPE_ORDER = [
-    'draw_cards', 'draw_discard', 'per_turn_draw', 'per_cast_draw',
-    'produce_mana', 'scaling_mana', 'reduce_cost',
-    'tutor_to_hand', 'cryptolith_rites_mana', 'enchantment_sanctum_mana',
-].filter(k => k in EFFECT_SCHEMA);
+// Each entry maps a UI label to how it constructs a category dict
+const CATEGORY_TYPES = [
+    {key: 'ramp_producer',     label: 'Ramp: Mana Producer',       category: 'ramp', variant: 'producer'},
+    {key: 'ramp_immediate',    label: 'Ramp: Mana Burst',          category: 'ramp', variant: 'producer', immediate: true},
+    {key: 'ramp_land',         label: 'Ramp: Land to Battlefield', category: 'ramp', variant: 'land_to_battlefield', immediate: true},
+    {key: 'ramp_reducer',      label: 'Ramp: Cost Reducer',        category: 'ramp', variant: 'reducer'},
+    {key: 'draw_immediate',    label: 'Draw: Immediate',           category: 'draw', immediate: true},
+    {key: 'draw_per_turn',     label: 'Draw: Per Turn',            category: 'draw', variant: 'per_turn'},
+    {key: 'draw_per_cast',     label: 'Draw: Per Cast',            category: 'draw', variant: 'per_cast'},
+    {key: 'discard',           label: 'Discard',                   category: 'discard'},
+    {key: 'land',              label: 'Land',                      category: 'land'},
+];
 
-function buildTypeOptions(selectedType) {
-    return EFFECT_TYPE_ORDER.map(k =>
-        `<option value="${k}"${k === selectedType ? ' selected' : ''}>${EFFECT_SCHEMA[k].label} (${EFFECT_SCHEMA[k].slot})</option>`
+function detectCategoryType(cat) {
+    if (cat.category === 'land') return 'land';
+    if (cat.category === 'discard') return 'discard';
+    if (cat.category === 'draw') {
+        if (cat.immediate) return 'draw_immediate';
+        if (cat.per_cast) return 'draw_per_cast';
+        return 'draw_per_turn';
+    }
+    if (cat.category === 'ramp') {
+        if (cat.land_to_battlefield) return 'ramp_land';
+        if (cat.reducer) return 'ramp_reducer';
+        if (cat.immediate) return 'ramp_immediate';
+        return 'ramp_producer';
+    }
+    return 'ramp_producer';
+}
+
+function buildCategoryOptions(selectedKey) {
+    return CATEGORY_TYPES.map(ct =>
+        `<option value="${ct.key}"${ct.key === selectedKey ? ' selected' : ''}>${ct.label}</option>`
     ).join('');
+}
+
+function getFieldsForType(key) {
+    const ct = CATEGORY_TYPES.find(c => c.key === key);
+    if (!ct) return [];
+    const fields = [];
+    if (ct.category === 'land') {
+        fields.push({name: 'tapped', type: 'bool', default: false});
+    } else if (ct.category === 'discard') {
+        fields.push({name: 'amount', type: 'int', default: 1});
+    } else if (ct.category === 'draw') {
+        if (ct.immediate) {
+            fields.push({name: 'amount', type: 'int', default: 1});
+        } else if (ct.variant === 'per_turn') {
+            fields.push({name: 'amount', type: 'int', default: 1});
+        } else if (ct.variant === 'per_cast') {
+            fields.push({name: 'amount', type: 'int', default: 1});
+            fields.push({name: 'trigger', type: 'select', options: ['spell','creature','enchantment','land','artifact','nonpermanent'], default: 'spell'});
+        }
+    } else if (ct.category === 'ramp') {
+        if (ct.variant === 'producer') {
+            fields.push({name: 'mana_amount', type: 'int', default: 1});
+        } else if (ct.variant === 'land_to_battlefield') {
+            fields.push({name: 'count', type: 'int', default: 1});
+            fields.push({name: 'tempo', type: 'select', options: ['tapped','untapped'], default: 'tapped'});
+        } else if (ct.variant === 'reducer') {
+            fields.push({name: 'spell_type', type: 'select', options: ['creature','enchantment','nonpermanent','permanent','spell'], default: 'creature'});
+            fields.push({name: 'amount', type: 'int', default: 1});
+        }
+    }
+    return fields;
+}
+
+function buildCategoryFromRow(row) {
+    const key = row.querySelector('.category-type-select').value;
+    const ct = CATEGORY_TYPES.find(c => c.key === key);
+    if (!ct) return null;
+    const cat = {category: ct.category};
+
+    if (ct.category === 'land') {
+        const tapped = row.querySelector('[data-field="tapped"]');
+        if (tapped && tapped.checked) cat.tapped = true;
+        return cat;
+    }
+    if (ct.category === 'discard') {
+        cat.amount = parseInt(row.querySelector('[data-field="amount"]').value, 10) || 1;
+        return cat;
+    }
+    if (ct.category === 'draw') {
+        if (ct.immediate) {
+            cat.immediate = true;
+            cat.amount = parseInt(row.querySelector('[data-field="amount"]').value, 10) || 1;
+        } else {
+            cat.immediate = false;
+            if (ct.variant === 'per_turn') {
+                cat.per_turn = {amount: parseInt(row.querySelector('[data-field="amount"]').value, 10) || 1};
+            } else if (ct.variant === 'per_cast') {
+                cat.per_cast = {
+                    amount: parseInt(row.querySelector('[data-field="amount"]').value, 10) || 1,
+                    trigger: row.querySelector('[data-field="trigger"]').value || 'spell',
+                };
+            }
+        }
+        return cat;
+    }
+    if (ct.category === 'ramp') {
+        cat.immediate = !!ct.immediate;
+        if (ct.variant === 'producer') {
+            cat.producer = {mana_amount: parseInt(row.querySelector('[data-field="mana_amount"]').value, 10) || 1};
+        } else if (ct.variant === 'land_to_battlefield') {
+            cat.land_to_battlefield = {
+                count: parseInt(row.querySelector('[data-field="count"]').value, 10) || 1,
+                tempo: row.querySelector('[data-field="tempo"]').value || 'tapped',
+            };
+        } else if (ct.variant === 'reducer') {
+            cat.reducer = {
+                spell_type: row.querySelector('[data-field="spell_type"]').value || 'creature',
+                amount: parseInt(row.querySelector('[data-field="amount"]').value, 10) || 1,
+            };
+        }
+        return cat;
+    }
+    return cat;
 }
 
 function toggleOverride(btn) {
@@ -253,69 +457,75 @@ function toggleOverride(btn) {
             const cardName = card.dataset.cardName;
             const cardData = CARD_EFFECTS.find(c => c.name === cardName);
             const regOverride = cardData && cardData.registry_override;
-            if (regOverride && regOverride.effects && regOverride.effects.length > 0) {
-                regOverride.effects.forEach(eff => addEffectRowWithData(panel, eff));
-                if (regOverride.ramp) panel.querySelector('.meta-ramp').checked = true;
+            if (regOverride && regOverride.categories && regOverride.categories.length > 0) {
+                regOverride.categories.forEach(cat => addCategoryRowWithData(panel, cat));
                 if (regOverride.priority) panel.querySelector('.meta-priority').value = regOverride.priority;
                 collectOverrides();
             } else {
-                addEffectRow(panel.querySelector('.override-effects-list').nextElementSibling, 'draw_cards');
+                addEffectRow(panel.querySelector('.override-effects-list').nextElementSibling, 'ramp_producer');
             }
         }
     }
 }
 
-function addEffectRow(btn, defaultType) {
+function addEffectRow(btn, defaultKey) {
     const panel = btn.closest('.override-panel');
     const list = panel.querySelector('.override-effects-list');
     const row = document.createElement('div');
     row.className = 'override-effect-row';
 
-    const selected = defaultType || EFFECT_TYPE_ORDER[0];
+    const selected = defaultKey || 'ramp_producer';
 
     row.innerHTML = `
-        <select class="effect-type-select" onchange="onTypeChange(this)">
-            ${buildTypeOptions(selected)}
+        <select class="category-type-select" onchange="onCategoryTypeChange(this)">
+            ${buildCategoryOptions(selected)}
         </select>
         <div class="effect-params"></div>
         <button type="button" class="btn-remove-effect" onclick="this.parentElement.remove(); collectOverrides();">&times;</button>
     `;
     list.appendChild(row);
-    onTypeChange(row.querySelector('.effect-type-select'));
+    onCategoryTypeChange(row.querySelector('.category-type-select'));
 }
 
-function onTypeChange(select) {
-    const typeStr = select.value;
-    const schema = EFFECT_SCHEMA[typeStr];
+function onCategoryTypeChange(select) {
+    const key = select.value;
+    const fields = getFieldsForType(key);
     const paramsDiv = select.parentElement.querySelector('.effect-params');
     paramsDiv.innerHTML = '';
 
-    for (const [pName, pInfo] of Object.entries(schema.params)) {
+    for (const field of fields) {
         const label = document.createElement('label');
         label.className = 'effect-param-label';
-        label.textContent = pName + ' ';
-        const input = document.createElement('input');
-        input.className = 'effect-param-input';
-        input.dataset.param = pName;
-        input.dataset.paramType = pInfo.type;
-        if (pInfo.type === 'int' || pInfo.type === 'float') {
-            input.type = 'number';
-            input.value = pInfo.default !== undefined ? pInfo.default : '';
-            input.style.width = '4rem';
-        } else if (pInfo.type === 'bool') {
+        label.textContent = field.name + ' ';
+
+        if (field.type === 'select') {
+            const sel = document.createElement('select');
+            sel.dataset.field = field.name;
+            for (const opt of field.options) {
+                const o = document.createElement('option');
+                o.value = opt;
+                o.textContent = opt;
+                if (opt === field.default) o.selected = true;
+                sel.appendChild(o);
+            }
+            sel.addEventListener('change', collectOverrides);
+            label.appendChild(sel);
+        } else if (field.type === 'bool') {
+            const input = document.createElement('input');
             input.type = 'checkbox';
-            input.checked = pInfo.default || false;
-        } else if (pInfo.type === 'list') {
-            input.type = 'text';
-            input.placeholder = 'comma-separated';
-            input.value = pInfo.default ? pInfo.default.join(', ') : '';
-            input.style.width = '12rem';
+            input.dataset.field = field.name;
+            input.checked = field.default || false;
+            input.addEventListener('change', collectOverrides);
+            label.appendChild(input);
         } else {
-            input.type = 'text';
-            input.value = pInfo.default || '';
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.dataset.field = field.name;
+            input.value = field.default !== undefined ? field.default : '';
+            input.style.width = '4rem';
+            input.addEventListener('change', collectOverrides);
+            label.appendChild(input);
         }
-        input.addEventListener('change', collectOverrides);
-        label.appendChild(input);
         paramsDiv.appendChild(label);
     }
     collectOverrides();
@@ -328,7 +538,6 @@ function removeOverride(btn) {
     panel.style.display = 'none';
     const toggleBtn = card.querySelector('.override-toggle');
     toggleBtn.textContent = card.querySelector('.no-effects') ? 'Add Effect' : 'Override';
-    // Reset the badge text to original
     const badges = card.querySelector('.effects-card-badges');
     const cardName = card.dataset.cardName;
     const orig = CARD_EFFECTS.find(c => c.name === cardName);
@@ -340,8 +549,6 @@ function removeOverride(btn) {
         badges.textContent = 'No effects';
         badges.classList.add('no-effects');
     }
-    // Uncheck metadata
-    panel.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
     panel.querySelectorAll('input[type=number]').forEach(inp => {
         if (inp.classList.contains('meta-priority')) inp.value = '0';
         else if (inp.classList.contains('meta-override-cmc')) inp.value = '';
@@ -351,7 +558,8 @@ function removeOverride(btn) {
 }
 
 function collectOverrides() {
-    const overrides = {};
+    let overrides = {};
+    try { overrides = JSON.parse(document.getElementById('effect-overrides-input').value); } catch(e) {}
     document.querySelectorAll('.effects-card').forEach(card => {
         const panel = card.querySelector('.override-panel');
         if (panel.style.display === 'none') return;
@@ -360,36 +568,13 @@ function collectOverrides() {
         if (rows.length === 0) return;
 
         const cardName = card.dataset.cardName;
-        const effects = [];
+        const categories = [];
         rows.forEach(row => {
-            const typeStr = row.querySelector('.effect-type-select').value;
-            const slot = EFFECT_SCHEMA[typeStr].slot;
-            const params = {};
-            row.querySelectorAll('.effect-param-input').forEach(inp => {
-                const pType = inp.dataset.paramType;
-                const pName = inp.dataset.param;
-                if (pType === 'int') {
-                    const v = parseInt(inp.value, 10);
-                    if (!isNaN(v)) params[pName] = v;
-                } else if (pType === 'float') {
-                    const v = parseFloat(inp.value);
-                    if (!isNaN(v)) params[pName] = v;
-                } else if (pType === 'bool') {
-                    params[pName] = inp.checked;
-                } else if (pType === 'list') {
-                    const v = inp.value.trim();
-                    if (v) params[pName] = v.split(',').map(s => s.trim()).filter(s => s);
-                } else {
-                    if (inp.value) params[pName] = inp.value;
-                }
-            });
-            effects.push({type: typeStr, slot: slot, params: params});
+            const cat = buildCategoryFromRow(row);
+            if (cat) categories.push(cat);
         });
 
-        const entry = {effects: effects};
-        if (panel.querySelector('.meta-ramp').checked) entry.ramp = true;
-        if (panel.querySelector('.meta-tapped').checked) entry.tapped = true;
-        if (panel.querySelector('.meta-is-land-tutor').checked) entry.is_land_tutor = true;
+        const entry = {categories: categories};
         const prio = parseInt(panel.querySelector('.meta-priority').value, 10);
         if (prio > 0) entry.priority = prio;
         const ocmc = panel.querySelector('.meta-override-cmc').value;
@@ -409,36 +594,58 @@ function persistOverrides() {
     });
 }
 
-function addEffectRowWithData(panel, effectData) {
+function addCategoryRowWithData(panel, catData) {
     const list = panel.querySelector('.override-effects-list');
     const row = document.createElement('div');
     row.className = 'override-effect-row';
 
+    const key = detectCategoryType(catData);
+
     row.innerHTML = `
-        <select class="effect-type-select" onchange="onTypeChange(this)">
-            ${buildTypeOptions(effectData.type)}
+        <select class="category-type-select" onchange="onCategoryTypeChange(this)">
+            ${buildCategoryOptions(key)}
         </select>
         <div class="effect-params"></div>
         <button type="button" class="btn-remove-effect" onclick="this.parentElement.remove(); collectOverrides();">&times;</button>
     `;
     list.appendChild(row);
-    // Build params UI for the selected type
-    onTypeChange(row.querySelector('.effect-type-select'));
-    // Now populate param values from saved data
-    if (effectData.params) {
-        row.querySelectorAll('.effect-param-input').forEach(inp => {
-            const pName = inp.dataset.param;
-            if (pName in effectData.params) {
-                const val = effectData.params[pName];
-                if (inp.type === 'checkbox') {
-                    inp.checked = !!val;
-                } else if (Array.isArray(val)) {
-                    inp.value = val.join(', ');
-                } else {
-                    inp.value = val;
-                }
-            }
-        });
+    onCategoryTypeChange(row.querySelector('.category-type-select'));
+
+    // Populate field values from saved data
+    if (catData.category === 'land') {
+        const f = row.querySelector('[data-field="tapped"]');
+        if (f) f.checked = !!catData.tapped;
+    } else if (catData.category === 'discard') {
+        const f = row.querySelector('[data-field="amount"]');
+        if (f) f.value = catData.amount || 1;
+    } else if (catData.category === 'draw') {
+        if (catData.immediate) {
+            const f = row.querySelector('[data-field="amount"]');
+            if (f) f.value = catData.amount || 1;
+        } else if (catData.per_turn) {
+            const f = row.querySelector('[data-field="amount"]');
+            if (f) f.value = catData.per_turn.amount || 1;
+        } else if (catData.per_cast) {
+            const fa = row.querySelector('[data-field="amount"]');
+            if (fa) fa.value = catData.per_cast.amount || 1;
+            const ft = row.querySelector('[data-field="trigger"]');
+            if (ft) ft.value = catData.per_cast.trigger || 'spell';
+        }
+    } else if (catData.category === 'ramp') {
+        if (catData.producer) {
+            const f = row.querySelector('[data-field="mana_amount"]');
+            if (f) f.value = catData.producer.mana_amount || 1;
+        } else if (catData.land_to_battlefield) {
+            const fc = row.querySelector('[data-field="count"]');
+            if (fc) fc.value = catData.land_to_battlefield.count || 1;
+            const ft = row.querySelector('[data-field="tempo"]');
+            if (ft) ft.value = catData.land_to_battlefield.tempo || 'tapped';
+        } else if (catData.reducer) {
+            const fs = row.querySelector('[data-field="spell_type"]');
+            if (fs) fs.value = catData.reducer.spell_type || 'creature';
+            const fa = row.querySelector('[data-field="amount"]');
+            if (fa) fa.value = catData.reducer.amount || 1;
+        }
     }
 }
 
@@ -453,19 +660,13 @@ function loadSavedOverrides() {
         const panel = card.querySelector('.override-panel');
         const toggleBtn = card.querySelector('.override-toggle');
 
-        // Open the panel
         panel.style.display = 'block';
         toggleBtn.textContent = 'Hide';
 
-        // Add effect rows from saved data
-        if (override.effects && override.effects.length > 0) {
-            override.effects.forEach(eff => addEffectRowWithData(panel, eff));
+        if (override.categories && override.categories.length > 0) {
+            override.categories.forEach(cat => addCategoryRowWithData(panel, cat));
         }
 
-        // Set metadata
-        if (override.ramp) panel.querySelector('.meta-ramp').checked = true;
-        if (override.tapped) panel.querySelector('.meta-tapped').checked = true;
-        if (override.is_land_tutor) panel.querySelector('.meta-is-land-tutor').checked = true;
         if (override.priority) panel.querySelector('.meta-priority').value = override.priority;
         if (override.override_cmc !== undefined && override.override_cmc !== null) {
             panel.querySelector('.meta-override-cmc').value = override.override_cmc;
@@ -481,6 +682,251 @@ document.getElementById('sim-form').addEventListener('htmx:configRequest', funct
 
 // Load saved overrides on page load
 loadSavedOverrides();
+
+// --- Card Labeler Wizard ---
+const UNLABELED_CARDS = {{ unlabeled_cards | tojson }};
+const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
+
+(function() {
+    let cards = [];
+    let currentIndex = 0;
+    let currentStep = 'classify';
+    let state = {};
+    let history = [];
+    let amountContext = '';  // 'ramp', 'draw', 'discard'
+
+    const STEPS = ['classify','ramp','tempo','spell-type','draw-type','draw-timing','trigger','amount'];
+
+    function showStep(step) {
+        STEPS.forEach(s => {
+            const el = document.getElementById('labeler-step-' + s);
+            if (el) el.style.display = s === step ? '' : 'none';
+        });
+        currentStep = step;
+        document.getElementById('labeler-back-btn').style.display = history.length > 0 ? '' : 'none';
+    }
+
+    function updateDisplay() {
+        if (currentIndex >= cards.length) {
+            labelerClose();
+            return;
+        }
+        const card = cards[currentIndex];
+        document.getElementById('labeler-card-name').textContent = card.name;
+        document.getElementById('labeler-card-cmc').textContent = 'CMC ' + card.cmc;
+        document.getElementById('labeler-image').src =
+            'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(card.name) + '&format=image&version=normal';
+        document.getElementById('labeler-progress').textContent =
+            'Card ' + (currentIndex + 1) + ' of ' + cards.length;
+        state = {};
+        history = [];
+        showStep('classify');
+    }
+
+    function setAmountPrompt(text) {
+        document.getElementById('labeler-amount-prompt').textContent = text;
+    }
+
+    window.labelerOpen = function(cardList) {
+        cards = cardList.slice();
+        currentIndex = 0;
+        document.getElementById('card-labeler').style.display = '';
+        updateDisplay();
+    };
+
+    window.labelerClose = function() {
+        document.getElementById('card-labeler').style.display = 'none';
+    };
+
+    window.labelerSkip = function() {
+        currentIndex++;
+        updateDisplay();
+    };
+
+    window.labelerBack = function() {
+        if (history.length === 0) return;
+        const prev = history.pop();
+        state = prev.state;
+        amountContext = prev.amountContext || amountContext;
+        showStep(prev.step);
+    };
+
+    window.labelerChoose = function(value) {
+        history.push({step: currentStep, state: Object.assign({}, state), amountContext: amountContext});
+
+        if (currentStep === 'classify') {
+            if (value === 'draw') {
+                state.mainType = 'draw';
+                showStep('draw-type');
+            } else if (value === 'ramp') {
+                state.mainType = 'ramp';
+                showStep('ramp');
+            } else if (value === 'both') {
+                state.mainType = 'both';
+                showStep('ramp');
+            } else {
+                // neither - skip, no save
+                currentIndex++;
+                updateDisplay();
+            }
+        } else if (currentStep === 'ramp') {
+            state.rampType = value;
+            if (value === 'cost_reducer') {
+                showStep('spell-type');
+            } else if (value === 'mana_rock') {
+                amountContext = 'ramp';
+                setAmountPrompt('How much mana does it produce?');
+                showStep('amount');
+            } else if (value === 'mana_dork') {
+                amountContext = 'ramp';
+                setAmountPrompt('How much mana does it produce?');
+                showStep('amount');
+            } else if (value === 'land_ramp') {
+                amountContext = 'ramp';
+                setAmountPrompt('How many lands does it fetch?');
+                showStep('amount');
+            } else if (value === 'ritual') {
+                amountContext = 'ramp';
+                setAmountPrompt('How much mana does it produce?');
+                showStep('amount');
+            }
+        } else if (currentStep === 'spell-type') {
+            state.spellType = value;
+            amountContext = 'ramp';
+            setAmountPrompt('How much cost reduction?');
+            showStep('amount');
+        } else if (currentStep === 'amount') {
+            const num = parseInt(value, 10) || 1;
+            if (amountContext === 'ramp') {
+                state.rampAmount = num;
+                if (state.rampType === 'mana_rock' || state.rampType === 'land_ramp') {
+                    showStep('tempo');
+                } else if (state.rampType === 'mana_dork') {
+                    state.tempo = 'summoning_sick';
+                    finishRampOrContinue();
+                } else {
+                    // ritual or cost_reducer
+                    finishRampOrContinue();
+                }
+            } else if (amountContext === 'draw') {
+                state.drawAmount = num;
+                if (state.drawType === 'draw_discard') {
+                    amountContext = 'discard';
+                    setAmountPrompt('How many cards discarded?');
+                    showStep('amount');
+                } else {
+                    saveAndNext();
+                }
+            } else if (amountContext === 'discard') {
+                state.discardAmount = num;
+                saveAndNext();
+            }
+        } else if (currentStep === 'tempo') {
+            state.tempo = value;
+            finishRampOrContinue();
+        } else if (currentStep === 'draw-type') {
+            state.drawType = value;
+            showStep('draw-timing');
+        } else if (currentStep === 'draw-timing') {
+            state.drawTiming = value;
+            if (value === 'per_cast') {
+                showStep('trigger');
+            } else {
+                amountContext = 'draw';
+                setAmountPrompt('How many cards drawn?');
+                showStep('amount');
+            }
+        } else if (currentStep === 'trigger') {
+            state.trigger = value;
+            amountContext = 'draw';
+            setAmountPrompt('How many cards drawn?');
+            showStep('amount');
+        }
+    };
+
+    function finishRampOrContinue() {
+        if (state.mainType === 'both') {
+            // Ramp portion done, now ask draw questions
+            showStep('draw-type');
+        } else {
+            saveAndNext();
+        }
+    }
+
+    function buildRampCategories(cats) {
+        if (state.rampType === 'mana_rock' || state.rampType === 'mana_dork') {
+            const cat = {category: 'ramp', immediate: false, producer: {mana_amount: state.rampAmount || 1}};
+            if (state.tempo === 'tapped') cat.producer.tempo = 'tapped';
+            else if (state.tempo === 'summoning_sick') cat.producer.tempo = 'summoning_sick';
+            cats.push(cat);
+        } else if (state.rampType === 'ritual') {
+            cats.push({category: 'ramp', immediate: true, producer: {mana_amount: state.rampAmount || 1}});
+        } else if (state.rampType === 'land_ramp') {
+            cats.push({category: 'ramp', immediate: true, land_to_battlefield: {count: state.rampAmount || 1, tempo: state.tempo || 'tapped'}});
+        } else if (state.rampType === 'cost_reducer') {
+            cats.push({category: 'ramp', immediate: false, reducer: {spell_type: state.spellType || 'creature', amount: state.rampAmount || 1}});
+        }
+    }
+
+    function buildDrawCategories(cats) {
+        if (state.drawTiming === 'immediate') {
+            cats.push({category: 'draw', immediate: true, amount: state.drawAmount || 1});
+        } else if (state.drawTiming === 'per_turn') {
+            cats.push({category: 'draw', immediate: false, per_turn: {amount: state.drawAmount || 1}});
+        } else if (state.drawTiming === 'per_cast') {
+            cats.push({category: 'draw', immediate: false, per_cast: {amount: state.drawAmount || 1, trigger: state.trigger || 'spell'}});
+        }
+        if (state.drawType === 'draw_discard' && state.discardAmount) {
+            cats.push({category: 'discard', amount: state.discardAmount});
+        }
+    }
+
+    function buildCategories() {
+        const cats = [];
+        if (state.mainType === 'ramp') {
+            buildRampCategories(cats);
+        } else if (state.mainType === 'draw') {
+            buildDrawCategories(cats);
+        } else if (state.mainType === 'both') {
+            buildRampCategories(cats);
+            buildDrawCategories(cats);
+        }
+        return cats;
+    }
+
+    function saveAndNext() {
+        const categories = buildCategories();
+        if (categories.length === 0) {
+            currentIndex++;
+            updateDisplay();
+            return;
+        }
+        const cardName = cards[currentIndex].name;
+        let overrides = {};
+        try { overrides = JSON.parse(document.getElementById('effect-overrides-input').value); } catch(e) {}
+        overrides[cardName] = {categories: categories};
+        document.getElementById('effect-overrides-input').value = JSON.stringify(overrides);
+        persistOverrides();
+
+        // Update the effects editor UI if the card row exists
+        const cardEl = document.querySelector('.effects-card[data-card-name="' + CSS.escape(cardName) + '"]');
+        if (cardEl) {
+            const badges = cardEl.querySelector('.effects-card-badges');
+            if (badges) {
+                badges.textContent = 'User override';
+                badges.classList.remove('no-effects');
+            }
+        }
+
+        currentIndex++;
+        updateDisplay();
+    }
+
+    // Auto-show labeler if there are unlabeled cards
+    if (UNLABELED_CARDS.length > 0) {
+        labelerOpen(UNLABELED_CARDS);
+    }
+})();
 </script>
 {% endif %}
 {% endblock %}

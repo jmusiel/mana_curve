@@ -1,8 +1,7 @@
-"""Tests for the JSON card effects loader."""
+"""Tests for the JSON card effects loader (v2 category format)."""
 
 from __future__ import annotations
 
-import dataclasses
 import json
 import tempfile
 from pathlib import Path
@@ -12,10 +11,9 @@ import pytest
 from auto_goldfish.effects import builtin
 from auto_goldfish.effects.json_loader import (
     METADATA_FIELDS,
-    TYPE_MAP,
-    VALID_SLOTS,
-    _hydrate_effect,
+    VALID_CATEGORIES,
     _merge_metadata,
+    _translate_category,
     build_overridden_registry,
     get_effect_schema,
     load_registry_from_json,
@@ -43,59 +41,22 @@ def registry():
 def test_json_parses(json_data):
     assert "version" in json_data
     assert "groups" in json_data
-    assert json_data["version"] == 1
+    assert json_data["version"] == 2
 
 
-def test_all_type_strings_in_type_map(json_data):
-    """Every effect 'type' string in the JSON must exist in TYPE_MAP."""
+def test_all_categories_valid(json_data):
+    """Every category string in the JSON must be a valid category."""
     for group in json_data["groups"]:
         defaults = group.get("defaults", {})
-        for effect in defaults.get("effects", []):
-            assert effect["type"] in TYPE_MAP, (
-                f"Unknown type {effect['type']!r} in defaults of group {group['group']!r}"
+        for cat in defaults.get("categories", []):
+            assert cat["category"] in VALID_CATEGORIES, (
+                f"Unknown category {cat['category']!r} in defaults of group {group['group']!r}"
             )
         for card_name, card_data in group["cards"].items():
-            for effect in card_data.get("effects", []):
-                assert effect["type"] in TYPE_MAP, (
-                    f"Unknown type {effect['type']!r} in card {card_name!r}"
+            for cat in card_data.get("categories", []):
+                assert cat["category"] in VALID_CATEGORIES, (
+                    f"Unknown category {cat['category']!r} in card {card_name!r}"
                 )
-
-
-def test_all_slots_valid(json_data):
-    """Every effect 'slot' string must be a valid slot."""
-    for group in json_data["groups"]:
-        defaults = group.get("defaults", {})
-        for effect in defaults.get("effects", []):
-            assert effect["slot"] in VALID_SLOTS, (
-                f"Invalid slot {effect['slot']!r} in defaults of group {group['group']!r}"
-            )
-        for card_name, card_data in group["cards"].items():
-            for effect in card_data.get("effects", []):
-                assert effect["slot"] in VALID_SLOTS, (
-                    f"Invalid slot {effect['slot']!r} in card {card_name!r}"
-                )
-
-
-def test_all_params_match_dataclass_fields(json_data):
-    """All params keys in the JSON must be valid constructor args for their effect class."""
-    for group in json_data["groups"]:
-        all_effects = []
-        defaults = group.get("defaults", {})
-        for effect in defaults.get("effects", []):
-            all_effects.append((f"defaults of {group['group']}", effect))
-        for card_name, card_data in group["cards"].items():
-            for effect in card_data.get("effects", []):
-                all_effects.append((card_name, effect))
-
-        for source, effect in all_effects:
-            cls = TYPE_MAP[effect["type"]]
-            params = effect.get("params", {})
-            if dataclasses.is_dataclass(cls):
-                valid_fields = {f.name for f in dataclasses.fields(cls)}
-                for key in params:
-                    assert key in valid_fields, (
-                        f"Param {key!r} not a field of {cls.__name__} (card: {source})"
-                    )
 
 
 def test_no_duplicate_card_names(json_data):
@@ -107,27 +68,9 @@ def test_no_duplicate_card_names(json_data):
             seen.add(name)
 
 
-def test_type_map_covers_all_builtin_classes():
-    """TYPE_MAP should have an entry for every effect dataclass in builtin.py."""
-    builtin_classes = {
-        obj
-        for name in dir(builtin)
-        if not name.startswith("_")
-        for obj in [getattr(builtin, name)]
-        if isinstance(obj, type) and dataclasses.is_dataclass(obj)
-    }
-    mapped_classes = set(TYPE_MAP.values())
-    missing = builtin_classes - mapped_classes
-    assert not missing, f"Builtin classes not in TYPE_MAP: {missing}"
-
-
-def test_card_count(registry):
-    """Registry should contain 118 cards."""
-    assert len(registry) == 118
-
-
 def test_metadata_fields_match_card_effects():
     """METADATA_FIELDS should match the non-slot fields of CardEffects."""
+    import dataclasses
     slot_fields = {"on_play", "per_turn", "cast_trigger", "mana_function"}
     card_effects_fields = {f.name for f in dataclasses.fields(CardEffects)}
     expected_metadata = card_effects_fields - slot_fields
@@ -135,35 +78,132 @@ def test_metadata_fields_match_card_effects():
 
 
 # ---------------------------------------------------------------------------
-# Hydration
+# _translate_category tests
 # ---------------------------------------------------------------------------
 
-def test_hydrate_produce_mana():
-    effect = _hydrate_effect({"type": "produce_mana", "slot": "on_play", "params": {"amount": 2}})
-    assert isinstance(effect, builtin.ProduceMana)
-    assert effect.amount == 2
+class TestTranslateCategory:
+    def test_land_untapped(self):
+        effects, meta = _translate_category({"category": "land"})
+        assert effects == []
+        assert meta == {}
 
+    def test_land_tapped(self):
+        effects, meta = _translate_category({"category": "land", "tapped": True})
+        assert effects == []
+        assert meta == {"tapped": True}
 
-def test_hydrate_no_params():
-    """Effects with no params (CryptolithRitesMana) should hydrate correctly."""
-    effect = _hydrate_effect({"type": "cryptolith_rites_mana", "slot": "mana_function"})
-    assert isinstance(effect, builtin.CryptolithRitesMana)
+    def test_ramp_repeatable_producer(self):
+        effects, meta = _translate_category({
+            "category": "ramp", "immediate": False,
+            "producer": {"mana_amount": 2},
+        })
+        assert len(effects) == 1
+        slot, eff = effects[0]
+        assert slot == "on_play"
+        assert isinstance(eff, builtin.ProduceMana)
+        assert eff.amount == 2
+        assert meta["ramp"] is True
 
+    def test_ramp_immediate_producer(self):
+        effects, meta = _translate_category({
+            "category": "ramp", "immediate": True,
+            "producer": {"mana_amount": 3},
+        })
+        assert len(effects) == 1
+        slot, eff = effects[0]
+        assert slot == "on_play"
+        assert isinstance(eff, builtin.ImmediateMana)
+        assert eff.amount == 3
+        assert meta["ramp"] is True
 
-def test_hydrate_tutor_with_targets():
-    targets = ["Serra's Sanctum"]
-    effect = _hydrate_effect({
-        "type": "tutor_to_hand",
-        "slot": "on_play",
-        "params": {"targets": targets},
-    })
-    assert isinstance(effect, builtin.TutorToHand)
-    assert effect.targets == targets
+    def test_ramp_land_to_battlefield(self):
+        effects, meta = _translate_category({
+            "category": "ramp", "immediate": True,
+            "land_to_battlefield": {"count": 1, "tempo": "tapped"},
+        })
+        assert len(effects) == 1
+        slot, eff = effects[0]
+        assert slot == "on_play"
+        assert isinstance(eff, builtin.LandToBattlefield)
+        assert eff.count == 1
+        assert eff.tapped is True
 
+    def test_ramp_land_to_battlefield_untapped(self):
+        effects, meta = _translate_category({
+            "category": "ramp", "immediate": True,
+            "land_to_battlefield": {"count": 2, "tempo": "untapped"},
+        })
+        slot, eff = effects[0]
+        assert isinstance(eff, builtin.LandToBattlefield)
+        assert eff.tapped is False
 
-def test_hydrate_unknown_type_raises():
-    with pytest.raises(ValueError, match="Unknown effect type"):
-        _hydrate_effect({"type": "nonexistent_effect", "slot": "on_play"})
+    def test_ramp_reducer(self):
+        effects, meta = _translate_category({
+            "category": "ramp", "immediate": False,
+            "reducer": {"spell_type": "creature", "amount": 1},
+        })
+        slot, eff = effects[0]
+        assert slot == "on_play"
+        assert isinstance(eff, builtin.ReduceCost)
+        assert eff.spell_type == "creature"
+        assert eff.amount == 1
+
+    def test_draw_immediate(self):
+        effects, meta = _translate_category({
+            "category": "draw", "immediate": True, "amount": 3,
+        })
+        slot, eff = effects[0]
+        assert slot == "on_play"
+        assert isinstance(eff, builtin.DrawCards)
+        assert eff.amount == 3
+
+    def test_draw_per_turn(self):
+        effects, meta = _translate_category({
+            "category": "draw", "immediate": False,
+            "per_turn": {"amount": 1},
+        })
+        slot, eff = effects[0]
+        assert slot == "per_turn"
+        assert isinstance(eff, builtin.PerTurnDraw)
+        assert eff.amount == 1
+
+    def test_draw_per_cast(self):
+        effects, meta = _translate_category({
+            "category": "draw", "immediate": False,
+            "per_cast": {"amount": 1, "trigger": "creature"},
+        })
+        slot, eff = effects[0]
+        assert slot == "cast_trigger"
+        assert isinstance(eff, builtin.PerCastDraw)
+        assert eff.amount == 1
+        assert eff.trigger == "creature"
+
+    def test_discard(self):
+        effects, meta = _translate_category({
+            "category": "discard", "amount": 2,
+        })
+        slot, eff = effects[0]
+        assert slot == "on_play"
+        assert isinstance(eff, builtin.DiscardCards)
+        assert eff.amount == 2
+
+    def test_unknown_category_raises(self):
+        with pytest.raises(ValueError, match="Unknown category"):
+            _translate_category({"category": "nonexistent"})
+
+    def test_tapped_tempo_sets_metadata(self):
+        effects, meta = _translate_category({
+            "category": "ramp", "immediate": False,
+            "producer": {"mana_amount": 1, "tempo": "tapped"},
+        })
+        assert meta.get("tapped") is True
+
+    def test_summoning_sick_sets_tapped(self):
+        effects, meta = _translate_category({
+            "category": "ramp", "immediate": False,
+            "producer": {"mana_amount": 1, "tempo": "summoning_sick"},
+        })
+        assert meta.get("tapped") is True
 
 
 # ---------------------------------------------------------------------------
@@ -185,24 +225,11 @@ def test_great_henge(registry):
     assert effects.priority == 1
     assert len(effects.cast_trigger) == 1
     assert isinstance(effects.cast_trigger[0], builtin.PerCastDraw)
-    assert effects.cast_trigger[0].creature == 1
+    assert effects.cast_trigger[0].trigger == "creature"
+    assert effects.cast_trigger[0].amount == 1
     assert len(effects.on_play) == 1
     assert isinstance(effects.on_play[0], builtin.ProduceMana)
     assert effects.on_play[0].amount == 2
-
-
-def test_tolaria_west(registry):
-    effects = registry.get("Tolaria West")
-    assert effects is not None
-    assert effects.ramp is True
-    assert effects.priority == 3
-    assert effects.is_land_tutor is True
-    assert effects.extra_types == ["sorcery"]
-    assert effects.override_cmc == 3
-    assert effects.tapped is True
-    assert len(effects.on_play) == 1
-    assert isinstance(effects.on_play[0], builtin.TutorToHand)
-    assert effects.on_play[0].targets == ["Serra's Sanctum"]
 
 
 def test_archmage_of_runes_consolidated(registry):
@@ -211,10 +238,18 @@ def test_archmage_of_runes_consolidated(registry):
     assert effects is not None
     assert len(effects.cast_trigger) == 1
     assert isinstance(effects.cast_trigger[0], builtin.PerCastDraw)
-    assert effects.cast_trigger[0].nonpermanent == 1
+    assert effects.cast_trigger[0].trigger == "nonpermanent"
     assert len(effects.on_play) == 1
     assert isinstance(effects.on_play[0], builtin.ReduceCost)
-    assert effects.on_play[0].nonpermanent == 1
+    assert effects.on_play[0].spell_type == "nonpermanent"
+
+
+def test_tolaria_west(registry):
+    effects = registry.get("Tolaria West")
+    assert effects is not None
+    assert effects.tapped is True
+    # No effects — effectless land
+    assert effects.on_play == []
 
 
 def test_cabal_coffers_empty_effects(registry):
@@ -232,6 +267,43 @@ def test_unicode_card_names(registry):
     assert registry.has("Lórien Revealed")
     assert registry.has("Séance Board")
     assert registry.has("Bolas's Citadel")
+
+
+def test_faithless_looting_draw_and_discard(registry):
+    effects = registry.get("Faithless Looting")
+    assert effects is not None
+    assert len(effects.on_play) == 2
+    assert isinstance(effects.on_play[0], builtin.DrawCards)
+    assert effects.on_play[0].amount == 2
+    assert isinstance(effects.on_play[1], builtin.DiscardCards)
+    assert effects.on_play[1].amount == 2
+
+
+def test_deadly_dispute_draw_and_treasure(registry):
+    effects = registry.get("Deadly Dispute")
+    assert effects is not None
+    assert len(effects.on_play) == 2
+    assert isinstance(effects.on_play[0], builtin.DrawCards)
+    assert effects.on_play[0].amount == 2
+    assert isinstance(effects.on_play[1], builtin.ImmediateMana)
+    assert effects.on_play[1].amount == 1
+
+
+def test_scaling_mana_approximated_as_producer(registry):
+    """Former ScalingMana cards are now approximated as repeatable producers."""
+    effects = registry.get("As Foretold")
+    assert effects is not None
+    assert effects.ramp is True
+    assert effects.priority == 2
+    assert len(effects.on_play) == 1
+    assert isinstance(effects.on_play[0], builtin.ProduceMana)
+
+
+def test_card_count(registry):
+    """Registry should contain the expected number of cards after migration."""
+    # Lost: 4 Cryptolith, 2 EnchantmentSanctum, 2 GreenTutors, 1 Urza's Cave = 9 removed
+    # Original was 118, now 118 - 9 = 109
+    assert len(registry) == 109
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +325,7 @@ def test_merge_metadata_card_overrides():
 
 
 def test_group_defaults_apply(registry):
-    """Cards in 'Mana Producers (1 mana)' should inherit ramp=True from defaults."""
+    """Cards in 'Repeatable Mana Producers (1 mana)' should inherit ramp from categories."""
     effects = registry.get("Arcane Signet")
     assert effects is not None
     assert effects.ramp is True
@@ -262,15 +334,13 @@ def test_group_defaults_apply(registry):
     assert effects.on_play[0].amount == 1
 
 
-def test_card_effects_override_default_effects(registry):
-    """Archmage of Runes overrides group default effects with its own list."""
-    # Archmage Emeritus uses group defaults (cast_trigger only)
+def test_card_categories_override_default_categories(registry):
+    """Archmage of Runes overrides group default categories with its own list."""
     emeritus = registry.get("Archmage Emeritus")
     assert emeritus is not None
     assert len(emeritus.on_play) == 0
     assert len(emeritus.cast_trigger) == 1
 
-    # Archmage of Runes overrides with both cast_trigger and on_play
     runes = registry.get("Archmage of Runes")
     assert runes is not None
     assert len(runes.on_play) == 1
@@ -289,17 +359,17 @@ def _write_json(tmp_path: Path, data: dict) -> Path:
 
 def test_duplicate_card_name_raises(tmp_path):
     data = {
-        "version": 1,
+        "version": 2,
         "groups": [
             {
                 "group": "A",
                 "defaults": {},
-                "cards": {"Sol Ring": {"effects": []}},
+                "cards": {"Sol Ring": {"categories": []}},
             },
             {
                 "group": "B",
                 "defaults": {},
-                "cards": {"Sol Ring": {"effects": []}},
+                "cards": {"Sol Ring": {"categories": []}},
             },
         ],
     }
@@ -307,41 +377,22 @@ def test_duplicate_card_name_raises(tmp_path):
         load_registry_from_json(_write_json(tmp_path, data))
 
 
-def test_invalid_slot_raises(tmp_path):
+def test_unknown_category_in_json_raises(tmp_path):
     data = {
-        "version": 1,
+        "version": 2,
         "groups": [
             {
                 "group": "A",
                 "defaults": {},
                 "cards": {
                     "Bad Card": {
-                        "effects": [{"type": "produce_mana", "slot": "bad_slot", "params": {"amount": 1}}]
+                        "categories": [{"category": "fake_cat"}]
                     }
                 },
             }
         ],
     }
-    with pytest.raises(ValueError, match="Invalid slot"):
-        load_registry_from_json(_write_json(tmp_path, data))
-
-
-def test_unknown_type_in_json_raises(tmp_path):
-    data = {
-        "version": 1,
-        "groups": [
-            {
-                "group": "A",
-                "defaults": {},
-                "cards": {
-                    "Bad Card": {
-                        "effects": [{"type": "fake_type", "slot": "on_play"}]
-                    }
-                },
-            }
-        ],
-    }
-    with pytest.raises(ValueError, match="Unknown effect type"):
+    with pytest.raises(ValueError, match="Unknown category"):
         load_registry_from_json(_write_json(tmp_path, data))
 
 
@@ -370,8 +421,7 @@ def test_registry_copy_is_independent(registry):
 def test_build_overridden_registry_replaces_effect(registry):
     overrides = {
         "Sol Ring": {
-            "effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 5}}],
-            "ramp": True,
+            "categories": [{"category": "ramp", "immediate": False, "producer": {"mana_amount": 5}}],
         }
     }
     new_reg = build_overridden_registry(registry, overrides)
@@ -386,7 +436,7 @@ def test_build_overridden_registry_replaces_effect(registry):
 def test_build_overridden_registry_adds_new_card(registry):
     overrides = {
         "My Custom Card": {
-            "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 3}}],
+            "categories": [{"category": "draw", "immediate": True, "amount": 3}],
         }
     }
     new_reg = build_overridden_registry(registry, overrides)
@@ -397,16 +447,6 @@ def test_build_overridden_registry_adds_new_card(registry):
     assert custom.on_play[0].amount == 3
 
 
-def test_build_overridden_registry_invalid_slot_raises(registry):
-    overrides = {
-        "Bad Card": {
-            "effects": [{"type": "produce_mana", "slot": "bad_slot", "params": {"amount": 1}}],
-        }
-    }
-    with pytest.raises(ValueError, match="Invalid slot"):
-        build_overridden_registry(registry, overrides)
-
-
 def test_build_overridden_registry_empty_overrides(registry):
     new_reg = build_overridden_registry(registry, {})
     assert len(new_reg) == len(registry)
@@ -415,8 +455,7 @@ def test_build_overridden_registry_empty_overrides(registry):
 def test_build_overridden_registry_preserves_metadata(registry):
     overrides = {
         "Sol Ring": {
-            "effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 3}}],
-            "ramp": True,
+            "categories": [{"category": "ramp", "immediate": False, "producer": {"mana_amount": 3}}],
             "tapped": True,
         }
     }
@@ -430,36 +469,32 @@ def test_build_overridden_registry_preserves_metadata(registry):
 # get_effect_schema()
 # ---------------------------------------------------------------------------
 
-def test_get_effect_schema_contains_all_types():
+def test_get_effect_schema_contains_all_categories():
     schema = get_effect_schema()
-    for type_str in TYPE_MAP:
-        assert type_str in schema, f"Missing {type_str} from schema"
+    assert "categories" in schema
+    for cat in VALID_CATEGORIES:
+        assert cat in schema["categories"], f"Missing {cat} from schema"
 
 
-def test_get_effect_schema_structure():
+def test_get_effect_schema_ramp_has_variants():
     schema = get_effect_schema()
-    produce = schema["produce_mana"]
-    assert produce["label"] == "ProduceMana"
-    assert produce["slot"] == "on_play"
-    assert "amount" in produce["params"]
-    assert produce["params"]["amount"]["type"] == "int"
-    assert produce["params"]["amount"]["default"] == 1
+    ramp = schema["categories"]["ramp"]
+    assert "variants" in ramp
+    assert "producer" in ramp["variants"]
+    assert "land_to_battlefield" in ramp["variants"]
+    assert "reducer" in ramp["variants"]
 
 
-def test_get_effect_schema_slots_are_valid():
+def test_get_effect_schema_draw_has_variants():
     schema = get_effect_schema()
-    for type_str, info in schema.items():
-        assert info["slot"] in VALID_SLOTS, f"{type_str} has invalid slot {info['slot']}"
+    draw = schema["categories"]["draw"]
+    assert "variants" in draw
+    assert "per_turn" in draw["variants"]
+    assert "per_cast" in draw["variants"]
 
 
-def test_get_effect_schema_per_turn_draw():
+def test_get_effect_schema_metadata():
     schema = get_effect_schema()
-    ptd = schema["per_turn_draw"]
-    assert ptd["slot"] == "per_turn"
-    assert ptd["label"] == "PerTurnDraw"
-
-
-def test_get_effect_schema_mana_function():
-    schema = get_effect_schema()
-    crm = schema["cryptolith_rites_mana"]
-    assert crm["slot"] == "mana_function"
+    assert "metadata" in schema
+    assert "priority" in schema["metadata"]
+    assert "override_cmc" in schema["metadata"]

@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import fields as dc_fields
 from pathlib import Path
 from typing import Any
 
-from auto_goldfish.effects.json_loader import METADATA_FIELDS, TYPE_MAP, VALID_SLOTS
+from auto_goldfish.effects.json_loader import METADATA_FIELDS, VALID_CATEGORIES
 
 from .schemas import ScryfallCard
 from .validator import validate_label
@@ -17,293 +16,217 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_LABELED_PATH = Path(__file__).parent / "data" / "labeled_cards.json"
 
-# Conservative subset: types/slots that the LLM can reliably classify.
-CONSERVATIVE_TYPES = {
-    "produce_mana",
-    "draw_cards",
-    "draw_discard",
-    "reduce_cost",
-    "per_turn_draw",
-    "scaling_mana",
+SYSTEM_PROMPT = """\
+You are a Magic: The Gathering card analyst for a mana curve simulator.
+
+## How to respond
+First, write a brief "reasoning" analyzing the card, then fill in "categories".
+Each category is a SELF-CONTAINED object — all variant fields go INSIDE it.
+
+## Category Types
+
+### ramp
+Repeatable mana producer (mana rocks, signets, dorks):
+  {"category": "ramp", "immediate": false, "producer": {"mana_amount": 1}}
+Immediate mana (rituals, one-shot):
+  {"category": "ramp", "immediate": true, "producer": {"mana_amount": 3}}
+Land fetch (Cultivate, Rampant Growth):
+  {"category": "ramp", "immediate": true, "land_to_battlefield": {"count": 1, "tempo": "tapped"}}
+Cost reducer (Goblin Warchief):
+  {"category": "ramp", "immediate": false, "reducer": {"spell_type": "creature", "amount": 1}}
+  Valid spell_type: "creature", "enchantment", "nonpermanent", "permanent", "spell"
+
+### draw
+Immediate (Harmonize):
+  {"category": "draw", "immediate": true, "amount": 3}
+Per-turn (Phyrexian Arena):
+  {"category": "draw", "immediate": false, "per_turn": {"amount": 1}}
+Per-cast (Beast Whisperer):
+  {"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "creature"}}
+  Valid trigger: "spell", "creature", "enchantment", "land", "artifact", "nonpermanent"
+
+### discard
+  {"category": "discard", "amount": 2}
+
+### land
+  {"category": "land", "tapped": true}
+  (only for lands that enter tapped; normal lands need no entry)
+
+## Rules
+- Cards that don't fit any category: {"categories": []}
+- Draw+discard (e.g. Faithless Looting): use BOTH draw and discard categories
+- IMPORTANT: "producer", "per_turn", "per_cast", etc. go INSIDE the category object, NEVER in metadata
+
+## Examples
+
+Rakdos Signet (mana rock, {T}: Add {B}{R}):
+{
+  "reasoning": "Rakdos Signet is a mana rock that taps for 1 mana. Repeatable producer.",
+  "categories": [
+    {"category": "ramp", "immediate": false, "producer": {"mana_amount": 1}}
+  ]
 }
-CONSERVATIVE_SLOTS = {"on_play", "per_turn"}
 
+Sol Ring ({T}: Add {C}{C}):
+{
+  "reasoning": "Sol Ring taps for 2 colorless mana. Repeatable producer with amount 2.",
+  "categories": [
+    {"category": "ramp", "immediate": false, "producer": {"mana_amount": 2}}
+  ]
+}
 
-def _build_effect_docs() -> str:
-    """Build documentation of all effect types and their params."""
-    lines = []
-    for type_name, cls in TYPE_MAP.items():
-        params = {f.name: f.type for f in dc_fields(cls)}
-        if params:
-            param_str = ", ".join(f"{k}: {v}" for k, v in params.items())
-            lines.append(f"  - {type_name}: params({param_str})")
-        else:
-            lines.append(f"  - {type_name}: no params")
-    return "\n".join(lines)
+Cultivate (search for two lands, one to battlefield tapped, one to hand):
+{
+  "reasoning": "Cultivate puts 1 land onto the battlefield tapped. Land fetch ramp.",
+  "categories": [
+    {"category": "ramp", "immediate": true, "land_to_battlefield": {"count": 1, "tempo": "tapped"}}
+  ]
+}
 
+Phyrexian Arena (draw a card and lose 1 life each upkeep):
+{
+  "reasoning": "Draws 1 card per turn. Repeatable per-turn draw. Life loss is irrelevant.",
+  "categories": [
+    {"category": "draw", "immediate": false, "per_turn": {"amount": 1}}
+  ]
+}
 
-def _build_conservative_effect_docs() -> str:
-    """Build documentation of only the conservative-subset effect types."""
-    lines = []
-    for type_name, cls in TYPE_MAP.items():
-        if type_name not in CONSERVATIVE_TYPES:
-            continue
-        params = {f.name: f.type for f in dc_fields(cls)}
-        if params:
-            param_str = ", ".join(f"{k}: {v}" for k, v in params.items())
-            lines.append(f"  - {type_name}: params({param_str})")
-        else:
-            lines.append(f"  - {type_name}: no params")
-    return "\n".join(lines)
+The Great Henge ({T}: Add {G}{G}; draw on creature ETB):
+{
+  "reasoning": "Taps for 2 mana (repeatable producer) and draws on each creature cast.",
+  "categories": [
+    {"category": "ramp", "immediate": false, "producer": {"mana_amount": 2}},
+    {"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "creature"}}
+  ]
+}
 
-
-_EFFECT_DOCS = _build_effect_docs()
-_CONSERVATIVE_EFFECT_DOCS = _build_conservative_effect_docs()
-
-SYSTEM_PROMPT = f"""\
-You are a Magic: The Gathering card analyst for a mana curve simulator.
-Your job is to label cards with machine-interpretable effects.
-
-## Effect Types and Parameters
-{_EFFECT_DOCS}
-
-## Valid Slots
-Each effect must be assigned to exactly one slot:
-  - on_play: triggers once when the card is played
-  - per_turn: triggers at the start of each turn after the card is in play
-  - cast_trigger: triggers when another spell is cast while this card is in play
-  - mana_function: provides a dynamic mana ability evaluated each turn
-
-## Metadata Fields (all optional)
-  - priority (int): play priority (0 = normal, 2 = high). Use 2 for scaling effects.
-  - ramp (bool): true if this card produces or increases mana
-  - is_land_tutor (bool): true if this card searches for land cards
-  - tapped (bool): true if this card enters tapped or has a significant tempo cost
-  - extra_types (list[str]): additional card types for simulation, e.g. ["land", "artifact"]
-  - override_cmc (int): override the mana cost for simulation purposes
-
-## Output Schema
-Return a JSON object with exactly two keys:
-{{
-  "effects": [
-    {{"type": "<effect_type>", "slot": "<slot>", "params": {{<key>: <value>}}}}
-  ],
-  "metadata": {{<key>: <value>}}
-}}
-
-## Important Rules
-- Only label effects that the simulator can model (the types listed above)
-- Cards that don't fit any effect type should get empty effects: {{"effects": [], "metadata": {{}}}}
-- Mana rocks/dorks/ramp spells that add 1 mana: produce_mana amount=1, slot=on_play, ramp=true
-- Mana rocks that add 2 mana: produce_mana amount=2 (e.g. Sol Ring)
-- Cost reducers: use reduce_cost with the appropriate category param
-- Card draw on ETB: draw_cards with amount, slot=on_play
-- Recurring draw: per_turn_draw, slot=per_turn
-- Draw on cast trigger: per_cast_draw with creature/spell/etc category, slot=cast_trigger
-- Scaling mana (gains mana over time): scaling_mana, slot=per_turn, priority=2
-
-## Examples
-
-### Sol Ring
-Input: name="Sol Ring", mana_cost="{{1}}", type_line="Artifact", oracle_text="{{T}}: Add {{C}}{{C}}."
-Output: {{"effects": [{{"type": "produce_mana", "slot": "on_play", "params": {{"amount": 2}}}}], "metadata": {{"ramp": true}}}}
-
-### Phyrexian Arena
-Input: name="Phyrexian Arena", mana_cost="{{1}}{{B}}{{B}}", type_line="Enchantment", oracle_text="At the beginning of your upkeep, you draw a card and you lose 1 life."
-Output: {{"effects": [{{"type": "per_turn_draw", "slot": "per_turn", "params": {{"amount": 1}}}}], "metadata": {{}}}}
-
-### The Great Henge
-Input: name="The Great Henge", mana_cost="{{7}}{{G}}{{G}}", type_line="Legendary Artifact", oracle_text="This spell costs {{X}} less to cast, where X is the greatest power among creatures you control. {{T}}: Add {{G}}{{G}}. You gain 2 life. Whenever a nontoken creature enters the battlefield under your control, put a +1/+1 counter on it and draw a card."
-Output: {{"effects": [{{"type": "produce_mana", "slot": "on_play", "params": {{"amount": 2}}}}, {{"type": "per_cast_draw", "slot": "cast_trigger", "params": {{"creature": 1}}}}], "metadata": {{"ramp": true}}}}
-
-### Lightning Bolt (no simulatable effect)
-Input: name="Lightning Bolt", mana_cost="{{R}}", type_line="Instant", oracle_text="Lightning Bolt deals 3 damage to any target."
-Output: {{"effects": [], "metadata": {{}}}}
+Path to Exile (exile target creature, its controller searches for a land):
+{
+  "reasoning": "Removal spell. The land goes to the opponent, not us. No simulatable effect.",
+  "categories": []
+}
 """
 
-BATCH_SYSTEM_PROMPT = f"""\
+BATCH_SYSTEM_PROMPT = """\
 You are a Magic: The Gathering card analyst for a mana curve simulator.
-Your job is to label multiple cards at once with machine-interpretable effects.
+Your job is to label multiple cards at once with machine-interpretable categories.
 
-## Effect Types and Parameters
-{_EFFECT_DOCS}
+## How to respond
+For each card, write a brief "reasoning" analyzing the card, then fill in "categories".
+Each category is a SELF-CONTAINED object — all variant fields go INSIDE it.
 
-## Valid Slots
-Each effect must be assigned to exactly one slot:
-  - on_play: triggers once when the card is played
-  - per_turn: triggers at the start of each turn after the card is in play
-  - cast_trigger: triggers when another spell is cast while this card is in play
-  - mana_function: provides a dynamic mana ability evaluated each turn
+## Category Types
 
-## Metadata Fields (all optional)
-  - priority (int): play priority (0 = normal, 2 = high). Use 2 for scaling effects.
-  - ramp (bool): true if this card produces or increases mana
-  - is_land_tutor (bool): true if this card searches for land cards
-  - tapped (bool): true if this card enters tapped or has a significant tempo cost
-  - extra_types (list[str]): additional card types for simulation, e.g. ["land", "artifact"]
-  - override_cmc (int): override the mana cost for simulation purposes
+### ramp
+Repeatable mana producer (mana rocks, signets, dorks):
+  {"category": "ramp", "immediate": false, "producer": {"mana_amount": 1}}
+Immediate mana (rituals, one-shot):
+  {"category": "ramp", "immediate": true, "producer": {"mana_amount": 3}}
+Land fetch (Cultivate, Rampant Growth):
+  {"category": "ramp", "immediate": true, "land_to_battlefield": {"count": 1, "tempo": "tapped"}}
+Cost reducer (Goblin Warchief):
+  {"category": "ramp", "immediate": false, "reducer": {"spell_type": "creature", "amount": 1}}
+  Valid spell_type: "creature", "enchantment", "nonpermanent", "permanent", "spell"
 
-## Important Rules
-- Only label effects that the simulator can model (the types listed above)
-- Cards that don't fit any effect type should get empty effects: {{"effects": [], "metadata": {{}}}}
-- Mana rocks/dorks/ramp spells that add 1 mana: produce_mana amount=1, slot=on_play, ramp=true
-- Mana rocks that add 2 mana: produce_mana amount=2 (e.g. Sol Ring)
-- Cost reducers: use reduce_cost with the appropriate category param
-- Card draw on ETB: draw_cards with amount, slot=on_play
-- Recurring draw: per_turn_draw, slot=per_turn
-- Draw on cast trigger: per_cast_draw with creature/spell/etc category, slot=cast_trigger
-- Scaling mana (gains mana over time): scaling_mana, slot=per_turn, priority=2
+### draw
+Immediate (Harmonize):
+  {"category": "draw", "immediate": true, "amount": 3}
+Per-turn (Phyrexian Arena):
+  {"category": "draw", "immediate": false, "per_turn": {"amount": 1}}
+Per-cast (Beast Whisperer):
+  {"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "creature"}}
+  Valid trigger: "spell", "creature", "enchantment", "land", "artifact", "nonpermanent"
+
+### discard
+  {"category": "discard", "amount": 2}
+
+### land
+  {"category": "land", "tapped": true}
+  (only for lands that enter tapped; normal lands need no entry)
+
+## Rules
+- Cards that don't fit any category: {"categories": []}
+- Draw+discard (e.g. Faithless Looting): use BOTH draw and discard categories
+- IMPORTANT: "producer", "per_turn", "per_cast", etc. go INSIDE the category object, NEVER in metadata
 
 ## Output Schema
-Return a JSON object keyed by card name. Each value has "effects" and "metadata":
-{{
-  "Card Name": {{
-    "effects": [{{"type": "<type>", "slot": "<slot>", "params": {{...}}}}],
-    "metadata": {{...}}
-  }},
-  ...
-}}
+Return a JSON object keyed by card name. Each entry has "reasoning" and "categories":
+{
+  "Sol Ring": {
+    "reasoning": "Sol Ring taps for 2 colorless mana. Repeatable producer with amount 2.",
+    "categories": [
+      {"category": "ramp", "immediate": false, "producer": {"mana_amount": 2}}
+    ]
+  },
+  "Lightning Bolt": {
+    "reasoning": "Damage only. No mana, draw, or discard effect for the simulator.",
+    "categories": []
+  }
+}
 
 You MUST include an entry for every card listed in the prompt, using the exact card name.
 """
 
-CONSERVATIVE_SYSTEM_PROMPT = f"""\
-You are a Magic: The Gathering card analyst for a mana curve simulator.
-Your job is to label cards with machine-interpretable effects.
-
-## Effect Types and Parameters
-{_CONSERVATIVE_EFFECT_DOCS}
-
-## Valid Slots
-Each effect must be assigned to exactly one slot:
-  - on_play: triggers once when the card is played
-  - per_turn: triggers at the start of each turn after the card is in play
-
-Do NOT use cast_trigger or mana_function slots.
-
-## Metadata Fields (all optional)
-  - priority (int): play priority (0 = normal, 2 = high). Use 2 for scaling effects.
-  - ramp (bool): true if this card produces or increases mana
-  - tapped (bool): true if this card enters tapped or has a significant tempo cost
-  - extra_types (list[str]): additional card types for simulation, e.g. ["land", "artifact"]
-  - override_cmc (int): override the mana cost for simulation purposes
-
-## Approximation Guidance
-- If a card draws when other spells are cast, approximate as per_turn_draw with an \
-estimated average draws per turn.
-- If a card produces mana based on board state (creatures, enchantments, etc.), \
-approximate as produce_mana or scaling_mana.
-- Do NOT use tutor effects. Do NOT use cast_trigger or mana_function slots.
-- Do NOT use is_land_tutor metadata.
-
-## Output Schema
-Return a JSON object with exactly two keys:
-{{{{
-  "effects": [
-    {{{{"type": "<effect_type>", "slot": "<slot>", "params": {{{{<key>: <value>}}}}}}}}
-  ],
-  "metadata": {{{{<key>: <value>}}}}
-}}}}
-
-## Important Rules
-- Only label effects using the types listed above
-- Cards that don't fit any effect type should get empty effects: {{{{"effects": [], "metadata": {{{{}}}}}}}}
-- Mana rocks/dorks/ramp spells that add 1 mana: produce_mana amount=1, slot=on_play, ramp=true
-- Mana rocks that add 2 mana: produce_mana amount=2 (e.g. Sol Ring)
-- Cost reducers: use reduce_cost with the appropriate category param
-- Card draw on ETB: draw_cards with amount, slot=on_play
-- Recurring draw: per_turn_draw, slot=per_turn
-- Scaling mana (gains mana over time): scaling_mana, slot=per_turn, priority=2
-
-## Examples
-
-### Sol Ring
-Input: name="Sol Ring", mana_cost="{{1}}", type_line="Artifact", oracle_text="{{T}}: Add {{C}}{{C}}."
-Output: {{{{"effects": [{{{{"type": "produce_mana", "slot": "on_play", "params": {{{{"amount": 2}}}}}}}}], "metadata": {{{{"ramp": true}}}}}}}}
-
-### Phyrexian Arena
-Input: name="Phyrexian Arena", mana_cost="{{1}}{{B}}{{B}}", type_line="Enchantment", oracle_text="At the beginning of your upkeep, you draw a card and you lose 1 life."
-Output: {{{{"effects": [{{{{"type": "per_turn_draw", "slot": "per_turn", "params": {{{{"amount": 1}}}}}}}}], "metadata": {{{{}}}}}}}}
-
-### Beast Whisperer (approximated)
-Input: name="Beast Whisperer", mana_cost="{{2}}{{G}}{{G}}", type_line="Creature — Elf Druid", oracle_text="Whenever you cast a creature spell, draw a card."
-Output: {{{{"effects": [{{{{"type": "per_turn_draw", "slot": "per_turn", "params": {{{{"amount": 1}}}}}}}}], "metadata": {{{{}}}}}}}}
-
-### Lightning Bolt (no simulatable effect)
-Input: name="Lightning Bolt", mana_cost="{{R}}", type_line="Instant", oracle_text="Lightning Bolt deals 3 damage to any target."
-Output: {{{{"effects": [], "metadata": {{{{}}}}}}}}
-"""
-
-CONSERVATIVE_BATCH_SYSTEM_PROMPT = f"""\
-You are a Magic: The Gathering card analyst for a mana curve simulator.
-Your job is to label multiple cards at once with machine-interpretable effects.
-
-## Effect Types and Parameters
-{_CONSERVATIVE_EFFECT_DOCS}
-
-## Valid Slots
-Each effect must be assigned to exactly one slot:
-  - on_play: triggers once when the card is played
-  - per_turn: triggers at the start of each turn after the card is in play
-
-Do NOT use cast_trigger or mana_function slots.
-
-## Metadata Fields (all optional)
-  - priority (int): play priority (0 = normal, 2 = high). Use 2 for scaling effects.
-  - ramp (bool): true if this card produces or increases mana
-  - tapped (bool): true if this card enters tapped or has a significant tempo cost
-  - extra_types (list[str]): additional card types for simulation, e.g. ["land", "artifact"]
-  - override_cmc (int): override the mana cost for simulation purposes
-
-## Approximation Guidance
-- If a card draws when other spells are cast, approximate as per_turn_draw with an \
-estimated average draws per turn.
-- If a card produces mana based on board state (creatures, enchantments, etc.), \
-approximate as produce_mana or scaling_mana.
-- Do NOT use tutor effects. Do NOT use cast_trigger or mana_function slots.
-- Do NOT use is_land_tutor metadata.
-
-## Important Rules
-- Only label effects using the types listed above
-- Cards that don't fit any effect type should get empty effects: {{{{"effects": [], "metadata": {{{{}}}}}}}}
-- Mana rocks/dorks/ramp spells that add 1 mana: produce_mana amount=1, slot=on_play, ramp=true
-- Mana rocks that add 2 mana: produce_mana amount=2 (e.g. Sol Ring)
-- Cost reducers: use reduce_cost with the appropriate category param
-- Card draw on ETB: draw_cards with amount, slot=on_play
-- Recurring draw: per_turn_draw, slot=per_turn
-- Scaling mana (gains mana over time): scaling_mana, slot=per_turn, priority=2
-
-## Output Schema
-Return a JSON object keyed by card name. Each value has "effects" and "metadata":
-{{{{
-  "Card Name": {{{{
-    "effects": [{{{{"type": "<type>", "slot": "<slot>", "params": {{{{...}}}}}}}}],
-    "metadata": {{{{...}}}}
-  }}}},
-  ...
-}}}}
-
-You MUST include an entry for every card listed in the prompt, using the exact card name.
-"""
+# Expanded category item schema — Ollama uses this for constrained decoding,
+# so all possible variant fields must be declared or the model cannot output them.
+_CATEGORY_ITEM_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "category": {"type": "string"},
+        "immediate": {"type": "boolean"},
+        # ramp variants
+        "producer": {
+            "type": "object",
+            "properties": {
+                "mana_amount": {"type": "integer"},
+            },
+        },
+        "land_to_battlefield": {
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer"},
+                "tempo": {"type": "string"},
+            },
+        },
+        "reducer": {
+            "type": "object",
+            "properties": {
+                "spell_type": {"type": "string"},
+                "amount": {"type": "integer"},
+            },
+        },
+        # draw variants
+        "amount": {"type": "integer"},
+        "per_turn": {
+            "type": "object",
+            "properties": {
+                "amount": {"type": "integer"},
+            },
+        },
+        "per_cast": {
+            "type": "object",
+            "properties": {
+                "amount": {"type": "integer"},
+                "trigger": {"type": "string"},
+            },
+        },
+        # land
+        "tapped": {"type": "boolean"},
+    },
+    "required": ["category"],
+}
 
 _LABEL_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
-        "effects": {
+        "reasoning": {"type": "string"},
+        "categories": {
             "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "type": {"type": "string"},
-                    "slot": {"type": "string"},
-                    "params": {"type": "object"},
-                },
-                "required": ["type", "slot", "params"],
-            },
+            "items": _CATEGORY_ITEM_SCHEMA,
         },
         "metadata": {"type": "object"},
     },
-    "required": ["effects", "metadata"],
+    "required": ["reasoning", "categories"],
 }
 
 # JSON schema for single-card structured output (ollama format parameter).
@@ -358,7 +281,6 @@ def label_card_batch(
     cards: list[ScryfallCard],
     model: str = "llama4:16x17b",
     max_retries: int = 3,
-    conservative: bool = True,
 ) -> dict[str, dict]:
     """Label a batch of cards in a single Ollama call.
 
@@ -370,9 +292,8 @@ def label_card_batch(
     card_names = [c.name for c in cards]
     schema = batch_json_schema(card_names)
 
-    system_prompt = CONSERVATIVE_BATCH_SYSTEM_PROMPT if conservative else BATCH_SYSTEM_PROMPT
     messages = [
-        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": BATCH_SYSTEM_PROMPT},
         {"role": "user", "content": build_batch_prompt(cards)},
     ]
 
@@ -386,6 +307,8 @@ def label_card_batch(
             )
             content = response["message"]["content"]
             parsed = json.loads(content)
+            # Normalize each card's label
+            parsed = {name: _normalize_label(lbl) for name, lbl in parsed.items()}
             # Verify all card names are present
             missing = set(card_names) - set(parsed.keys())
             if missing:
@@ -411,22 +334,29 @@ def label_card_batch(
     raise ValueError("Failed to label batch")  # pragma: no cover
 
 
+def _normalize_label(raw: dict) -> dict:
+    """Strip reasoning and ensure metadata defaults to {}."""
+    result = {
+        "categories": raw.get("categories", []),
+        "metadata": raw.get("metadata", {}),
+    }
+    return result
+
+
 def label_card(
     card: ScryfallCard,
     model: str = "llama4:16x17b",
     max_retries: int = 3,
-    conservative: bool = True,
 ) -> dict:
     """Label a single card using an Ollama LLM.
 
-    Returns the parsed label dict with 'effects' and 'metadata' keys.
+    Returns the parsed label dict with 'categories' and 'metadata' keys.
     Retries up to max_retries times on JSON parse failure.
     """
     import ollama
 
-    system_prompt = CONSERVATIVE_SYSTEM_PROMPT if conservative else SYSTEM_PROMPT
     messages = [
-        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": build_card_prompt(card)},
     ]
 
@@ -439,7 +369,8 @@ def label_card(
                 options={"temperature": 0},
             )
             content = response["message"]["content"]
-            return json.loads(content)
+            parsed = json.loads(content)
+            return _normalize_label(parsed)
         except (json.JSONDecodeError, KeyError) as exc:
             logger.warning(
                 "Attempt %d/%d for %s failed: %s",
@@ -481,7 +412,6 @@ def label_cards(
     resume: bool = True,
     concurrency: int = 1,
     batch_size: int = 1,
-    conservative: bool = True,
 ) -> dict[str, dict]:
     """Label multiple cards with LLM, with incremental saving and resume support.
 
@@ -492,7 +422,6 @@ def label_cards(
         resume: If True, skip cards already in the output file.
         concurrency: Number of parallel Ollama requests.
         batch_size: Number of cards per LLM call (>1 uses batch mode).
-        conservative: If True, use conservative prompts with simpler effect types.
 
     Returns:
         Dict mapping card name to label dict.
@@ -517,73 +446,68 @@ def label_cards(
     for i in range(0, len(to_label), batch_size):
         batches.append(to_label[i : i + batch_size])
 
+    skipped = 0
+
+    def _label_and_validate(card: ScryfallCard) -> dict | None:
+        """Label a single card, returning None if it fails validation."""
+        try:
+            label = label_card(card, model=model)
+        except ValueError:
+            logger.error("Failed to label %s, skipping", card.name)
+            return None
+        errors = validate_label(card.name, label)
+        if errors:
+            logger.warning("Skipping %s (validation errors): %s", card.name, errors)
+            return None
+        return label
+
     def _process_batch(batch: list[ScryfallCard]) -> dict[str, dict]:
+        nonlocal skipped
         batch_results: dict[str, dict] = {}
 
         if len(batch) == 1:
-            # Single card — use single-card path
             card = batch[0]
-            try:
-                label = label_card(card, model=model, conservative=conservative)
-            except ValueError:
-                logger.error("Failed to label %s, skipping", card.name)
-                return batch_results
-            errors = validate_label(card.name, label, conservative=conservative)
-            if errors:
-                logger.warning("Validation errors for %s: %s", card.name, errors)
-            batch_results[card.name] = label
+            label = _label_and_validate(card)
+            if label is not None:
+                batch_results[card.name] = label
+            else:
+                skipped += 1
             return batch_results
 
         # Multi-card batch
         try:
-            batch_labels = label_card_batch(
-                batch, model=model, conservative=conservative,
-            )
+            batch_labels = label_card_batch(batch, model=model)
         except ValueError:
             # Batch failed — fall back to single-card for each
             logger.warning("Batch failed, falling back to single-card labeling")
             for card in batch:
-                try:
-                    label = label_card(
-                        card, model=model, conservative=conservative,
-                    )
-                except ValueError:
-                    logger.error("Failed to label %s, skipping", card.name)
-                    continue
-                errors = validate_label(
-                    card.name, label, conservative=conservative,
-                )
-                if errors:
-                    logger.warning("Validation errors for %s: %s", card.name, errors)
-                batch_results[card.name] = label
+                label = _label_and_validate(card)
+                if label is not None:
+                    batch_results[card.name] = label
+                else:
+                    skipped += 1
             return batch_results
 
         # Validate each card in batch results
         for card in batch:
             if card.name in batch_labels:
                 label = batch_labels[card.name]
-                errors = validate_label(
-                    card.name, label, conservative=conservative,
-                )
+                errors = validate_label(card.name, label)
                 if errors:
-                    logger.warning("Validation errors for %s: %s", card.name, errors)
-                batch_results[card.name] = label
+                    logger.warning(
+                        "Skipping %s (validation errors): %s", card.name, errors,
+                    )
+                    skipped += 1
+                else:
+                    batch_results[card.name] = label
             else:
                 # Card missing from batch — fall back to single
                 logger.warning("%s missing from batch, trying single-card", card.name)
-                try:
-                    label = label_card(
-                        card, model=model, conservative=conservative,
-                    )
-                except ValueError:
-                    logger.error("Failed to label %s, skipping", card.name)
-                    continue
-                errors = validate_label(
-                    card.name, label, conservative=conservative,
-                )
-                if errors:
-                    logger.warning("Validation errors for %s: %s", card.name, errors)
-                batch_results[card.name] = label
+                label = _label_and_validate(card)
+                if label is not None:
+                    batch_results[card.name] = label
+                else:
+                    skipped += 1
 
         return batch_results
 
@@ -598,5 +522,10 @@ def label_cards(
                     results.update(batch_results)
                     save_labeled(results, output_path)
                 pbar.update(len(futures[future]))
+
+    if skipped:
+        logger.warning(
+            "%d cards skipped due to errors (re-run to retry them)", skipped,
+        )
 
     return results

@@ -22,6 +22,7 @@ class ScryfallCard:
     layout: str = "normal"
     card_faces: Optional[List[Dict[str, Any]]] = None
     produced_mana: List[str] = field(default_factory=list)
+    otags: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to a JSON-compatible dictionary."""
@@ -38,6 +39,7 @@ class ScryfallCard:
             "layout": self.layout,
             "card_faces": self.card_faces,
             "produced_mana": self.produced_mana,
+            "otags": self.otags,
         }
 
     @classmethod
@@ -56,6 +58,7 @@ class ScryfallCard:
             layout=data.get("layout", "normal"),
             card_faces=data.get("card_faces"),
             produced_mana=data.get("produced_mana", []),
+            otags=data.get("otags", []),
         )
 
     @classmethod

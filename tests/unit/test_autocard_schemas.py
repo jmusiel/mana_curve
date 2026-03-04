@@ -22,6 +22,7 @@ def sol_ring_dict():
         "layout": "normal",
         "card_faces": None,
         "produced_mana": ["C"],
+        "otags": [],
     }
 
 
@@ -61,6 +62,7 @@ def double_faced_dict():
             },
         ],
         "produced_mana": [],
+        "otags": [],
     }
 
 
@@ -97,6 +99,7 @@ class TestScryfallCardSerialization:
         assert card.layout == "normal"
         assert card.card_faces is None
         assert card.produced_mana == []
+        assert card.otags == []
 
     def test_round_trip_double_faced(self, double_faced_dict):
         card = ScryfallCard.from_dict(double_faced_dict)
@@ -189,3 +192,44 @@ class TestScryfallCardFromScryfall:
 
         card = ScryfallCard.from_scryfall_object(MockNoMana())
         assert card.produced_mana == []
+
+
+class TestScryfallCardOtags:
+    def test_otags_round_trip(self, sol_ring_dict):
+        sol_ring_dict["otags"] = ["draw", "ramp"]
+        card = ScryfallCard.from_dict(sol_ring_dict)
+        assert card.otags == ["draw", "ramp"]
+        assert card.to_dict()["otags"] == ["draw", "ramp"]
+
+    def test_otags_backward_compat(self):
+        """Old data without otags field should default to empty list."""
+        data = {
+            "name": "Test",
+            "mana_cost": "{1}",
+            "cmc": 1.0,
+            "type_line": "Artifact",
+            "oracle_text": "",
+            "colors": [],
+            "color_identity": [],
+            "keywords": [],
+        }
+        card = ScryfallCard.from_dict(data)
+        assert card.otags == []
+
+    def test_otags_multiple_tags(self):
+        card = ScryfallCard(
+            name="Test",
+            mana_cost="{1}",
+            cmc=1.0,
+            type_line="Artifact",
+            oracle_text="",
+            colors=[],
+            color_identity=[],
+            keywords=[],
+            otags=["draw", "card-advantage", "ramp"],
+        )
+        assert card.otags == ["draw", "card-advantage", "ramp"]
+        d = card.to_dict()
+        assert d["otags"] == ["draw", "card-advantage", "ramp"]
+        restored = ScryfallCard.from_dict(d)
+        assert restored.otags == card.otags

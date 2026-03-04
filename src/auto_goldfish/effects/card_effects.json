@@ -1,11 +1,10 @@
 {
-  "version": 1,
+  "version": 2,
   "groups": [
     {
-      "group": "Mana Producers (1 mana)",
+      "group": "Repeatable Mana Producers (1 mana)",
       "defaults": {
-        "ramp": true,
-        "effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 1}}]
+        "categories": [{"category": "ramp", "immediate": false, "producer": {"mana_amount": 1}}]
       },
       "cards": {
         "Arcane Signet": {},
@@ -28,10 +27,9 @@
       }
     },
     {
-      "group": "Mana Producers (2 mana)",
+      "group": "Repeatable Mana Producers (2 mana)",
       "defaults": {
-        "ramp": true,
-        "effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 2}}]
+        "categories": [{"category": "ramp", "immediate": false, "producer": {"mana_amount": 2}}]
       },
       "cards": {
         "Sol Ring": {},
@@ -42,21 +40,19 @@
       }
     },
     {
-      "group": "Mana Producers (3 mana)",
+      "group": "Repeatable Mana Producers (3 mana)",
       "defaults": {
-        "ramp": true,
-        "effects": [{"type": "produce_mana", "slot": "on_play", "params": {"amount": 3}}]
+        "categories": [{"category": "ramp", "immediate": false, "producer": {"mana_amount": 3}}]
       },
       "cards": {
         "Open the Way": {}
       }
     },
     {
-      "group": "Scaling Mana Producers",
+      "group": "Scaling Mana Producers (approx as repeatable 1)",
       "defaults": {
-        "ramp": true,
         "priority": 2,
-        "effects": [{"type": "scaling_mana", "slot": "per_turn", "params": {"amount": 1}}]
+        "categories": [{"category": "ramp", "immediate": false, "producer": {"mana_amount": 1}}]
       },
       "cards": {
         "As Foretold": {},
@@ -69,37 +65,10 @@
       }
     },
     {
-      "group": "Cryptolith Rite effects",
-      "defaults": {
-        "ramp": true,
-        "priority": 2,
-        "effects": [{"type": "cryptolith_rites_mana", "slot": "mana_function"}]
-      },
-      "cards": {
-        "Gemhide Sliver": {},
-        "Enduring Vitality": {},
-        "Cryptolith Rite": {},
-        "Manaweft Sliver": {}
-      }
-    },
-    {
-      "group": "Enchantment Sanctum effects",
-      "defaults": {
-        "priority": 2,
-        "extra_types": ["artifact"],
-        "effects": [{"type": "enchantment_sanctum_mana", "slot": "mana_function"}]
-      },
-      "cards": {
-        "Serra's Sanctum": {},
-        "Sanctum Weaver": {}
-      }
-    },
-    {
       "group": "Cost Reducers (nonpermanent)",
       "defaults": {
-        "ramp": true,
         "priority": 2,
-        "effects": [{"type": "reduce_cost", "slot": "on_play", "params": {"nonpermanent": 1}}]
+        "categories": [{"category": "ramp", "immediate": false, "reducer": {"spell_type": "nonpermanent", "amount": 1}}]
       },
       "cards": {
         "Thunderclap Drake": {},
@@ -109,9 +78,8 @@
     {
       "group": "Cost Reducers (creature)",
       "defaults": {
-        "ramp": true,
         "priority": 2,
-        "effects": [{"type": "reduce_cost", "slot": "on_play", "params": {"creature": 1}}]
+        "categories": [{"category": "ramp", "immediate": false, "reducer": {"spell_type": "creature", "amount": 1}}]
       },
       "cards": {
         "Hamza, Guardian of Arashin": {},
@@ -121,9 +89,8 @@
     {
       "group": "Cost Reducers (enchantment)",
       "defaults": {
-        "ramp": true,
         "priority": 2,
-        "effects": [{"type": "reduce_cost", "slot": "on_play", "params": {"enchantment": 1}}]
+        "categories": [{"category": "ramp", "immediate": false, "reducer": {"spell_type": "enchantment", "amount": 1}}]
       },
       "cards": {
         "Jukai Naturalist": {},
@@ -131,78 +98,49 @@
       }
     },
     {
-      "group": "Green Tutors",
-      "defaults": {
-        "ramp": true,
-        "priority": 3,
-        "effects": [{"type": "tutor_to_hand", "slot": "on_play", "params": {"targets": [
-          "Gemhide Sliver",
-          "Manaweft Sliver",
-          "Enduring Vitality",
-          "Sanctum Weaver",
-          "Argothian Enchantress",
-          "Sythis, Harvest's Hand",
-          "Setessan Champion",
-          "Satyr Enchanter",
-          "Verduran Enchantress",
-          "Eidolon of Blossoms"
-        ]}}]
-      },
-      "cards": {
-        "Green Sun's Zenith": {},
-        "Finale of Devastation": {}
-      }
-    },
-    {
-      "group": "Land Tutors",
-      "defaults": {
-        "ramp": true,
-        "priority": 3,
-        "is_land_tutor": true,
-        "extra_types": ["sorcery"],
-        "override_cmc": 3
-      },
-      "cards": {
-        "Tolaria West": {
-          "effects": [{"type": "tutor_to_hand", "slot": "on_play", "params": {"targets": ["Serra's Sanctum"]}}],
-          "tapped": true
-        },
-        "Urza's Cave": {
-          "effects": [{"type": "tutor_to_hand", "slot": "on_play", "params": {"targets": ["Serra's Sanctum"]}}]
-        }
-      }
-    },
-    {
       "group": "Immediate Draw (1 card)",
       "defaults": {
         "priority": 1,
-        "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 1}}]
+        "categories": [{"category": "draw", "immediate": true, "amount": 1}]
       },
       "cards": {
         "Archivist of Oghma": {},
         "Growth Spiral": {},
         "Explore": {},
-        "Mulch": {}
+        "Mulch": {},
+        "Frantic Search": {},
+        "Brainstorm": {},
+        "Gitaxian Probe": {},
+        "Gamble": {},
+        "Visions of Beyond": {},
+        "Mystical Tutor": {},
+        "See the Truth": {}
       }
     },
     {
       "group": "Immediate Draw (2 cards)",
       "defaults": {
         "priority": 1,
-        "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 2}}]
+        "categories": [{"category": "draw", "immediate": true, "amount": 2}]
       },
       "cards": {
         "Flame of Anor": {},
         "Plumb the Forbidden": {},
         "Diresight": {},
-        "Read the Bones": {}
+        "Read the Bones": {},
+        "Deadly Dispute": {
+          "categories": [
+            {"category": "draw", "immediate": true, "amount": 2},
+            {"category": "ramp", "immediate": true, "producer": {"mana_amount": 1}}
+          ]
+        }
       }
     },
     {
       "group": "Immediate Draw (3 cards)",
       "defaults": {
         "priority": 1,
-        "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 3}}]
+        "categories": [{"category": "draw", "immediate": true, "amount": 3}]
       },
       "cards": {
         "Manifold Insights": {},
@@ -218,66 +156,80 @@
       "group": "Immediate Draw (4 cards)",
       "defaults": {
         "priority": 1,
-        "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 4}}]
+        "categories": [{"category": "draw", "immediate": true, "amount": 4}]
       },
       "cards": {
         "Rishkar's Expertise": {}
       }
     },
     {
-      "group": "Draw/Discard (simple filter)",
-      "defaults": {
-        "priority": 1,
-        "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 1}}]
-      },
-      "cards": {
-        "Frantic Search": {},
-        "Brainstorm": {},
-        "Gitaxian Probe": {},
-        "Gamble": {},
-        "Visions of Beyond": {},
-        "Mystical Tutor": {},
-        "See the Truth": {}
-      }
-    },
-    {
-      "group": "Draw/Discard (complex)",
+      "group": "Draw + Discard (complex)",
       "defaults": {
         "priority": 1
       },
       "cards": {
         "Fact or Fiction": {
-          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 5, "discard": 2}}]
+          "categories": [
+            {"category": "draw", "immediate": true, "amount": 5},
+            {"category": "discard", "amount": 2}
+          ]
         },
         "Windfall": {
-          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"discard": 100, "second_draw": 6}}]
+          "categories": [
+            {"category": "discard", "amount": 100},
+            {"category": "draw", "immediate": true, "amount": 6}
+          ]
         },
         "Unexpected Windfall": {
-          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"discard": 1, "second_draw": 2, "make_treasures": 2}}]
+          "categories": [
+            {"category": "discard", "amount": 1},
+            {"category": "draw", "immediate": true, "amount": 2},
+            {"category": "ramp", "immediate": true, "producer": {"mana_amount": 2}}
+          ]
         },
         "Big Score": {
-          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"discard": 1, "second_draw": 2, "make_treasures": 2}}]
+          "categories": [
+            {"category": "discard", "amount": 1},
+            {"category": "draw", "immediate": true, "amount": 2},
+            {"category": "ramp", "immediate": true, "producer": {"mana_amount": 2}}
+          ]
         },
         "Maestros Charm": {
-          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 5, "discard": 4}}]
+          "categories": [
+            {"category": "draw", "immediate": true, "amount": 5},
+            {"category": "discard", "amount": 4}
+          ]
         },
         "Picklock Prankster // Free the Fae": {
-          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 4, "discard": 3}}]
+          "categories": [
+            {"category": "draw", "immediate": true, "amount": 4},
+            {"category": "discard", "amount": 3}
+          ]
         },
         "Consider": {
-          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 2, "discard": 1}}]
+          "categories": [
+            {"category": "draw", "immediate": true, "amount": 2},
+            {"category": "discard", "amount": 1}
+          ]
         },
         "Thought Scour": {
-          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 3, "discard": 2}}]
+          "categories": [
+            {"category": "draw", "immediate": true, "amount": 3},
+            {"category": "discard", "amount": 2}
+          ]
         },
         "Faithless Looting": {
-          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 2, "discard": 2}}]
+          "categories": [
+            {"category": "draw", "immediate": true, "amount": 2},
+            {"category": "discard", "amount": 2}
+          ]
         },
         "Prismari Command": {
-          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 2, "discard": 2, "make_treasures": 1}}]
-        },
-        "Deadly Dispute": {
-          "effects": [{"type": "draw_discard", "slot": "on_play", "params": {"first_draw": 2, "make_treasures": 1}}]
+          "categories": [
+            {"category": "draw", "immediate": true, "amount": 2},
+            {"category": "discard", "amount": 2},
+            {"category": "ramp", "immediate": true, "producer": {"mana_amount": 1}}
+          ]
         }
       }
     },
@@ -285,7 +237,7 @@
       "group": "Per-Turn Draw",
       "defaults": {
         "priority": 1,
-        "effects": [{"type": "per_turn_draw", "slot": "per_turn", "params": {"amount": 1}}]
+        "categories": [{"category": "draw", "immediate": false, "per_turn": {"amount": 1}}]
       },
       "cards": {
         "Black Market Connections": {},
@@ -310,14 +262,14 @@
       "group": "Per-Cast Draw (nonpermanent)",
       "defaults": {
         "priority": 1,
-        "effects": [{"type": "per_cast_draw", "slot": "cast_trigger", "params": {"nonpermanent": 1}}]
+        "categories": [{"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "nonpermanent"}}]
       },
       "cards": {
         "Archmage Emeritus": {},
         "Archmage of Runes": {
-          "effects": [
-            {"type": "per_cast_draw", "slot": "cast_trigger", "params": {"nonpermanent": 1}},
-            {"type": "reduce_cost", "slot": "on_play", "params": {"nonpermanent": 1}}
+          "categories": [
+            {"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "nonpermanent"}},
+            {"category": "ramp", "immediate": false, "reducer": {"spell_type": "nonpermanent", "amount": 1}}
           ]
         }
       }
@@ -326,7 +278,7 @@
       "group": "Per-Cast Draw (spell)",
       "defaults": {
         "priority": 1,
-        "effects": [{"type": "per_cast_draw", "slot": "cast_trigger", "params": {"spell": 1}}]
+        "categories": [{"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "spell"}}]
       },
       "cards": {
         "Bolas's Citadel": {}
@@ -336,7 +288,7 @@
       "group": "Per-Cast Draw (creature)",
       "defaults": {
         "priority": 1,
-        "effects": [{"type": "per_cast_draw", "slot": "cast_trigger", "params": {"creature": 1}}]
+        "categories": [{"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "creature"}}]
       },
       "cards": {
         "Skullclamp": {},
@@ -347,9 +299,9 @@
         "Erebos, Bleak-Hearted": {},
         "Mentor of the Meek": {},
         "The Great Henge": {
-          "effects": [
-            {"type": "per_cast_draw", "slot": "cast_trigger", "params": {"creature": 1}},
-            {"type": "produce_mana", "slot": "on_play", "params": {"amount": 2}}
+          "categories": [
+            {"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "creature"}},
+            {"category": "ramp", "immediate": false, "producer": {"mana_amount": 2}}
           ]
         }
       }
@@ -358,7 +310,7 @@
       "group": "Per-Cast Draw (enchantment)",
       "defaults": {
         "priority": 1,
-        "effects": [{"type": "per_cast_draw", "slot": "cast_trigger", "params": {"enchantment": 1}}]
+        "categories": [{"category": "draw", "immediate": false, "per_cast": {"amount": 1, "trigger": "enchantment"}}]
       },
       "cards": {
         "Mesa Enchantress": {},
@@ -377,13 +329,16 @@
       "defaults": {},
       "cards": {
         "Lórien Revealed": {
-          "effects": [{"type": "draw_cards", "slot": "on_play", "params": {"amount": 3}}],
+          "categories": [{"category": "draw", "immediate": true, "amount": 3}],
           "extra_types": ["land"],
           "tapped": true
         },
         "Cabal Coffers": {
-          "effects": [],
+          "categories": [],
           "extra_types": ["artifact"]
+        },
+        "Tolaria West": {
+          "categories": [{"category": "land", "tapped": true}]
         }
       }
     }

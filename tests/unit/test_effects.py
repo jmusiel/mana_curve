@@ -1,21 +1,18 @@
 """Tests for the effects system."""
 
 from auto_goldfish.effects.builtin import (
-    CryptolithRitesMana,
+    DiscardCards,
     DrawCards,
-    DrawDiscard,
-    EnchantmentSanctumMana,
+    ImmediateMana,
+    LandToBattlefield,
     PerCastDraw,
     PerTurnDraw,
     ProduceMana,
     ReduceCost,
-    ScalingMana,
-    TutorToHand,
 )
 from auto_goldfish.effects.registry import CardEffects, EffectRegistry
 from auto_goldfish.effects.types import (
     CastTriggerEffect,
-    ManaFunctionEffect,
     OnPlayEffect,
     PerTurnEffect,
 )
@@ -27,14 +24,26 @@ class TestProtocols:
     def test_produce_mana_is_on_play(self):
         assert isinstance(ProduceMana(1), OnPlayEffect)
 
-    def test_scaling_mana_is_per_turn(self):
-        assert isinstance(ScalingMana(1), PerTurnEffect)
+    def test_draw_cards_is_on_play(self):
+        assert isinstance(DrawCards(1), OnPlayEffect)
+
+    def test_immediate_mana_is_on_play(self):
+        assert isinstance(ImmediateMana(1), OnPlayEffect)
+
+    def test_land_to_battlefield_is_on_play(self):
+        assert isinstance(LandToBattlefield(), OnPlayEffect)
+
+    def test_discard_cards_is_on_play(self):
+        assert isinstance(DiscardCards(1), OnPlayEffect)
+
+    def test_reduce_cost_is_on_play(self):
+        assert isinstance(ReduceCost(), OnPlayEffect)
+
+    def test_per_turn_draw_is_per_turn(self):
+        assert isinstance(PerTurnDraw(1), PerTurnEffect)
 
     def test_per_cast_draw_is_cast_trigger(self):
-        assert isinstance(PerCastDraw(creature=1), CastTriggerEffect)
-
-    def test_cryptolith_is_mana_function(self):
-        assert isinstance(CryptolithRitesMana(), ManaFunctionEffect)
+        assert isinstance(PerCastDraw(amount=1, trigger="creature"), CastTriggerEffect)
 
 
 class TestProduceMana:
@@ -52,56 +61,106 @@ class TestProduceMana:
         assert gs.mana_production == 3
 
 
+class TestImmediateMana:
+    def test_adds_treasure(self):
+        gs = GameState()
+        card = Card(name="Dark Ritual", cmc=1, types=["instant"])
+        ImmediateMana(3).on_play(card, gs)
+        assert gs.treasure == 3
+
+    def test_stacks(self):
+        gs = GameState()
+        card = Card(name="Ritual", cmc=1, types=["instant"])
+        ImmediateMana(2).on_play(card, gs)
+        ImmediateMana(1).on_play(card, gs)
+        assert gs.treasure == 3
+
+
+class TestDiscardCards:
+    def test_discards_from_hand(self):
+        gs = GameState()
+        card = Card(name="Faithless Looting", cmc=1, types=["sorcery"])
+        # Set up a hand with cards
+        c1 = Card(name="A", cmc=1, types=["creature"])
+        c2 = Card(name="B", cmc=2, types=["creature"])
+        gs.decklist = [c1, c2]
+        gs.hand = [0, 1]
+        c1.zone = gs.hand
+        c2.zone = gs.hand
+        gs.should_log = False
+
+        DiscardCards(1).on_play(card, gs)
+        assert len(gs.hand) == 1
+
+    def test_discard_stops_on_empty_hand(self):
+        gs = GameState()
+        card = Card(name="Faithless Looting", cmc=1, types=["sorcery"])
+        gs.decklist = []
+        gs.hand = []
+        gs.should_log = False
+        # Should not error
+        DiscardCards(3).on_play(card, gs)
+        assert len(gs.hand) == 0
+
+
 class TestReduceCost:
     def test_reduces_creature_cost(self):
         gs = GameState()
         card = Card(name="Hamza", cmc=6, types=["creature"])
-        ReduceCost(creature=1).on_play(card, gs)
+        ReduceCost(spell_type="creature", amount=1).on_play(card, gs)
         assert gs.creature_cost_reduction == 1
 
     def test_reduces_enchantment_cost(self):
         gs = GameState()
         card = Card(name="Jukai", cmc=2, types=["creature"])
-        ReduceCost(enchantment=1).on_play(card, gs)
+        ReduceCost(spell_type="enchantment", amount=1).on_play(card, gs)
         assert gs.enchantment_cost_reduction == 1
 
-
-class TestScalingMana:
-    def test_adds_mana_each_turn(self):
+    def test_reduces_spell_cost(self):
         gs = GameState()
-        card = Card(name="As Foretold", cmc=3, types=["enchantment"])
-        sm = ScalingMana(1)
-        sm.per_turn(card, gs)
-        assert gs.mana_production == 1
-        sm.per_turn(card, gs)
-        assert gs.mana_production == 2
+        card = Card(name="Goblin", cmc=2, types=["creature"])
+        ReduceCost(spell_type="spell", amount=2).on_play(card, gs)
+        assert gs.spell_cost_reduction == 2
 
 
-class TestCryptolithRitesMana:
-    def test_taps_creatures_for_mana(self):
+class TestPerCastDraw:
+    def test_draws_on_creature_cast(self):
         gs = GameState()
-        gs.creatures_played = 3
-        gs.tapped_creatures_this_turn = 0
-        cr = CryptolithRitesMana()
-        mana = cr.mana_function(gs)
-        assert mana == 3
-        assert gs.tapped_creatures_this_turn == 3
+        gs.should_log = False
+        gs.decklist = [Card(name=f"C{i}", cmc=1, types=["creature"]) for i in range(5)]
+        gs.deck = list(range(5))
+        for i, c in enumerate(gs.decklist):
+            c.zone = gs.deck
 
-    def test_no_double_tap(self):
+        trigger_card = Card(name="Trigger", cmc=3, types=["enchantment"])
+        casted = Card(name="Bear", cmc=2, types=["creature"])
+
+        PerCastDraw(amount=1, trigger="creature").cast_trigger(trigger_card, casted, gs)
+        assert gs.draws == 1
+
+    def test_no_draw_on_wrong_type(self):
         gs = GameState()
-        gs.creatures_played = 3
-        gs.tapped_creatures_this_turn = 3
-        cr = CryptolithRitesMana()
-        mana = cr.mana_function(gs)
-        assert mana == 0
+        gs.should_log = False
 
+        trigger_card = Card(name="Trigger", cmc=3, types=["enchantment"])
+        casted = Card(name="Bolt", cmc=1, types=["instant"])
 
-class TestEnchantmentSanctumMana:
-    def test_mana_from_enchantments(self):
+        PerCastDraw(amount=1, trigger="creature").cast_trigger(trigger_card, casted, gs)
+        assert gs.draws == 0
+
+    def test_draws_on_spell_cast(self):
         gs = GameState()
-        gs.enchantments_played = 5
-        es = EnchantmentSanctumMana()
-        assert es.mana_function(gs) == 5
+        gs.should_log = False
+        gs.decklist = [Card(name=f"C{i}", cmc=1, types=["creature"]) for i in range(5)]
+        gs.deck = list(range(5))
+        for i, c in enumerate(gs.decklist):
+            c.zone = gs.deck
+
+        trigger_card = Card(name="Trigger", cmc=3, types=["enchantment"])
+        casted = Card(name="Bear", cmc=2, types=["creature"])
+
+        PerCastDraw(amount=1, trigger="spell").cast_trigger(trigger_card, casted, gs)
+        assert gs.draws == 1
 
 
 class TestRegistry:
@@ -142,53 +201,36 @@ class TestDescribe:
     def test_draw_cards_describe_one(self):
         assert DrawCards(1).describe() == "Draw 1 card"
 
-    def test_draw_discard_describe(self):
-        desc = DrawDiscard(2, 1, 0, 0).describe()
-        assert "Draw 2" in desc
-        assert "discard 1" in desc
+    def test_immediate_mana_describe(self):
+        assert ImmediateMana(3).describe() == "+3 treasure"
 
-    def test_draw_discard_with_treasures(self):
-        desc = DrawDiscard(0, 0, 0, 2).describe()
-        assert "treasure" in desc
+    def test_land_to_battlefield_describe_tapped(self):
+        assert LandToBattlefield(1, tapped=True).describe() == "Fetch 1 land tapped"
+
+    def test_land_to_battlefield_describe_untapped(self):
+        assert LandToBattlefield(2, tapped=False).describe() == "Fetch 2 lands untapped"
+
+    def test_discard_cards_describe(self):
+        assert DiscardCards(2).describe() == "Discard 2"
 
     def test_reduce_cost_creature(self):
-        desc = ReduceCost(creature=1).describe()
-        assert "Creature costs -1" in desc
+        desc = ReduceCost(spell_type="creature", amount=1).describe()
+        assert desc == "Creature costs -1"
 
-    def test_reduce_cost_multiple(self):
-        desc = ReduceCost(creature=1, enchantment=2).describe()
-        assert "Creature" in desc
-        assert "Enchantment" in desc
-
-    def test_tutor_to_hand_describe(self):
-        desc = TutorToHand(["Sol Ring"]).describe()
-        assert "Tutor: Sol Ring" == desc
-
-    def test_tutor_to_hand_multiple_targets(self):
-        desc = TutorToHand(["Sol Ring", "Mana Crypt"]).describe()
-        assert "Sol Ring" in desc
-        assert "Mana Crypt" in desc
+    def test_reduce_cost_enchantment(self):
+        desc = ReduceCost(spell_type="enchantment", amount=2).describe()
+        assert desc == "Enchantment costs -2"
 
     def test_per_turn_draw_describe(self):
         assert PerTurnDraw(1).describe() == "Draw 1 per turn"
 
-    def test_scaling_mana_describe(self):
-        assert ScalingMana(1).describe() == "+1 mana per turn (scaling)"
-
     def test_per_cast_draw_describe(self):
-        desc = PerCastDraw(creature=1).describe()
-        assert "Draw 1 on creature cast" == desc
+        desc = PerCastDraw(amount=1, trigger="creature").describe()
+        assert desc == "Draw 1 on creature cast"
 
-    def test_per_cast_draw_multiple_types(self):
-        desc = PerCastDraw(creature=1, enchantment=1).describe()
-        assert "creature" in desc
-        assert "enchantment" in desc
-
-    def test_cryptolith_rites_describe(self):
-        assert CryptolithRitesMana().describe() == "Tap creatures for mana"
-
-    def test_enchantment_sanctum_describe(self):
-        assert EnchantmentSanctumMana().describe() == "Mana from enchantments"
+    def test_per_cast_draw_describe_spell(self):
+        desc = PerCastDraw(amount=1, trigger="spell").describe()
+        assert desc == "Draw 1 on spell cast"
 
 
 class TestDescribeEffects:
@@ -205,20 +247,19 @@ class TestDescribeEffects:
     def test_multiple_effects(self):
         ce = CardEffects(
             on_play=[ProduceMana(2)],
-            cast_trigger=[PerCastDraw(creature=1)],
+            cast_trigger=[PerCastDraw(amount=1, trigger="creature")],
         )
         desc = ce.describe_effects()
         assert "+2 mana" in desc
         assert "Draw 1 on creature cast" in desc
         assert "; " in desc
 
-    def test_effects_across_all_lists(self):
+    def test_effects_across_multiple_lists(self):
         ce = CardEffects(
             on_play=[ProduceMana(1)],
             per_turn=[PerTurnDraw(1)],
-            cast_trigger=[PerCastDraw(creature=1)],
-            mana_function=[CryptolithRitesMana()],
+            cast_trigger=[PerCastDraw(amount=1, trigger="creature")],
         )
         desc = ce.describe_effects()
         parts = desc.split("; ")
-        assert len(parts) == 4
+        assert len(parts) == 3

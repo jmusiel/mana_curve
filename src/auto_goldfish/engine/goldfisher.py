@@ -111,9 +111,24 @@ def _random_discard(state: GameState) -> None:
         state.log.append(f"Discarded {discarded.printable}")
 
 
-def _find_card_by_name(state: GameState, name: str) -> Card | None:
-    """Find a card in the decklist by name."""
-    return state.deckdict.get(name)
+def _find_effectless_lands(state: GameState, count: int) -> list[int]:
+    """Find up to *count* land cards in the deck that have no registered effects."""
+    found: list[int] = []
+    for idx in state.deck:
+        card = state.decklist[idx]
+        if card.land and not _has_effects(card):
+            found.append(idx)
+            if len(found) >= count:
+                break
+    return found
+
+
+def _has_effects(card: Card) -> bool:
+    """Return True if the card has any cached effects."""
+    eff = getattr(card, '_cached_effects', None)
+    if eff is None:
+        return False
+    return bool(eff.on_play or eff.per_turn or eff.cast_trigger or eff.mana_function)
 
 
 def _card_to_dict(card: Card) -> dict:

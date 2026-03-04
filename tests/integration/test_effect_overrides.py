@@ -56,9 +56,8 @@ def test_mana_override_increases_mean_mana():
     # Override: give Creature 0 (cmc=1) a massive mana boost
     overrides = {
         "Creature 0": {
-            "effects": [{"type": "produce_mana", "slot": "on_play",
-                         "params": {"amount": 10}}],
-            "ramp": True,
+            "categories": [{"category": "ramp", "immediate": False,
+                            "producer": {"mana_amount": 10}}],
         }
     }
     registry = build_overridden_registry(DEFAULT_REGISTRY, overrides)
@@ -86,8 +85,7 @@ def test_draw_override_increases_draws():
     # Override: give Creature 1 (cmc=2) a big draw effect
     overrides = {
         "Creature 1": {
-            "effects": [{"type": "draw_cards", "slot": "on_play",
-                         "params": {"amount": 5}}],
+            "categories": [{"category": "draw", "immediate": True, "amount": 5}],
         }
     }
     registry = build_overridden_registry(DEFAULT_REGISTRY, overrides)
@@ -122,9 +120,8 @@ def test_override_adds_effect_to_unregistered_card():
     # Override: give it mana production
     overrides = {
         "Custom Creature": {
-            "effects": [{"type": "produce_mana", "slot": "on_play",
-                         "params": {"amount": 3}}],
-            "ramp": True,
+            "categories": [{"category": "ramp", "immediate": False,
+                            "producer": {"mana_amount": 3}}],
         }
     }
     registry = build_overridden_registry(DEFAULT_REGISTRY, overrides)
