@@ -936,6 +936,7 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
     let pyodideReady = false;
     let pyodideInitializing = false;
     let resolvedWheelUrl = null;
+    let lastConfig = null;
 
     const form = document.getElementById('sim-form');
     const jobStatus = document.getElementById('job-status');
@@ -1002,6 +1003,14 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
             localResults.innerHTML = '';
             ClientResults.render(localResults, msg.data, DECK_NAME);
             document.getElementById('submit-btn').disabled = false;
+            // Fire-and-forget: persist results to database
+            if (lastConfig) {
+                fetch('/sim/api/' + DECK_NAME + '/results', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({config: lastConfig, results: msg.data})
+                }).catch(function() {});
+            }
         } else if (msg.type === 'error') {
             jobStatus.innerHTML = '<div class="job-status error"><p>Error: ' + msg.message + '</p></div>';
             document.getElementById('submit-btn').disabled = false;
@@ -1071,6 +1080,7 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
             const seedVal = document.getElementById('seed').value.trim();
             if (seedVal) config.seed = parseInt(seedVal);
 
+            lastConfig = config;
             jobStatus.innerHTML = '<div class="job-status"><p>Starting simulation...</p></div>';
             worker.postMessage({
                 type: 'run',
