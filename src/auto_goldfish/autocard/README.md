@@ -344,6 +344,26 @@ Validate all labels against the category schema.
 autocard validate [--cards PATH]
 ```
 
+### `autocard fetch-otags`
+
+Fetch Scryfall otag data (card-advantage, ramp, cheaper-than-mv) and write a compact registry to `effects/otag_registry.json`. This registry is used by the web wizard to filter which cards need labeling.
+
+```
+autocard fetch-otags [--per-tag-count N] [--output PATH]
+```
+
+Examples:
+```bash
+# Default: fetch up to 500 cards per tag
+autocard fetch-otags
+
+# Fetch more cards per tag
+autocard fetch-otags --per-tag-count 1000
+
+# Write to a custom path
+autocard fetch-otags --output /tmp/otag_registry.json
+```
+
 ### `autocard export`
 
 Export labeled cards to a registry JSON file.

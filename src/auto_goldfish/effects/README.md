@@ -156,6 +156,13 @@ Example -- adding a card with custom categories:
 }
 ```
 
+## Otag Registry
+
+`otag_registry.json` maps card names to their Scryfall otags (e.g. `ramp`, `card-advantage`, `cheaper-than-mv`). This file is populated by the `autocard fetch-otags` CLI command and used by the web wizard to filter which cards need labeling.
+
+- **`otag_loader.py`** provides `load_otag_registry()`, `get_matching_cards()`, and `has_cheaper_than_mv()` for querying the registry.
+- The registry is committed reference data (not gitignored).
+
 ## How to Add a New Effect Type
 
 1. Create a new `@dataclass` class in `builtin.py` implementing one of the protocols from `types.py`

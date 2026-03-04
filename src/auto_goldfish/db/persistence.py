@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import (
+    CardAnnotationRow,
     CardPerformanceRow,
     CardRow,
     DeckCardRow,
@@ -194,6 +195,100 @@ def save_simulation_run(
 # ---------------------------------------------------------------------------
 # Convenience wrappers (handle session internally)
 # ---------------------------------------------------------------------------
+
+def save_card_annotation(
+    session: Session,
+    card_name: str,
+    effects_json: str,
+    source: str = "human",
+    session_id: str | None = None,
+) -> CardAnnotationRow:
+    """Save a card annotation, upserting within the same wizard session.
+
+    If a row with the same (card_name, session_id) exists, update it.
+    Otherwise insert a new row.  This ensures one row per card per
+    wizard session, while still accumulating rows across sessions.
+    """
+    if session_id:
+        existing = session.execute(
+            select(CardAnnotationRow).where(
+                CardAnnotationRow.card_name == card_name,
+                CardAnnotationRow.session_id == session_id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            existing.effects_json = effects_json
+            existing.source = source
+            session.flush()
+            return existing
+
+    row = CardAnnotationRow(
+        card_name=card_name,
+        effects_json=effects_json,
+        source=source,
+        session_id=session_id,
+    )
+    session.add(row)
+    session.flush()
+    return row
+
+
+def get_annotation_stats(
+    session: Session,
+    card_names: List[str],
+) -> Dict[str, Dict[str, Any]]:
+    """Get annotation statistics for a list of cards.
+
+    Returns dict of card_name -> {
+        human_count: int,
+        is_controversial: bool,
+        has_human: bool,
+        latest_effects_json: str | None,
+        latest_source: str | None,
+    }
+    """
+    if not card_names:
+        return {}
+
+    rows = session.execute(
+        select(CardAnnotationRow)
+        .where(CardAnnotationRow.card_name.in_(card_names))
+        .order_by(CardAnnotationRow.created_at.desc())
+    ).scalars().all()
+
+    # Group by card name
+    by_card: Dict[str, list] = {}
+    for row in rows:
+        by_card.setdefault(row.card_name, []).append(row)
+
+    stats: Dict[str, Dict[str, Any]] = {}
+    for name in card_names:
+        annotations = by_card.get(name, [])
+        human_annotations = [a for a in annotations if a.source == "human"]
+        human_count = len(human_annotations)
+
+        # Controversial = 2+ distinct effects_json among human annotations with no clear majority
+        is_controversial = False
+        if human_count >= 2:
+            effects_counts: Dict[str, int] = {}
+            for a in human_annotations:
+                effects_counts[a.effects_json] = effects_counts.get(a.effects_json, 0) + 1
+            # No clear majority = no single effects_json has > 50% of votes
+            max_count = max(effects_counts.values())
+            if max_count <= human_count / 2:
+                is_controversial = True
+
+        latest = annotations[0] if annotations else None
+        stats[name] = {
+            "human_count": human_count,
+            "is_controversial": is_controversial,
+            "has_human": human_count > 0,
+            "latest_effects_json": latest.effects_json if latest else None,
+            "latest_source": latest.source if latest else None,
+        }
+
+    return stats
+
 
 def persist_completed_job(job: Any) -> None:
     """Persist a completed SimJob to the database.

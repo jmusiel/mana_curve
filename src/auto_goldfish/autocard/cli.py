@@ -102,6 +102,39 @@ def cmd_validate(args: argparse.Namespace) -> None:
     print(f"\nValidation: {passed}/{total} passed, {failed} failed")
 
 
+def cmd_fetch_otags(args: argparse.Namespace) -> None:
+    """Fetch Scryfall otag data and write a compact otag registry."""
+    import json
+    from datetime import date
+
+    from .scryfall import fetch_top_cards_by_tags
+
+    tags = ["otag:card-advantage", "otag:ramp", "otag:cheaper-than-mv"]
+    base_query = "-t:land f:commander"
+    per_tag_count = args.per_tag_count or 100000
+
+    print(f"Fetching otag cards: {tags}", flush=True)
+    cards = fetch_top_cards_by_tags(tags=tags, per_tag_count=per_tag_count, base_query=base_query)
+
+    registry = {
+        "updated": date.today().isoformat(),
+        "cards": {card.name: card.otags for card in cards},
+    }
+
+    from pathlib import Path
+
+    if args.output:
+        output = Path(args.output)
+    else:
+        output = Path(__file__).resolve().parent.parent / "effects" / "otag_registry.json"
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with open(output, "w", encoding="utf-8") as f:
+        json.dump(registry, f, indent=2, ensure_ascii=False)
+
+    print(f"Wrote {len(registry['cards'])} cards to {output}", flush=True)
+
+
 def cmd_export(args: argparse.Namespace) -> None:
     """Export labeled cards to registry JSON."""
     from .exporter import export_to_registry
@@ -203,6 +236,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to labeled_cards.json",
     )
     val_parser.set_defaults(func=cmd_validate)
+
+    # fetch-otags
+    otag_parser = subparsers.add_parser("fetch-otags", help="Fetch Scryfall otags to otag registry")
+    otag_parser.add_argument(
+        "--per-tag-count", type=int, default=100000,
+        help="Max cards per tag (default: 100000, effectively all)",
+    )
+    otag_parser.add_argument(
+        "--output", type=str, default=None,
+        help="Output path (default: effects/otag_registry.json)",
+    )
+    otag_parser.set_defaults(func=cmd_fetch_otags)
 
     # export
     exp_parser = subparsers.add_parser("export", help="Export labels to registry JSON")

@@ -17,97 +17,36 @@
         </div>
         <div class="labeler-body">
             <div class="labeler-card-display">
-                <img id="labeler-image" class="labeler-image" src="" alt="Card image">
+                <div class="labeler-image-wrap">
+                    <img id="labeler-image" class="labeler-image" src="" alt="Card image">
+                    <span id="labeler-checkmark" class="labeler-checkmark" style="display:none;">&#10003;</span>
+                </div>
                 <div class="labeler-card-info">
                     <strong id="labeler-card-name"></strong>
                     <span id="labeler-card-cmc"></span>
+                    <div class="labeler-tag-grid">
+                        <span id="labeler-tag-ramp" class="labeler-tag">ramp</span>
+                        <span id="labeler-tag-card-advantage" class="labeler-tag">card-advantage</span>
+                        <span id="labeler-tag-cheaper-than-mv" class="labeler-tag">cheaper-than-mv</span>
+                    </div>
+                </div>
+                <div class="labeler-card-nav">
+                    <button type="button" class="btn btn-secondary btn-sm" id="labeler-prev-btn" onclick="labelerPrev()" disabled>&larr; Prev</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="labeler-next-btn" onclick="labelerSkip()">Next &rarr;</button>
                 </div>
             </div>
             <div class="labeler-controls">
-                <div id="labeler-step-classify" class="labeler-step">
-                    <p class="labeler-prompt">What does this card do?</p>
-                    <div class="labeler-buttons">
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('draw')">Draw</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('ramp')">Ramp</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('both')">Both</button>
-                        <button type="button" class="btn btn-secondary" onclick="labelerChoose('neither')">Neither</button>
-                    </div>
-                </div>
-                <div id="labeler-step-ramp" class="labeler-step" style="display:none;">
-                    <p class="labeler-prompt">What kind of ramp?</p>
-                    <div class="labeler-buttons">
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('mana_rock')">Mana Rock</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('mana_dork')">Mana Dork</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('land_ramp')">Land Ramp</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('ritual')">Ritual</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('cost_reducer')">Cost Reducer</button>
-                    </div>
-                </div>
-                <div id="labeler-step-tempo" class="labeler-step" style="display:none;">
-                    <p class="labeler-prompt">Does it enter tapped or untapped?</p>
-                    <div class="labeler-buttons">
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('tapped')">Tapped</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('untapped')">Untapped</button>
-                    </div>
-                </div>
-                <div id="labeler-step-spell-type" class="labeler-step" style="display:none;">
-                    <p class="labeler-prompt">What spell type does it reduce?</p>
-                    <div class="labeler-buttons">
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('creature')">Creature</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('enchantment')">Enchantment</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('nonpermanent')">Nonpermanent</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('permanent')">Permanent</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('spell')">Spell</button>
-                    </div>
-                </div>
-                <div id="labeler-step-draw-type" class="labeler-step" style="display:none;">
-                    <p class="labeler-prompt">Does it also discard?</p>
-                    <div class="labeler-buttons">
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('draw_only')">Draw Only</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('draw_discard')">Draw/Discard</button>
-                    </div>
-                </div>
-                <div id="labeler-step-draw-timing" class="labeler-step" style="display:none;">
-                    <p class="labeler-prompt">When does it draw?</p>
-                    <div class="labeler-buttons">
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('immediate')">Immediate (ETB)</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('per_turn')">Per Turn</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('per_cast')">Per Cast</button>
-                    </div>
-                </div>
-                <div id="labeler-step-trigger" class="labeler-step" style="display:none;">
-                    <p class="labeler-prompt">What triggers the draw?</p>
-                    <div class="labeler-buttons">
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('creature')">Creature</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('spell')">Spell</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('enchantment')">Enchantment</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('land')">Land</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('artifact')">Artifact</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose('nonpermanent')">Nonpermanent</button>
-                    </div>
-                </div>
-                <div id="labeler-step-amount" class="labeler-step" style="display:none;">
-                    <p class="labeler-prompt" id="labeler-amount-prompt">How many?</p>
-                    <div class="labeler-buttons">
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose(1)">1</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose(2)">2</button>
-                        <button type="button" class="btn btn-primary" onclick="labelerChoose(3)">3</button>
-                        <span class="labeler-custom-amount">
-                            <input type="number" id="labeler-custom-amount" min="1" max="20" value="4" style="width:4rem">
-                            <button type="button" class="btn btn-secondary btn-sm" onclick="labelerChoose(parseInt(document.getElementById('labeler-custom-amount').value)||1)">OK</button>
-                        </span>
-                    </div>
-                </div>
+                <div id="labeler-flowchart"></div>
                 <div class="labeler-nav">
-                    <button type="button" class="btn btn-secondary btn-sm" id="labeler-back-btn" onclick="labelerBack()">Back</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="labeler-submit-btn" onclick="labelerSubmit()" style="display:none;">Submit</button>
                     <button type="button" class="btn btn-secondary btn-sm" onclick="labelerSkip()">Skip</button>
                 </div>
             </div>
         </div>
     </div>
 
-    {% if unlabeled_cards is defined and unlabeled_cards %}
-    <button type="button" class="btn btn-primary" id="label-cards-btn" onclick="labelerOpen(ALL_NONLAND_CARDS)" style="margin-bottom:1rem;">Label Cards</button>
+    {% if wizard_cards is defined and wizard_cards %}
+    <button type="button" class="btn btn-primary" id="label-cards-btn" onclick="labelerOpen(WIZARD_CARDS)" style="margin-bottom:1rem;">Label Cards</button>
     {% elif all_nonland_cards is defined and all_nonland_cards %}
     <button type="button" class="btn btn-secondary" id="label-cards-btn" onclick="labelerOpen(ALL_NONLAND_CARDS)" style="margin-bottom:1rem;">Label Cards</button>
     {% endif %}
@@ -321,6 +260,8 @@
 const EFFECT_SCHEMA = {{ effect_schema | tojson }};
 const CARD_EFFECTS = {{ card_effects | tojson }};
 const SAVED_OVERRIDES = {{ saved_overrides | tojson }};
+const IS_LOCAL_DECK = {{ 'true' if is_local is defined and is_local else 'false' }};
+const DECK_NAME_FOR_STORE = {{ deck_name | tojson }};
 
 // Each entry maps a UI label to how it constructs a category dict
 const CATEGORY_TYPES = [
@@ -585,11 +526,18 @@ function collectOverrides() {
 
 function persistOverrides() {
     const data = document.getElementById('effect-overrides-input').value;
-    fetch('{{ url_for("simulation.save_overrides_api", deck_name=deck_name) }}', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: data,
-    });
+    if (IS_LOCAL_DECK) {
+        try {
+            var overrides = JSON.parse(data);
+            DeckStore.saveOverrides(DECK_NAME_FOR_STORE, overrides);
+        } catch (e) {}
+    } else {
+        fetch('{{ url_for("simulation.save_overrides_api", deck_name=deck_name) }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: data,
+        });
+    }
 }
 
 function addCategoryRowWithData(panel, catData) {
@@ -677,26 +625,517 @@ function loadSavedOverrides() {
 loadSavedOverrides();
 
 // --- Card Labeler Wizard ---
-const UNLABELED_CARDS = {{ unlabeled_cards | tojson }};
+const WIZARD_CARDS = {{ wizard_cards | tojson if wizard_cards is defined else '[]' }};
 const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
+const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
 
 (function() {
     let cards = [];
     let currentIndex = 0;
-    let currentStep = 'classify';
     let state = {};
-    let history = [];
     let amountContext = '';  // 'ramp', 'draw', 'discard'
+    let decisionLog = [];   // [{stepId, prompt, chosenValue, chosenLabel}]
+    let activeStep = null;  // current step ID to render
+    const submittedCards = new Set();  // card names that received human feedback this session
+    const sessionId = crypto.randomUUID();  // unique ID for this wizard session
 
-    const STEPS = ['classify','ramp','tempo','spell-type','draw-type','draw-timing','trigger','amount'];
+    // --- Step definitions ---
+    const STEP_DEFS = {
+        classify:     { prompt: 'What does this card do?', options: [
+                          {value: 'draw', label: 'Draw'}, {value: 'ramp', label: 'Ramp'},
+                          {value: 'both', label: 'Both'}, {value: 'neither', label: 'Neither', style: 'secondary'}
+                      ]},
+        ramp:         { prompt: 'What kind of ramp?', options: [
+                          {value: 'mana_rock', label: 'Mana Rock'}, {value: 'mana_dork', label: 'Mana Dork'},
+                          {value: 'land_ramp', label: 'Land Ramp'}, {value: 'ritual', label: 'Ritual'},
+                          {value: 'cost_reducer', label: 'Cost Reducer'}
+                      ]},
+        tempo:        { prompt: 'Does it enter tapped or untapped?', options: [
+                          {value: 'tapped', label: 'Tapped'}, {value: 'untapped', label: 'Untapped'}
+                      ]},
+        'spell-type': { prompt: 'What spell type does it reduce?', options: [
+                          {value: 'creature', label: 'Creature'}, {value: 'enchantment', label: 'Enchantment'},
+                          {value: 'nonpermanent', label: 'Nonpermanent'}, {value: 'permanent', label: 'Permanent'},
+                          {value: 'spell', label: 'Spell'}
+                      ]},
+        'draw-type':  { prompt: 'Does it also discard?', options: [
+                          {value: 'draw_only', label: 'Draw Only'}, {value: 'draw_discard', label: 'Draw/Discard'}
+                      ]},
+        'draw-timing':{ prompt: 'When does it draw?', options: [
+                          {value: 'immediate', label: 'Immediate (ETB)'}, {value: 'per_turn', label: 'Per Turn'},
+                          {value: 'per_cast', label: 'Per Cast'}
+                      ]},
+        trigger:      { prompt: 'What triggers the draw?', options: [
+                          {value: 'creature', label: 'Creature'}, {value: 'spell', label: 'Spell'},
+                          {value: 'enchantment', label: 'Enchantment'}, {value: 'land', label: 'Land'},
+                          {value: 'artifact', label: 'Artifact'}, {value: 'nonpermanent', label: 'Nonpermanent'}
+                      ]},
+        amount:       { prompt: 'How many?', type: 'amount' },
+        cost:         { prompt: 'How much does this card cost?', type: 'cost' }
+    };
 
-    function showStep(step) {
-        STEPS.forEach(s => {
-            const el = document.getElementById('labeler-step-' + s);
-            if (el) el.style.display = s === step ? '' : 'none';
+    // Look up display label for a value in a step's options
+    function labelFor(stepId, value) {
+        const def = STEP_DEFS[stepId];
+        if (def && def.options) {
+            const opt = def.options.find(function(o) { return o.value === value; });
+            if (opt) return opt.label;
+        }
+        return String(value);
+    }
+
+    // Get the prompt for a step, considering dynamic amount prompts
+    function promptFor(stepId, logEntry) {
+        if (logEntry && logEntry.prompt) return logEntry.prompt;
+        return STEP_DEFS[stepId] ? STEP_DEFS[stepId].prompt : stepId;
+    }
+
+    // --- Flowchart rendering ---
+    function renderFlowchart() {
+        const container = document.getElementById('labeler-flowchart');
+        container.innerHTML = '';
+
+        // Render answered nodes
+        decisionLog.forEach(function(entry, idx) {
+            const node = document.createElement('div');
+            node.className = 'flowchart-node flowchart-node-answered';
+            const prompt = document.createElement('span');
+            prompt.className = 'flowchart-prompt';
+            prompt.textContent = promptFor(entry.stepId, entry);
+            node.appendChild(prompt);
+
+            // Show all options for this step: selected in blue, others in gray
+            var allOptions = getOptionsForStep(entry.stepId, entry.chosenValue);
+            var btns = document.createElement('span');
+            btns.className = 'flowchart-options';
+            allOptions.forEach(function(opt) {
+                var chip = document.createElement('span');
+                if (String(opt.value) === String(entry.chosenValue)) {
+                    chip.className = 'flowchart-answer';
+                    chip.textContent = opt.label;
+                    chip.title = 'Click to change from here';
+                    chip.addEventListener('click', function() { rewindTo(idx); });
+                } else {
+                    chip.className = 'flowchart-answer flowchart-answer-alt';
+                    chip.textContent = opt.label;
+                    chip.title = 'Switch to ' + opt.label;
+                    chip.addEventListener('click', function() { rewindAndChoose(idx, opt.value); });
+                }
+                btns.appendChild(chip);
+            });
+            node.appendChild(btns);
+            container.appendChild(node);
         });
-        currentStep = step;
-        document.getElementById('labeler-back-btn').style.display = history.length > 0 ? '' : 'none';
+
+        // Show/hide Submit button based on whether tree is complete
+        var submitBtn = document.getElementById('labeler-submit-btn');
+        if (!activeStep && decisionLog.length > 0) {
+            submitBtn.style.display = '';
+        } else {
+            submitBtn.style.display = 'none';
+        }
+
+        // Render active step (if tree is not yet complete)
+        if (!activeStep) return;
+        var def = STEP_DEFS[activeStep];
+        if (!def) return;
+
+        var node = document.createElement('div');
+        node.className = 'flowchart-node flowchart-node-active';
+
+        if (def.type === 'amount') {
+            renderAmountNode(node);
+        } else if (def.type === 'cost') {
+            renderCostNode(node);
+        } else if (def.options) {
+            renderOptionsNode(node, def);
+        }
+        container.appendChild(node);
+    }
+
+
+    // Get the list of options for a step, including the chosen value
+    function getOptionsForStep(stepId, chosenValue) {
+        var def = STEP_DEFS[stepId];
+        if (def && def.options) return def.options;
+        // Amount steps: show 1,2,3 plus the chosen value if it's not one of those
+        if (stepId === 'amount') {
+            var opts = [{value: 1, label: '1'}, {value: 2, label: '2'}, {value: 3, label: '3'}];
+            var num = parseInt(chosenValue, 10) || 1;
+            if (num > 3) opts.push({value: num, label: String(num)});
+            return opts;
+        }
+        // Cost steps: show 1-9 plus the chosen value if it's not one of those
+        if (stepId === 'cost') {
+            var costOpts = [];
+            for (var i = 1; i <= 9; i++) costOpts.push({value: i, label: String(i)});
+            var cv = parseInt(chosenValue, 10);
+            if (cv > 9 || cv === 0) costOpts.push({value: cv, label: String(cv)});
+            return costOpts;
+        }
+        // Fallback: just show the chosen value
+        return [{value: chosenValue, label: String(chosenValue)}];
+    }
+
+    // Rewind to index N and immediately apply a different choice
+    function rewindAndChoose(index, newValue) {
+        var kept = decisionLog.slice(0, index);
+        state = {};
+        amountContext = '';
+        var replayStep = getFirstStep();
+        kept.forEach(function(entry) {
+            replayStep = applyDecision(entry.stepId, entry.chosenValue, true);
+        });
+        decisionLog = kept;
+        activeStep = replayStep;
+        // Now apply the new choice at this step
+        labelerChoose(newValue);
+    }
+
+    // Decode a prior annotation into a decision log
+    function decodeAnnotation(annotation) {
+        var log = [];
+        if (!annotation || !annotation.categories) return log;
+        var cats = annotation.categories;
+
+        // Include cost step for all cards
+        var card = cards[currentIndex];
+        if (card) {
+            var costVal = (annotation.override_cmc !== undefined && annotation.override_cmc !== null)
+                ? annotation.override_cmc : (card.cmc || 0);
+            log.push({stepId: 'cost', prompt: STEP_DEFS.cost.prompt, chosenValue: costVal, chosenLabel: String(costVal)});
+        }
+
+        if (cats.length === 0) return log;
+
+        var rampCat = cats.find(function(c) { return c.category === 'ramp'; });
+        var drawCat = cats.find(function(c) { return c.category === 'draw'; });
+        var discardCat = cats.find(function(c) { return c.category === 'discard'; });
+
+        var classifyValue;
+        if (rampCat && drawCat) classifyValue = 'both';
+        else if (rampCat) classifyValue = 'ramp';
+        else if (drawCat) classifyValue = 'draw';
+        else return log;
+
+        log.push({stepId: 'classify', prompt: STEP_DEFS.classify.prompt, chosenValue: classifyValue, chosenLabel: labelFor('classify', classifyValue)});
+
+        if (rampCat) {
+            var rampType;
+            if (rampCat.reducer) rampType = 'cost_reducer';
+            else if (rampCat.land_to_battlefield) rampType = 'land_ramp';
+            else if (rampCat.immediate && rampCat.producer) rampType = 'ritual';
+            else if (rampCat.producer) {
+                rampType = (rampCat.producer.tempo === 'summoning_sick') ? 'mana_dork' : 'mana_rock';
+            }
+
+            if (rampType) {
+                log.push({stepId: 'ramp', prompt: STEP_DEFS.ramp.prompt, chosenValue: rampType, chosenLabel: labelFor('ramp', rampType)});
+
+                if (rampType === 'cost_reducer') {
+                    var spellType = rampCat.reducer.spell_type || 'creature';
+                    log.push({stepId: 'spell-type', prompt: STEP_DEFS['spell-type'].prompt, chosenValue: spellType, chosenLabel: labelFor('spell-type', spellType)});
+                    var amt = rampCat.reducer.amount || 1;
+                    log.push({stepId: 'amount', prompt: 'How much cost reduction?', chosenValue: amt, chosenLabel: String(amt)});
+                } else if (rampType === 'land_ramp') {
+                    var count = rampCat.land_to_battlefield.count || 1;
+                    log.push({stepId: 'amount', prompt: 'How many lands does it fetch?', chosenValue: count, chosenLabel: String(count)});
+                    var tempo = rampCat.land_to_battlefield.tempo || 'tapped';
+                    log.push({stepId: 'tempo', prompt: STEP_DEFS.tempo.prompt, chosenValue: tempo, chosenLabel: labelFor('tempo', tempo)});
+                } else if (rampType === 'mana_rock') {
+                    var manaAmt = rampCat.producer.mana_amount || 1;
+                    log.push({stepId: 'amount', prompt: 'How much mana does it produce?', chosenValue: manaAmt, chosenLabel: String(manaAmt)});
+                    var tempoVal = rampCat.producer.tempo === 'tapped' ? 'tapped' : 'untapped';
+                    log.push({stepId: 'tempo', prompt: STEP_DEFS.tempo.prompt, chosenValue: tempoVal, chosenLabel: labelFor('tempo', tempoVal)});
+                } else if (rampType === 'mana_dork') {
+                    var dorkAmt = rampCat.producer.mana_amount || 1;
+                    log.push({stepId: 'amount', prompt: 'How much mana does it produce?', chosenValue: dorkAmt, chosenLabel: String(dorkAmt)});
+                } else if (rampType === 'ritual') {
+                    var ritAmt = rampCat.producer.mana_amount || 1;
+                    log.push({stepId: 'amount', prompt: 'How much mana does it produce?', chosenValue: ritAmt, chosenLabel: String(ritAmt)});
+                }
+            }
+        }
+
+        if (drawCat) {
+            var drawType = discardCat ? 'draw_discard' : 'draw_only';
+            log.push({stepId: 'draw-type', prompt: STEP_DEFS['draw-type'].prompt, chosenValue: drawType, chosenLabel: labelFor('draw-type', drawType)});
+
+            var timing;
+            if (drawCat.immediate) timing = 'immediate';
+            else if (drawCat.per_turn) timing = 'per_turn';
+            else if (drawCat.per_cast) timing = 'per_cast';
+
+            if (timing) {
+                log.push({stepId: 'draw-timing', prompt: STEP_DEFS['draw-timing'].prompt, chosenValue: timing, chosenLabel: labelFor('draw-timing', timing)});
+
+                if (timing === 'per_cast') {
+                    var trigger = drawCat.per_cast.trigger || 'spell';
+                    log.push({stepId: 'trigger', prompt: STEP_DEFS.trigger.prompt, chosenValue: trigger, chosenLabel: labelFor('trigger', trigger)});
+                }
+
+                var drawAmount;
+                if (timing === 'immediate') drawAmount = drawCat.amount || 1;
+                else if (timing === 'per_turn') drawAmount = drawCat.per_turn.amount || 1;
+                else if (timing === 'per_cast') drawAmount = drawCat.per_cast.amount || 1;
+                log.push({stepId: 'amount', prompt: 'How many cards drawn?', chosenValue: drawAmount, chosenLabel: String(drawAmount)});
+
+                if (discardCat) {
+                    var discAmt = discardCat.amount || 1;
+                    log.push({stepId: 'amount', prompt: 'How many cards discarded?', chosenValue: discAmt, chosenLabel: String(discAmt)});
+                }
+            }
+        }
+
+        return log;
+    }
+
+    function renderAmountNode(node) {
+        const p = document.createElement('p');
+        p.className = 'labeler-prompt';
+        p.textContent = getAmountPrompt();
+        node.appendChild(p);
+        const btns = document.createElement('div');
+        btns.className = 'flowchart-options';
+        [1, 2, 3].forEach(function(n) {
+            var b = document.createElement('span');
+            b.className = 'flowchart-answer flowchart-answer-alt';
+            b.textContent = String(n);
+            b.addEventListener('click', function() { labelerChoose(n); });
+            btns.appendChild(b);
+        });
+        var span = document.createElement('span');
+        span.className = 'labeler-custom-amount';
+        var inp = document.createElement('input');
+        inp.type = 'number';
+        inp.min = '1';
+        inp.max = '20';
+        inp.value = '4';
+        inp.style.width = '4rem';
+        inp.id = 'labeler-custom-amount';
+        span.appendChild(inp);
+        var okBtn = document.createElement('button');
+        okBtn.type = 'button';
+        okBtn.className = 'btn btn-secondary btn-sm';
+        okBtn.textContent = 'OK';
+        okBtn.addEventListener('click', function() {
+            labelerChoose(parseInt(inp.value) || 1);
+        });
+        span.appendChild(okBtn);
+        btns.appendChild(span);
+        node.appendChild(btns);
+    }
+
+    function renderCostNode(node) {
+        const p = document.createElement('p');
+        p.className = 'labeler-prompt';
+        p.textContent = STEP_DEFS.cost.prompt;
+        node.appendChild(p);
+        const btns = document.createElement('div');
+        btns.className = 'flowchart-options';
+        for (var n = 1; n <= 9; n++) {
+            (function(num) {
+                var b = document.createElement('span');
+                b.className = 'flowchart-answer flowchart-answer-alt';
+                var hint = document.createElement('span');
+                hint.className = 'flowchart-key-hint';
+                hint.textContent = String(num);
+                b.appendChild(hint);
+                b.appendChild(document.createTextNode(String(num)));
+                b.addEventListener('click', function() { labelerChoose(num); });
+                btns.appendChild(b);
+            })(n);
+        }
+        // Custom input (key 0 focuses it)
+        var span = document.createElement('span');
+        span.className = 'labeler-custom-amount';
+        var zeroHint = document.createElement('span');
+        zeroHint.className = 'flowchart-key-hint';
+        zeroHint.textContent = '0';
+        span.appendChild(zeroHint);
+        var inp = document.createElement('input');
+        inp.type = 'number';
+        inp.min = '0';
+        inp.max = '20';
+        inp.placeholder = '#';
+        inp.style.width = '3rem';
+        inp.id = 'labeler-cost-custom';
+        inp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                var val = parseInt(inp.value, 10);
+                if (!isNaN(val) && val >= 0) {
+                    labelerChoose(val);
+                }
+                inp.blur();
+            }
+        });
+        span.appendChild(inp);
+        var okBtn = document.createElement('button');
+        okBtn.type = 'button';
+        okBtn.className = 'btn btn-secondary btn-sm';
+        okBtn.textContent = 'OK';
+        okBtn.addEventListener('click', function() {
+            var val = parseInt(inp.value, 10);
+            if (!isNaN(val) && val >= 0) labelerChoose(val);
+        });
+        span.appendChild(okBtn);
+        btns.appendChild(span);
+        node.appendChild(btns);
+    }
+
+    function renderOptionsNode(node, def) {
+        const p = document.createElement('p');
+        p.className = 'labeler-prompt';
+        p.textContent = def.prompt;
+        node.appendChild(p);
+        const btns = document.createElement('div');
+        btns.className = 'flowchart-options';
+        def.options.forEach(function(opt, idx) {
+            var b = document.createElement('span');
+            b.className = 'flowchart-answer flowchart-answer-alt';
+            var numLabel = document.createElement('span');
+            numLabel.className = 'flowchart-key-hint';
+            numLabel.textContent = String(idx + 1);
+            b.appendChild(numLabel);
+            b.appendChild(document.createTextNode(opt.label));
+            b.addEventListener('click', function() { labelerChoose(opt.value); });
+            btns.appendChild(b);
+        });
+        node.appendChild(btns);
+    }
+
+    // --- Amount prompt logic ---
+    function getAmountPrompt() {
+        if (amountContext === 'ramp') {
+            if (state.rampType === 'land_ramp') return 'How many lands does it fetch?';
+            if (state.rampType === 'cost_reducer') return 'How much cost reduction?';
+            return 'How much mana does it produce?';
+        }
+        if (amountContext === 'draw') return 'How many cards drawn?';
+        if (amountContext === 'discard') return 'How many cards discarded?';
+        return 'How many?';
+    }
+
+    // --- State rewinding ---
+    function rewindTo(index) {
+        // Keep decisions up to (not including) the clicked index
+        const kept = decisionLog.slice(0, index);
+        // Reset state and replay kept decisions silently
+        state = {};
+        amountContext = '';
+        var replayStep = getFirstStep();
+        kept.forEach(function(entry) {
+            replayStep = applyDecision(entry.stepId, entry.chosenValue, true);
+        });
+        decisionLog = kept;
+        // The active step is the one that was at `index`
+        activeStep = replayStep;
+        renderFlowchart();
+    }
+
+    function getFirstStep() {
+        return 'cost';
+    }
+
+    // Apply a decision to state and return the next step ID.
+    // Returns '_done' when the decision tree is complete (ready for submit).
+    // Returns '_skip' for 'neither' (skip immediately, no submit needed).
+    function applyDecision(stepId, value, silent) {
+        if (stepId === 'cost') {
+            state.costOverride = parseInt(value, 10);
+            return 'classify';
+        } else if (stepId === 'classify') {
+            if (value === 'draw') {
+                state.mainType = 'draw';
+                return 'draw-type';
+            } else if (value === 'ramp') {
+                state.mainType = 'ramp';
+                return 'ramp';
+            } else if (value === 'both') {
+                state.mainType = 'both';
+                return 'ramp';
+            } else {
+                // neither — tree complete, wait for submit
+                state.mainType = 'neither';
+                return '_done';
+            }
+        } else if (stepId === 'ramp') {
+            state.rampType = value;
+            if (value === 'cost_reducer') return 'spell-type';
+            amountContext = 'ramp';
+            return 'amount';
+        } else if (stepId === 'spell-type') {
+            state.spellType = value;
+            amountContext = 'ramp';
+            return 'amount';
+        } else if (stepId === 'amount') {
+            var num = parseInt(value, 10) || 1;
+            if (amountContext === 'ramp') {
+                state.rampAmount = num;
+                if (state.rampType === 'mana_rock' || state.rampType === 'land_ramp') return 'tempo';
+                if (state.rampType === 'mana_dork') {
+                    state.tempo = 'summoning_sick';
+                    return finishRampOrContinueStep();
+                }
+                // ritual or cost_reducer
+                return finishRampOrContinueStep();
+            } else if (amountContext === 'draw') {
+                state.drawAmount = num;
+                if (state.drawType === 'draw_discard') {
+                    amountContext = 'discard';
+                    return 'amount';
+                }
+                return '_done';
+            } else if (amountContext === 'discard') {
+                state.discardAmount = num;
+                return '_done';
+            }
+        } else if (stepId === 'tempo') {
+            state.tempo = value;
+            return finishRampOrContinueStep();
+        } else if (stepId === 'draw-type') {
+            state.drawType = value;
+            return 'draw-timing';
+        } else if (stepId === 'draw-timing') {
+            state.drawTiming = value;
+            if (value === 'per_cast') return 'trigger';
+            amountContext = 'draw';
+            return 'amount';
+        } else if (stepId === 'trigger') {
+            state.trigger = value;
+            amountContext = 'draw';
+            return 'amount';
+        }
+        return '_done';
+    }
+
+    function finishRampOrContinueStep() {
+        if (state.mainType === 'both') return 'draw-type';
+        return '_done';
+    }
+
+    function describePriorAnnotation(annotation) {
+        if (!annotation || !annotation.categories) return 'No effects';
+        const cats = annotation.categories;
+        if (cats.length === 0) return 'No effects';
+        const parts = cats.map(function(c) {
+            if (c.category === 'ramp') {
+                if (c.producer) return 'Ramp: produces ' + (c.producer.mana_amount || 1) + ' mana' + (c.immediate ? ' (immediate)' : '');
+                if (c.land_to_battlefield) return 'Ramp: fetch ' + (c.land_to_battlefield.count || 1) + ' land(s) ' + (c.land_to_battlefield.tempo || 'tapped');
+                if (c.reducer) return 'Ramp: reduce ' + (c.reducer.spell_type || 'spell') + ' cost by ' + (c.reducer.amount || 1);
+                return 'Ramp';
+            }
+            if (c.category === 'draw') {
+                if (c.immediate) return 'Draw ' + (c.amount || 1) + ' card(s)';
+                if (c.per_turn) return 'Draw ' + (c.per_turn.amount || 1) + ' per turn';
+                if (c.per_cast) return 'Draw ' + (c.per_cast.amount || 1) + ' per ' + (c.per_cast.trigger || 'spell') + ' cast';
+                return 'Draw';
+            }
+            if (c.category === 'discard') return 'Discard ' + (c.amount || 1);
+            return c.category;
+        });
+        return parts.join(', ');
     }
 
     function updateDisplay() {
@@ -707,18 +1146,63 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
         const card = cards[currentIndex];
         document.getElementById('labeler-card-name').textContent = card.name;
         document.getElementById('labeler-card-cmc').textContent = 'CMC ' + card.cmc;
+        // Update tag grid
+        var cardOtags = card.otags || [];
+        ['card-advantage', 'ramp', 'cheaper-than-mv'].forEach(function(tag) {
+            var el = document.getElementById('labeler-tag-' + tag);
+            if (el) el.className = 'labeler-tag' + (cardOtags.indexOf(tag) >= 0 ? ' labeler-tag-active' : '');
+        });
         document.getElementById('labeler-image').src =
             'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(card.name) + '&format=image&version=normal';
         document.getElementById('labeler-progress').textContent =
             'Card ' + (currentIndex + 1) + ' of ' + cards.length;
         state = {};
-        history = [];
-        showStep('classify');
+        amountContext = '';
+        decisionLog = [];
+
+        // If card has prior annotation, decode it into a full decision tree
+        if (card.prior_annotation && card.prior_annotation.categories && card.prior_annotation.categories.length > 0) {
+            decisionLog = decodeAnnotation(card.prior_annotation);
+            // Replay decisions to rebuild state
+            var replayStep = getFirstStep();
+            decisionLog.forEach(function(entry) {
+                replayStep = applyDecision(entry.stepId, entry.chosenValue, true);
+            });
+            activeStep = null;  // tree complete, show Submit
+        } else if (card.cheaper_than_mv) {
+            // cheaper-than-mv with no prior: cost is the active (unanswered) question
+            activeStep = 'cost';
+        } else {
+            // All other cards: pre-fill cost with CMC, start at classify
+            var costVal = card.cmc || 0;
+            decisionLog.push({stepId: 'cost', prompt: STEP_DEFS.cost.prompt, chosenValue: costVal, chosenLabel: String(costVal)});
+            applyDecision('cost', costVal, true);
+            activeStep = 'classify';
+        }
+
+        // Update card navigation buttons and checkmark
+        document.getElementById('labeler-prev-btn').disabled = (currentIndex === 0);
+        document.getElementById('labeler-next-btn').disabled = (currentIndex >= cards.length - 1);
+        document.getElementById('labeler-checkmark').style.display =
+            submittedCards.has(card.name) ? '' : 'none';
+
+        renderFlowchart();
     }
 
-    function setAmountPrompt(text) {
-        document.getElementById('labeler-amount-prompt').textContent = text;
+    function postAnnotation(cardName, effects, source) {
+        fetch('/sim/' + encodeURIComponent(DECK_NAME_FOR_ANNOTATE) + '/annotate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({card_name: cardName, effects: effects, source: source || 'human', session_id: sessionId})
+        }).catch(function() {});
     }
+
+    window.labelerSubmit = function() {
+        submittedCards.add(cards[currentIndex].name);
+        saveAndNext();
+    };
+
+
 
     window.labelerOpen = function(cardList) {
         cards = cardList.slice();
@@ -736,115 +1220,31 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
         updateDisplay();
     };
 
-    window.labelerBack = function() {
-        if (history.length === 0) return;
-        const prev = history.pop();
-        state = prev.state;
-        amountContext = prev.amountContext || amountContext;
-        showStep(prev.step);
+    window.labelerPrev = function() {
+        if (currentIndex > 0) {
+            currentIndex--;
+            updateDisplay();
+        }
     };
 
     window.labelerChoose = function(value) {
-        history.push({step: currentStep, state: Object.assign({}, state), amountContext: amountContext});
+        var curStep = activeStep;
+        var currentPrompt = (curStep === 'amount') ? getAmountPrompt() : STEP_DEFS[curStep].prompt;
+        var chosenLabel = labelFor(curStep, value);
 
-        if (currentStep === 'classify') {
-            if (value === 'draw') {
-                state.mainType = 'draw';
-                showStep('draw-type');
-            } else if (value === 'ramp') {
-                state.mainType = 'ramp';
-                showStep('ramp');
-            } else if (value === 'both') {
-                state.mainType = 'both';
-                showStep('ramp');
-            } else {
-                // neither - skip, no save
-                currentIndex++;
-                updateDisplay();
-            }
-        } else if (currentStep === 'ramp') {
-            state.rampType = value;
-            if (value === 'cost_reducer') {
-                showStep('spell-type');
-            } else if (value === 'mana_rock') {
-                amountContext = 'ramp';
-                setAmountPrompt('How much mana does it produce?');
-                showStep('amount');
-            } else if (value === 'mana_dork') {
-                amountContext = 'ramp';
-                setAmountPrompt('How much mana does it produce?');
-                showStep('amount');
-            } else if (value === 'land_ramp') {
-                amountContext = 'ramp';
-                setAmountPrompt('How many lands does it fetch?');
-                showStep('amount');
-            } else if (value === 'ritual') {
-                amountContext = 'ramp';
-                setAmountPrompt('How much mana does it produce?');
-                showStep('amount');
-            }
-        } else if (currentStep === 'spell-type') {
-            state.spellType = value;
-            amountContext = 'ramp';
-            setAmountPrompt('How much cost reduction?');
-            showStep('amount');
-        } else if (currentStep === 'amount') {
-            const num = parseInt(value, 10) || 1;
-            if (amountContext === 'ramp') {
-                state.rampAmount = num;
-                if (state.rampType === 'mana_rock' || state.rampType === 'land_ramp') {
-                    showStep('tempo');
-                } else if (state.rampType === 'mana_dork') {
-                    state.tempo = 'summoning_sick';
-                    finishRampOrContinue();
-                } else {
-                    // ritual or cost_reducer
-                    finishRampOrContinue();
-                }
-            } else if (amountContext === 'draw') {
-                state.drawAmount = num;
-                if (state.drawType === 'draw_discard') {
-                    amountContext = 'discard';
-                    setAmountPrompt('How many cards discarded?');
-                    showStep('amount');
-                } else {
-                    saveAndNext();
-                }
-            } else if (amountContext === 'discard') {
-                state.discardAmount = num;
-                saveAndNext();
-            }
-        } else if (currentStep === 'tempo') {
-            state.tempo = value;
-            finishRampOrContinue();
-        } else if (currentStep === 'draw-type') {
-            state.drawType = value;
-            showStep('draw-timing');
-        } else if (currentStep === 'draw-timing') {
-            state.drawTiming = value;
-            if (value === 'per_cast') {
-                showStep('trigger');
-            } else {
-                amountContext = 'draw';
-                setAmountPrompt('How many cards drawn?');
-                showStep('amount');
-            }
-        } else if (currentStep === 'trigger') {
-            state.trigger = value;
-            amountContext = 'draw';
-            setAmountPrompt('How many cards drawn?');
-            showStep('amount');
-        }
-    };
+        var nextStep = applyDecision(curStep, value, false);
 
-    function finishRampOrContinue() {
-        if (state.mainType === 'both') {
-            // Ramp portion done, now ask draw questions
-            showStep('draw-type');
+        // Push to decision log
+        decisionLog.push({stepId: curStep, prompt: currentPrompt, chosenValue: value, chosenLabel: chosenLabel});
+
+        if (nextStep === '_done') {
+            // Tree complete — show Submit button, no active step
+            activeStep = null;
         } else {
-            saveAndNext();
+            activeStep = nextStep;
         }
-    }
+        renderFlowchart();
+    };
 
     function buildRampCategories(cats) {
         if (state.rampType === 'mana_rock' || state.rampType === 'mana_dork') {
@@ -889,19 +1289,28 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
 
     function saveAndNext() {
         const categories = buildCategories();
-        if (categories.length === 0) {
+        if (categories.length === 0 && state.costOverride === undefined) {
             currentIndex++;
             updateDisplay();
             return;
         }
-        const cardName = cards[currentIndex].name;
+        const card = cards[currentIndex];
+        const cardName = card.name;
+        const effectData = {categories: categories};
+
+        // Apply cost override from state if present
+        if (state.costOverride !== undefined) {
+            effectData.override_cmc = state.costOverride;
+        }
+
         let overrides = {};
         try { overrides = JSON.parse(document.getElementById('effect-overrides-input').value); } catch(e) {}
-        overrides[cardName] = {categories: categories};
+        overrides[cardName] = effectData;
         document.getElementById('effect-overrides-input').value = JSON.stringify(overrides);
         persistOverrides();
 
-        // Update the effects editor UI if the card row exists
+        postAnnotation(cardName, effectData, 'human');
+
         const cardEl = document.querySelector('.effects-card[data-card-name="' + CSS.escape(cardName) + '"]');
         if (cardEl) {
             const badges = cardEl.querySelector('.effects-card-badges');
@@ -915,9 +1324,68 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
         updateDisplay();
     }
 
-    // Auto-show labeler if there are unlabeled cards
-    if (UNLABELED_CARDS.length > 0) {
-        labelerOpen(UNLABELED_CARDS);
+    // --- Keyboard shortcuts ---
+    document.addEventListener('keydown', function(e) {
+        // Only active when labeler is visible
+        if (document.getElementById('card-labeler').style.display === 'none') return;
+        // Don't intercept if user is typing in an input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+        }
+        if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            labelerSkip();
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            labelerPrev();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            // Only submit if tree is complete (submit button visible)
+            if (!activeStep && decisionLog.length > 0) labelerSubmit();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            // Rewind to previous question if there is one
+            if (decisionLog.length > 0) rewindTo(decisionLog.length - 1);
+        } else if (e.key === '0') {
+            // 0 key focuses custom cost input
+            if (!activeStep) return;
+            var costInput = document.getElementById('labeler-cost-custom');
+            if (costInput) {
+                e.preventDefault();
+                costInput.focus();
+            }
+        } else if (e.key >= '1' && e.key <= '9') {
+            // Number keys select options in the active step
+            if (!activeStep) return;
+            var def = STEP_DEFS[activeStep];
+            if (def && def.options) {
+                var idx = parseInt(e.key, 10) - 1;
+                if (idx < def.options.length) {
+                    e.preventDefault();
+                    labelerChoose(def.options[idx].value);
+                }
+            } else if (def && def.type === 'amount') {
+                // For amount steps, number keys directly choose the value
+                var num = parseInt(e.key, 10);
+                e.preventDefault();
+                labelerChoose(num);
+            } else if (def && def.type === 'cost') {
+                // For cost steps, number keys 1-9 directly choose the value
+                var costNum = parseInt(e.key, 10);
+                e.preventDefault();
+                labelerChoose(costNum);
+            }
+        }
+    });
+
+    // Auto-show labeler if there are wizard cards to label
+    if (WIZARD_CARDS.length > 0) {
+        const autoShowCards = WIZARD_CARDS.filter(function(c) { return c.priority_group <= 2; });
+        if (autoShowCards.length > 0) {
+            labelerOpen(autoShowCards);
+        }
     }
 })();
 </script>
@@ -1047,17 +1515,34 @@ const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
         }
 
         try {
-            const [deckResp, effectsResp] = await Promise.all([
-                fetch(DECK_API_URL),
-                fetch(EFFECTS_API_URL),
-            ]);
+            let deckData, effectsData;
 
-            if (!deckResp.ok || !effectsResp.ok) {
-                throw new Error('Failed to fetch deck data');
+            if (IS_LOCAL_DECK) {
+                // For local decks, use the card_effects data embedded in the template
+                // (server already computed effects from the POSTed deck data)
+                deckData = DeckStore.getDeck(DECK_NAME) ? DeckStore.getDeck(DECK_NAME).cards : [];
+                // Build effects from CARD_EFFECTS (template-embedded, already computed by server)
+                effectsData = {};
+                CARD_EFFECTS.forEach(function(c) {
+                    if (c.override) {
+                        effectsData[c.name] = c.override;
+                    } else if (c.registry_override) {
+                        effectsData[c.name] = c.registry_override;
+                    }
+                });
+            } else {
+                const [deckResp, effectsResp] = await Promise.all([
+                    fetch(DECK_API_URL),
+                    fetch(EFFECTS_API_URL),
+                ]);
+
+                if (!deckResp.ok || !effectsResp.ok) {
+                    throw new Error('Failed to fetch deck data');
+                }
+
+                deckData = await deckResp.json();
+                effectsData = await effectsResp.json();
             }
-
-            const deckData = await deckResp.json();
-            const effectsData = await effectsResp.json();
 
             const overridesInput = document.getElementById('effect-overrides-input');
             let effectOverrides = {};

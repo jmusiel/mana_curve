@@ -2,7 +2,8 @@
 {% block title %}Import Deck{% endblock %}
 {% block content %}
 <h1>Import from Archidekt</h1>
-<form method="POST" action="{{ url_for('decks.import_deck') }}">
+<div id="import-flash" style="display:none;" class="flash"></div>
+<form id="import-form">
     <div class="form-group">
         <label for="deck_url">Archidekt Deck URL</label>
         <input type="text" id="deck_url" name="deck_url"
@@ -13,6 +14,44 @@
         <input type="text" id="deck_name" name="deck_name"
                placeholder="the_rr_connection">
     </div>
-    <button type="submit" class="btn btn-primary">Import</button>
+    <button type="submit" class="btn btn-primary" id="import-btn">Import</button>
 </form>
+<script>
+document.getElementById('import-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var flashEl = document.getElementById('import-flash');
+    var btn = document.getElementById('import-btn');
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
+    flashEl.style.display = 'none';
+
+    var deckUrl = document.getElementById('deck_url').value.trim();
+    var deckName = document.getElementById('deck_name').value.trim();
+
+    try {
+        var resp = await fetch('{{ url_for("decks.import_deck_api") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({deck_url: deckUrl, deck_name: deckName})
+        });
+        var data = await resp.json();
+        if (!data.ok) {
+            flashEl.className = 'flash flash-error';
+            flashEl.textContent = 'Import failed: ' + (data.error || 'Unknown error');
+            flashEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Import';
+            return;
+        }
+        DeckStore.saveDeck(data.deck_name, data.cards, {});
+        navigateToSim(data.deck_name);
+    } catch (err) {
+        flashEl.className = 'flash flash-error';
+        flashEl.textContent = 'Import failed: ' + err.message;
+        flashEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Import';
+    }
+});
+</script>
 {% endblock %}

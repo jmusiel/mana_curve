@@ -4,7 +4,11 @@
 <div class="deck-header">
     <h1>{{ name }}</h1>
     <p class="deck-stats">{{ total_cards }} cards &middot; {{ land_count }} lands</p>
+    {% if is_local is defined and is_local %}
+    <button class="btn btn-primary" onclick="navigateToSim('{{ name }}')">Simulate</button>
+    {% else %}
     <a href="{{ url_for('simulation.config', deck_name=name) }}" class="btn btn-primary">Simulate</a>
+    {% endif %}
 </div>
 
 {% if commanders %}

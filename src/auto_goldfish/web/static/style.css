@@ -521,11 +521,32 @@ a:hover { text-decoration: underline; }
 .labeler-card-display {
     flex-shrink: 0;
     text-align: center;
+    width: 265px;
+}
+.labeler-image-wrap {
+    position: relative;
+    display: inline-block;
 }
 .labeler-image {
     width: 265px;
     border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.labeler-checkmark {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #16a34a;
+    color: #fff;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 700;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 .labeler-card-info {
     margin-top: 0.5rem;
@@ -537,6 +558,34 @@ a:hover { text-decoration: underline; }
 }
 .labeler-card-info span {
     color: #64748b;
+}
+.labeler-tag-grid {
+    display: flex;
+    gap: 0.3rem;
+    justify-content: center;
+    margin-top: 0.35rem;
+    flex-wrap: wrap;
+}
+.labeler-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    background: #f8f9fa;
+    color: #cbd5e1;
+}
+.labeler-tag-active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+    font-weight: 500;
+}
+.labeler-card-nav {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
 }
 .labeler-controls {
     flex: 1;
@@ -563,6 +612,74 @@ a:hover { text-decoration: underline; }
     gap: 0.5rem;
     padding-top: 0.75rem;
     border-top: 1px solid #e2e8f0;
+}
+
+/* Flowchart nodes */
+.flowchart-node {
+    border-left: 3px solid #2563eb;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.35rem;
+    border-radius: 0 6px 6px 0;
+}
+.flowchart-node-answered {
+    background: #f1f5f9;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: default;
+}
+.flowchart-node-answered .flowchart-prompt {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+.flowchart-answer {
+    display: inline-block;
+    background: #2563eb;
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.flowchart-answer:hover {
+    background: #1d4ed8;
+}
+.flowchart-answer-alt {
+    background: #cbd5e1;
+    color: #475569;
+}
+.flowchart-answer-alt:hover {
+    background: #2563eb;
+    color: #fff;
+}
+.flowchart-answer-alt:hover .flowchart-key-hint {
+    background: rgba(255, 255, 255, 0.25);
+    color: #fff;
+}
+.flowchart-key-hint {
+    display: inline-block;
+    background: #94a3b8;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 600;
+    width: 1rem;
+    height: 1rem;
+    line-height: 1rem;
+    text-align: center;
+    border-radius: 3px;
+    margin-right: 0.3rem;
+    vertical-align: baseline;
+}
+.flowchart-options {
+    display: inline-flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+}
+.flowchart-node-active {
+    background: #fff;
+    border-left-color: #16a34a;
 }
 
 /* Headings */

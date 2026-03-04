@@ -97,7 +97,7 @@ class TestDashboard:
 
     def test_dashboard_contains_title(self, client):
         response = client.get("/")
-        assert b"Saved Decks" in response.data
+        assert b"Shared Decks" in response.data
 
     def test_dashboard_shows_import_link_when_empty(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
@@ -514,46 +514,56 @@ class TestCardLabeler:
         self._mock_deck(monkeypatch, tmp_path)
         response = client.get("/sim/testdeck")
         assert response.status_code == 200
-        assert b"UNLABELED_CARDS" in response.data
+        assert b"WIZARD_CARDS" in response.data
         assert b"ALL_NONLAND_CARDS" in response.data
 
-    def test_registry_cards_excluded_from_unlabeled(self, client, tmp_path, monkeypatch):
-        """Sol Ring is in DEFAULT_REGISTRY so should not appear in UNLABELED_CARDS."""
+    def test_otag_matched_cards_in_wizard(self, client, tmp_path, monkeypatch):
+        """Cards matching otag registry should appear in WIZARD_CARDS; unmatched should not."""
         self._mock_deck(monkeypatch, tmp_path)
-        response = client.get("/sim/testdeck")
-        html = response.data.decode()
-        # Find UNLABELED_CARDS value - Sol Ring should NOT be in it
-        import re
-        match = re.search(r'UNLABELED_CARDS\s*=\s*(\[.*?\]);', html, re.DOTALL)
-        assert match
-        unlabeled = json.loads(match.group(1))
-        unlabeled_names = [c["name"] for c in unlabeled]
-        assert "Sol Ring" not in unlabeled_names
-
-    def test_overridden_cards_excluded_from_unlabeled(self, client, tmp_path, monkeypatch):
-        """Cards with saved overrides should not appear in UNLABELED_CARDS."""
-        self._mock_deck(monkeypatch, tmp_path)
-        saved = {"Vren, the Relentless": {"categories": [{"category": "draw", "immediate": True, "amount": 1}]}}
+        # Mock otag registry with Sol Ring
         monkeypatch.setattr(
-            "auto_goldfish.web.routes.simulation.load_overrides",
-            lambda name: saved,
+            "auto_goldfish.web.routes.simulation.load_otag_registry",
+            lambda: {"updated": "2026-01-01", "cards": {"Sol Ring": ["ramp"]}},
         )
         response = client.get("/sim/testdeck")
         html = response.data.decode()
         import re
-        match = re.search(r'UNLABELED_CARDS\s*=\s*(\[.*?\]);', html, re.DOTALL)
+        match = re.search(r'WIZARD_CARDS\s*=\s*(\[.*?\]);', html, re.DOTALL)
         assert match
-        unlabeled = json.loads(match.group(1))
-        unlabeled_names = [c["name"] for c in unlabeled]
-        assert "Vren, the Relentless" not in unlabeled_names
+        wizard = json.loads(match.group(1))
+        wizard_names = [c["name"] for c in wizard]
+        assert "Sol Ring" in wizard_names
+        # Vren is not in the otag registry, should not appear
+        assert "Vren, the Relentless" not in wizard_names
+
+    def test_overridden_cards_have_prior_annotation(self, client, tmp_path, monkeypatch):
+        """Cards with saved overrides should have prior_annotation in WIZARD_CARDS."""
+        self._mock_deck(monkeypatch, tmp_path)
+        saved = {"Sol Ring": {"categories": [{"category": "draw", "immediate": True, "amount": 1}]}}
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.simulation.load_overrides",
+            lambda name: saved,
+        )
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.simulation.load_otag_registry",
+            lambda: {"updated": "2026-01-01", "cards": {"Sol Ring": ["ramp"]}},
+        )
+        response = client.get("/sim/testdeck")
+        html = response.data.decode()
+        import re
+        match = re.search(r'WIZARD_CARDS\s*=\s*(\[.*?\]);', html, re.DOTALL)
+        assert match
+        wizard = json.loads(match.group(1))
+        sol = next((c for c in wizard if c["name"] == "Sol Ring"), None)
+        assert sol is not None
+        assert sol["prior_annotation"] is not None
 
     def test_labeler_html_elements_present(self, client, tmp_path, monkeypatch):
         self._mock_deck(monkeypatch, tmp_path)
         response = client.get("/sim/testdeck")
         assert b"card-labeler" in response.data
-        assert b"labeler-step-classify" in response.data
-        assert b"labeler-step-ramp" in response.data
-        assert b"labeler-step-amount" in response.data
+        assert b"labeler-flowchart" in response.data
+        assert b"WIZARD_CARDS" in response.data
 
     def test_label_cards_button_present(self, client, tmp_path, monkeypatch):
         self._mock_deck(monkeypatch, tmp_path)
@@ -641,3 +651,133 @@ class TestSaveResultsAPI:
         assert response.status_code == 200
         data = response.get_json()
         assert data["ok"] is True
+
+
+class TestImportDeckAPI:
+    """Tests for POST /decks/import/api endpoint."""
+
+    def test_import_api_returns_cards(self, client, monkeypatch):
+        fake_cards = [
+            {"name": "Island", "types": ["Land"], "cmc": 0, "quantity": 1},
+            {"name": "Sol Ring", "types": ["Artifact"], "cmc": 1, "quantity": 1},
+        ]
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.decks.fetch_decklist",
+            lambda url, **kw: fake_cards,
+        )
+        response = client.post(
+            "/decks/import/api",
+            data=json.dumps({"deck_url": "https://archidekt.com/decks/123/test", "deck_name": "mytest"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+        assert data["deck_name"] == "mytest"
+        assert len(data["cards"]) == 2
+
+    def test_import_api_extracts_name_from_url(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.decks.fetch_decklist",
+            lambda url, **kw: [],
+        )
+        response = client.post(
+            "/decks/import/api",
+            data=json.dumps({"deck_url": "https://archidekt.com/decks/555/cool_deck"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["deck_name"] == "cool_deck"
+
+    def test_import_api_error(self, client, monkeypatch):
+        def raise_error(url, **kw):
+            raise ValueError("bad url")
+
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.decks.fetch_decklist",
+            raise_error,
+        )
+        response = client.post(
+            "/decks/import/api",
+            data=json.dumps({"deck_url": "bad"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["ok"] is False
+
+
+class TestDeckViewPOST:
+    """Tests for POST /decks/<name> with local deck data."""
+
+    def test_post_deck_view_renders(self, client):
+        cards = [
+            {"name": "Island", "types": ["Land"], "cmc": 0, "quantity": 1, "commander": False, "cost": "", "user_category": "Land"},
+            {"name": "Sol Ring", "types": ["Artifact"], "cmc": 1, "quantity": 1, "commander": False, "cost": "{1}", "user_category": "Ramp"},
+        ]
+        response = client.post(
+            "/decks/mylocaldeck",
+            data=json.dumps({"cards": cards}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        assert b"mylocaldeck" in response.data
+        assert b"Sol Ring" in response.data
+
+    def test_post_deck_view_is_local(self, client):
+        cards = [
+            {"name": "Island", "types": ["Land"], "cmc": 0, "quantity": 1, "commander": False, "cost": "", "user_category": "Land"},
+        ]
+        response = client.post(
+            "/decks/localdeck",
+            data=json.dumps({"cards": cards}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        # Local deck should have the navigateToSim button rather than an <a> link
+        assert b"navigateToSim" in response.data
+
+
+class TestSimulationPOST:
+    """Tests for POST /sim/<deck_name> with local deck data."""
+
+    def test_post_simulation_renders(self, client):
+        cards = [
+            {"name": "Island", "types": ["Land"], "cmc": 0, "quantity": 1, "commander": False, "cost": ""},
+            {"name": "Sol Ring", "types": ["Artifact"], "cmc": 1, "quantity": 1, "commander": False, "cost": "{1}"},
+        ]
+        response = client.post(
+            "/sim/mylocaldeck",
+            data=json.dumps({"cards": cards, "overrides": {}}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        assert b"Simulate" in response.data
+        assert b"mylocaldeck" in response.data
+
+    def test_post_simulation_is_local(self, client):
+        cards = [
+            {"name": "Island", "types": ["Land"], "cmc": 0, "quantity": 1, "commander": False, "cost": ""},
+        ]
+        response = client.post(
+            "/sim/localdeck",
+            data=json.dumps({"cards": cards, "overrides": {}}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        assert b"IS_LOCAL_DECK" in response.data
+
+    def test_post_simulation_with_overrides(self, client):
+        cards = [
+            {"name": "Island", "types": ["Land"], "cmc": 0, "quantity": 1, "commander": False, "cost": ""},
+            {"name": "Sol Ring", "types": ["Artifact"], "cmc": 1, "quantity": 1, "commander": False, "cost": "{1}"},
+        ]
+        overrides = {"Sol Ring": {"categories": [{"category": "ramp", "immediate": False, "producer": {"mana_amount": 5}}]}}
+        response = client.post(
+            "/sim/localdeck",
+            data=json.dumps({"cards": cards, "overrides": overrides}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        assert b"SAVED_OVERRIDES" in response.data

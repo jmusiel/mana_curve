@@ -76,16 +76,18 @@ def fetch_top_cards(
     while True:
         search = scrython.cards.Search(q=query, order="edhrec", dir="asc", page=page)
 
-        for raw in search.data():
+        for raw in search.data:
             if len(cards) >= count:
                 return cards
+            # scrython may return Object instances; convert to dict
+            raw_dict = raw.to_dict() if hasattr(raw, "to_dict") else raw
             try:
-                cards.append(_parse_card_dict(raw))
+                cards.append(_parse_card_dict(raw_dict))
             except Exception as exc:
-                name = raw.get("name", "???")
+                name = raw_dict.get("name", "???") if isinstance(raw_dict, dict) else getattr(raw, "name", "???")
                 print(f"  Warning: skipping {name!r}: {exc}")
 
-        if not search.has_more():
+        if not search.has_more:
             break
 
         page += 1
