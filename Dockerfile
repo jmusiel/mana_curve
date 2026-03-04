@@ -9,4 +9,4 @@ RUN pip install --no-cache-dir -U pip && \
 
 EXPOSE $PORT
 
-CMD gunicorn 'auto_goldfish.web:create_app()' --bind 0.0.0.0:${PORT:-8000}
+CMD gunicorn 'auto_goldfish.web:create_app()' --bind 0.0.0.0:${PORT:-8000} --preload --access-logfile - --error-logfile - --capture-output
