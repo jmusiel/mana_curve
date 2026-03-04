@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import JSON, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -24,7 +24,7 @@ class EffectLabelRow(Base):
     __tablename__ = "effect_labels"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    effects_json: Mapped[dict] = mapped_column(JSON, unique=True, nullable=False)
+    effects_json: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
 
 
 class DeckRow(Base):

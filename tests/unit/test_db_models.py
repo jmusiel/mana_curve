@@ -60,13 +60,13 @@ class TestCardRow:
 
 class TestEffectLabelRow:
     def test_insert_label(self, db_session: Session):
-        label = EffectLabelRow(effects_json={"effects": [{"type": "draw", "slot": "on_play"}]})
+        label = EffectLabelRow(effects_json='{"effects": [{"slot": "on_play", "type": "draw"}]}')
         db_session.add(label)
         db_session.commit()
         assert label.id is not None
 
     def test_unique_json(self, db_session: Session):
-        data = {"effects": [{"type": "draw"}]}
+        data = '{"effects": [{"type": "draw"}]}'
         db_session.add(EffectLabelRow(effects_json=data))
         db_session.commit()
         db_session.add(EffectLabelRow(effects_json=data))

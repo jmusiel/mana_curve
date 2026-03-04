@@ -38,12 +38,11 @@ def get_or_create_card(session: Session, name: str) -> CardRow:
 
 def get_or_create_effect_label(session: Session, effects: dict) -> EffectLabelRow:
     canonical = json.dumps(effects, sort_keys=True)
-    # Compare against the canonical JSON form
     row = session.execute(
-        select(EffectLabelRow).where(EffectLabelRow.effects_json == json.loads(canonical))
+        select(EffectLabelRow).where(EffectLabelRow.effects_json == canonical)
     ).scalar_one_or_none()
     if row is None:
-        row = EffectLabelRow(effects_json=json.loads(canonical))
+        row = EffectLabelRow(effects_json=canonical)
         session.add(row)
         session.flush()
     return row

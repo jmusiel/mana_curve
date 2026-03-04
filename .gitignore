@@ -13,3 +13,4 @@ CLAUDE.md
 **/untracked/**
 src/auto_goldfish/autocard/data/*.json
 decks/**/*.json
+.env
