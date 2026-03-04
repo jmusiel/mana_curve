@@ -6,10 +6,13 @@ Runs Goldfisher simulations in daemon threads. GameState is self-contained
 
 from __future__ import annotations
 
+import logging
 import threading
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from auto_goldfish.decklist.loader import load_decklist
 from auto_goldfish.effects.card_database import DEFAULT_REGISTRY
@@ -125,6 +128,13 @@ class SimulationRunner:
 
             with self._lock:
                 job.status = "completed"
+
+            try:
+                from auto_goldfish.db.persistence import persist_completed_job
+
+                persist_completed_job(job)
+            except Exception:
+                logger.exception("Failed to persist simulation run to DB")
 
         except Exception as e:
             with self._lock:

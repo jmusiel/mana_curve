@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
+import uuid
 
 from flask import Blueprint, abort, jsonify, render_template, request, send_file
+
+logger = logging.getLogger(__name__)
 
 from auto_goldfish.decklist.loader import get_deckpath, load_decklist, load_overrides, save_overrides
 from auto_goldfish.effects.builtin import (
@@ -130,6 +134,13 @@ def config(deck_name: str):
         for c in card_effects_list
     ]
 
+    try:
+        from auto_goldfish.db.persistence import persist_deck_cards
+
+        persist_deck_cards(deck_name, card_effects_list, saved_overrides)
+    except Exception:
+        logger.exception("Failed to persist deck cards to DB")
+
     effect_schema = get_effect_schema()
 
     return render_template(
@@ -227,3 +238,37 @@ def api_wheel_download(filename: str):
     if not os.path.isfile(wheel_path):
         abort(404)
     return send_file(wheel_path, mimetype="application/zip")
+
+
+@bp.route("/api/<deck_name>/results", methods=["POST"])
+def api_save_results(deck_name: str):
+    """Persist client-side simulation results to the database."""
+    path = get_deckpath(deck_name)
+    if not os.path.isfile(path):
+        abort(404)
+
+    try:
+        body = request.get_json(force=True)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid JSON"}), 400
+
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "error": "Invalid JSON"}), 400
+
+    config = body.get("config", {})
+    results = body.get("results", [])
+
+    job_id = uuid.uuid4().hex[:12]
+
+    try:
+        from auto_goldfish.db.persistence import get_or_create_deck, save_simulation_run
+        from auto_goldfish.db.session import get_session
+
+        with get_session() as session:
+            deck = get_or_create_deck(session, deck_name)
+            save_simulation_run(session, job_id, deck, config, results)
+        logger.info("Persisted client simulation %s for deck %s", job_id, deck_name)
+    except Exception:
+        logger.exception("Failed to persist client simulation results")
+
+    return jsonify({"ok": True})

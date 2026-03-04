@@ -574,3 +574,70 @@ class TestCardLabeler:
         assert "Sol Ring" in all_names
         assert "Vren, the Relentless" in all_names
         assert "Island" not in all_names
+
+
+class TestSaveResultsAPI:
+    """Tests for POST /sim/api/<deck_name>/results endpoint."""
+
+    def _mock_deck(self, monkeypatch, tmp_path):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        return root
+
+    def test_save_results_nonexistent_deck_404(self, client, tmp_path, monkeypatch):
+        """POST to nonexistent deck returns 404."""
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.simulation.get_deckpath",
+            lambda name: str(tmp_path / "nonexistent" / "nonexistent.json"),
+        )
+        response = client.post(
+            "/sim/api/nonexistent/results",
+            data=json.dumps({"config": {}, "results": []}),
+            content_type="application/json",
+        )
+        assert response.status_code == 404
+
+    def test_save_results_invalid_json(self, client, tmp_path, monkeypatch):
+        """POST with invalid JSON returns 400."""
+        self._mock_deck(monkeypatch, tmp_path)
+        response = client.post(
+            "/sim/api/testdeck/results",
+            data="not json",
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["ok"] is False
+
+    def test_save_results_db_failure_still_returns_ok(self, client, tmp_path, monkeypatch):
+        """If DB import fails (no sqlalchemy), endpoint still returns ok."""
+        self._mock_deck(monkeypatch, tmp_path)
+        # No DB mocking needed -- the try/except in the route catches ImportError
+        payload = {"config": {"turns": 10}, "results": []}
+        response = client.post(
+            "/sim/api/testdeck/results",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+
+    def test_save_results_returns_ok_with_valid_payload(self, client, tmp_path, monkeypatch):
+        """POST with valid JSON body returns ok (DB persistence is best-effort)."""
+        self._mock_deck(monkeypatch, tmp_path)
+        payload = {
+            "config": {"turns": 10, "sims": 100},
+            "results": [{"land_count": 37, "mean_mana": 5.5, "consistency": 0.8}],
+        }
+        response = client.post(
+            "/sim/api/testdeck/results",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True

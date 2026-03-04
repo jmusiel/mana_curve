@@ -20,4 +20,10 @@ def create_app() -> Flask:
 
     register_blueprints(app)
 
+    db_url = os.environ.get("DATABASE_URL", "")
+    if db_url:
+        from auto_goldfish.db.session import init_db
+
+        init_db(db_url)
+
     return app
