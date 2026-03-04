@@ -5,7 +5,7 @@ WORKDIR /app
 COPY . /app/
 
 RUN pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir '.[web,db]'
+    pip install --no-cache-dir '.[web]'
 
 EXPOSE $PORT
 
