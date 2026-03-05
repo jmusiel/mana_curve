@@ -27,5 +27,9 @@ if [ -n "$pids" ]; then
     sleep 0.5
 fi
 
+# Build wheel so Pyodide can load the simulation engine in-browser
+echo "Building wheel..."
+uv build --wheel --quiet
+
 echo "Starting Flask dev server on :$PORT"
 exec .venv/bin/flask --app src.auto_goldfish.web:create_app run --debug --port "$PORT"

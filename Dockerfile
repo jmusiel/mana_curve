@@ -4,8 +4,9 @@ WORKDIR /app
 
 COPY . /app/
 
-RUN pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir '.[web]'
+RUN pip install --no-cache-dir -U pip build && \
+    pip install --no-cache-dir '.[web]' && \
+    python -m build --wheel --outdir dist/
 
 EXPOSE $PORT
 
