@@ -66,23 +66,25 @@ class TestCmdFetchOtags:
         assert data["cards"]["Rhystic Study"] == ["card-advantage"]
         assert len(data["cards"]) == 2
 
-    def test_default_output_path(self, mock_cards):
+    def test_default_output_path(self, tmp_path, mock_cards):
         parser = build_parser()
         args = parser.parse_args(["fetch-otags"])
+        # Override the default output to avoid clobbering the real registry
+        args.output = str(tmp_path / "otag_registry.json")
 
         with patch("auto_goldfish.autocard.scryfall.fetch_top_cards_by_tags", return_value=mock_cards):
             cmd_fetch_otags(args)
 
-        # Verify it wrote to the default location
-        default_path = Path(__file__).resolve().parent.parent / "src" / "auto_goldfish" / "effects" / "otag_registry.json"
-        # The default path is relative to cli.py, just verify no crash
-        # and that registry was written somewhere
+        output = tmp_path / "otag_registry.json"
+        assert output.exists()
+        data = json.loads(output.read_text())
+        assert len(data["cards"]) == 2
 
     def test_parser_registers_command(self):
         parser = build_parser()
         args = parser.parse_args(["fetch-otags"])
         assert args.command == "fetch-otags"
-        assert args.per_tag_count == 500
+        assert args.per_tag_count == 100000
 
     def test_parser_custom_per_tag_count(self):
         parser = build_parser()
