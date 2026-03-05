@@ -139,12 +139,21 @@ def config(deck_name: str):
         for c in card_effects_list
     ]
 
+    # Persist deck cards in background — don't block the page response
     try:
+        import threading
+
         from auto_goldfish.db.persistence import persist_deck_cards
 
-        persist_deck_cards(deck_name, card_effects_list, saved_overrides)
+        def _persist_safe():
+            try:
+                persist_deck_cards(deck_name, card_effects_list, saved_overrides)
+            except Exception:
+                logger.debug("Background deck card persistence failed")
+
+        threading.Thread(target=_persist_safe, daemon=True).start()
     except Exception:
-        logger.exception("Failed to persist deck cards to DB")
+        logger.debug("Failed to start deck card persistence")
 
     # Build wizard card list using otag registry + optional DB stats
     otag_registry = load_otag_registry()
@@ -264,13 +273,35 @@ def api_effects(deck_name: str):
     return jsonify(effects)
 
 
+def _find_dist_dir():
+    """Locate the dist/ directory containing the wheel file.
+
+    Checks two locations:
+    1. Relative to __file__ (works when running from source tree)
+    2. Current working directory (works when installed, e.g. Docker with WORKDIR /app)
+    """
+    # Source-tree relative path (5 levels up from web/routes/simulation.py)
+    source_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    )
+    source_dist = os.path.join(source_root, "dist")
+    if os.path.isdir(source_dist):
+        return source_dist
+
+    # CWD-based (e.g. Docker WORKDIR /app)
+    cwd_dist = os.path.join(os.getcwd(), "dist")
+    if os.path.isdir(cwd_dist):
+        return cwd_dist
+
+    return None
+
+
 @bp.route("/api/wheel")
 def api_wheel():
     """Return the wheel filename so the client can build the download URL."""
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    )
-    dist_dir = os.path.join(project_root, "dist")
+    dist_dir = _find_dist_dir()
+    if not dist_dir:
+        abort(404)
     wheels = sorted(glob.glob(os.path.join(dist_dir, "auto_goldfish-*.whl")))
     if not wheels:
         abort(404)
@@ -284,10 +315,10 @@ def api_wheel_download(filename: str):
     for micropip to recognise this as a wheel rather than a package name."""
     if not filename.endswith(".whl") or "/" in filename or ".." in filename:
         abort(400)
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    )
-    wheel_path = os.path.join(project_root, "dist", filename)
+    dist_dir = _find_dist_dir()
+    if not dist_dir:
+        abort(404)
+    wheel_path = os.path.join(dist_dir, filename)
     if not os.path.isfile(wheel_path):
         abort(404)
     return send_file(wheel_path, mimetype="application/zip")
