@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import os
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 
-from auto_goldfish.decklist.archidekt import fetch_and_save
+from auto_goldfish.decklist.archidekt import fetch_and_save, fetch_decklist
 from auto_goldfish.decklist.loader import get_deckpath, load_decklist
 
 bp = Blueprint("decks", __name__, url_prefix="/decks")
@@ -39,13 +39,44 @@ def import_deck():
     return redirect(url_for("decks.view_deck", name=deck_name))
 
 
-@bp.route("/<name>")
-def view_deck(name: str):
-    path = get_deckpath(name)
-    if not os.path.isfile(path):
-        abort(404)
+@bp.route("/import/api", methods=["POST"])
+def import_deck_api():
+    """Fetch deck from Archidekt and return JSON (no server-side save)."""
+    try:
+        body = request.get_json(force=True)
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid JSON"}), 400
 
-    cards = load_decklist(name)
+    default_url = "https://archidekt.com/decks/81320/the_rr_connection"
+    deck_url = (body.get("deck_url") or "").strip() or default_url
+    deck_name = (body.get("deck_name") or "").strip()
+
+    if not deck_name:
+        deck_name = deck_url.rstrip("/").rsplit("/", 1)[-1]
+
+    try:
+        cards = fetch_decklist(deck_url)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+    return jsonify({"ok": True, "deck_name": deck_name, "cards": cards})
+
+
+@bp.route("/<name>", methods=["GET", "POST"])
+def view_deck(name: str):
+    if request.method == "POST":
+        try:
+            body = request.get_json(force=True)
+        except Exception:
+            abort(400)
+        cards = body.get("cards", [])
+        is_local = True
+    else:
+        path = get_deckpath(name)
+        if not os.path.isfile(path):
+            abort(404)
+        cards = load_decklist(name)
+        is_local = False
 
     # Group cards by user_category (or "Other")
     groups: dict[str, list] = {}
@@ -70,4 +101,5 @@ def view_deck(name: str):
         groups=sorted_groups,
         total_cards=total_cards,
         land_count=land_count,
+        is_local=is_local,
     )

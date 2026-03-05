@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Auto Goldfish - Dashboard{% endblock %}
 {% block content %}
-<h1>Saved Decks</h1>
+
+<!-- Local (browser) decks -->
+<div id="local-decks-section" style="display:none;">
+    <h1>Your Decks</h1>
+    <div id="local-deck-grid" class="deck-grid"></div>
+</div>
+
+<!-- Server (shared) decks -->
+<h1>Shared Decks</h1>
 {% if decks %}
 <div class="deck-grid">
     {% for deck in decks %}
@@ -19,6 +27,54 @@
     {% endfor %}
 </div>
 {% else %}
-<p class="empty-state">No decks saved yet. <a href="{{ url_for('decks.import_form') }}">Import one from Archidekt</a>.</p>
+<p class="empty-state" id="shared-empty">No shared decks available.</p>
 {% endif %}
+
+<!-- Combined empty state (no local + no shared) -->
+<p class="empty-state" id="combined-empty" style="display:none;">
+    No decks yet. <a href="{{ url_for('decks.import_form') }}">Import one from Archidekt</a>.
+</p>
+
+<script>
+(function() {
+    var localDecks = DeckStore.listDecks();
+    var section = document.getElementById('local-decks-section');
+    var grid = document.getElementById('local-deck-grid');
+    var hasShared = {{ 'true' if decks else 'false' }};
+
+    if (localDecks.length > 0) {
+        section.style.display = '';
+        localDecks.forEach(function(deck) {
+            var card = document.createElement('div');
+            card.className = 'deck-card';
+            var cmdrHtml = deck.commanders.length
+                ? '<p class="commanders">' + deck.commanders.join(', ') + '</p>'
+                : '';
+            card.innerHTML =
+                '<h2><a href="javascript:void(0)" onclick="navigateToDeckView(\'' + deck.name.replace(/'/g, "\\'") + '\')">' + deck.name + '</a></h2>'
+                + cmdrHtml
+                + '<p class="deck-stats">' + deck.card_count + ' cards &middot; ' + deck.land_count + ' lands</p>'
+                + '<div class="deck-actions">'
+                + '<button class="btn btn-secondary" onclick="navigateToDeckView(\'' + deck.name.replace(/'/g, "\\'") + '\')">View</button>'
+                + '<button class="btn btn-primary" onclick="navigateToSim(\'' + deck.name.replace(/'/g, "\\'") + '\')">Simulate</button>'
+                + '<button class="btn btn-danger btn-sm" onclick="deleteLocalDeck(\'' + deck.name.replace(/'/g, "\\'") + '\')">Delete</button>'
+                + '</div>';
+            grid.appendChild(card);
+        });
+    }
+
+    // Show combined empty state if neither local nor shared decks exist
+    if (localDecks.length === 0 && !hasShared) {
+        var sharedEmpty = document.getElementById('shared-empty');
+        if (sharedEmpty) sharedEmpty.style.display = 'none';
+        document.getElementById('combined-empty').style.display = '';
+    }
+})();
+
+function deleteLocalDeck(name) {
+    if (!confirm('Delete "' + name + '" from your browser?')) return;
+    DeckStore.deleteDeck(name);
+    location.reload();
+}
+</script>
 {% endblock %}

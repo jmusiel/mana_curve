@@ -107,6 +107,19 @@ class SimulationResultRow(Base):
     run: Mapped["SimulationRunRow"] = relationship(back_populates="results")
 
 
+class CardAnnotationRow(Base):
+    __tablename__ = "card_annotations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    card_name: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    effects_json: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="human")
+    session_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
 class CardPerformanceRow(Base):
     __tablename__ = "card_performance"
 

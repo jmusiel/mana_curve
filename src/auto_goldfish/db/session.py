@@ -6,7 +6,7 @@ import logging
 from contextlib import contextmanager
 from typing import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .models import Base
@@ -23,7 +23,19 @@ def init_db(database_url: str) -> None:
     _engine = create_engine(database_url)
     _SessionFactory = sessionmaker(bind=_engine)
     Base.metadata.create_all(_engine)
+    _migrate(_engine)
     logger.info("Database initialized: %s", database_url.split("@")[-1] if "@" in database_url else "(local)")
+
+
+def _migrate(engine) -> None:
+    """Add columns that create_all won't add to existing tables."""
+    insp = inspect(engine)
+    if "card_annotations" in insp.get_table_names():
+        cols = {c["name"] for c in insp.get_columns("card_annotations")}
+        if "session_id" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE card_annotations ADD COLUMN session_id TEXT"))
+            logger.info("Migrated card_annotations: added session_id column")
 
 
 @contextmanager
