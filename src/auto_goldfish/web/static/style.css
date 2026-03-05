@@ -614,6 +614,20 @@ a:hover { text-decoration: underline; }
     border-top: 1px solid #e2e8f0;
 }
 
+/* Labeler responsive: stack card + controls vertically on narrow screens */
+@media (max-width: 640px) {
+    .labeler-body {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .labeler-card-display {
+        width: 100%;
+    }
+    .labeler-image {
+        width: 200px;
+    }
+}
+
 /* Flowchart nodes */
 .flowchart-node {
     border-left: 3px solid #2563eb;
