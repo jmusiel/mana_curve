@@ -112,7 +112,9 @@ class TestImportPage:
     def test_import_form_renders(self, client):
         response = client.get("/decks/import")
         assert response.status_code == 200
+        assert b"Import Deck" in response.data
         assert b"Archidekt" in response.data
+        assert b"Paste Decklist" in response.data
 
     def test_import_empty_fields_uses_defaults(self, client, monkeypatch):
         """Empty fields should fall back to the default deck URL/name."""
@@ -662,7 +664,7 @@ class TestImportDeckAPI:
             {"name": "Sol Ring", "types": ["Artifact"], "cmc": 1, "quantity": 1},
         ]
         monkeypatch.setattr(
-            "auto_goldfish.web.routes.decks.fetch_decklist",
+            "auto_goldfish.web.routes.decks.fetch_archidekt",
             lambda url, **kw: fake_cards,
         )
         response = client.post(
@@ -678,7 +680,7 @@ class TestImportDeckAPI:
 
     def test_import_api_extracts_name_from_url(self, client, monkeypatch):
         monkeypatch.setattr(
-            "auto_goldfish.web.routes.decks.fetch_decklist",
+            "auto_goldfish.web.routes.decks.fetch_archidekt",
             lambda url, **kw: [],
         )
         response = client.post(
@@ -695,7 +697,7 @@ class TestImportDeckAPI:
             raise ValueError("bad url")
 
         monkeypatch.setattr(
-            "auto_goldfish.web.routes.decks.fetch_decklist",
+            "auto_goldfish.web.routes.decks.fetch_archidekt",
             raise_error,
         )
         response = client.post(
@@ -706,6 +708,141 @@ class TestImportDeckAPI:
         assert response.status_code == 400
         data = response.get_json()
         assert data["ok"] is False
+
+
+class TestTextImportAPI:
+    """Tests for POST /decks/import/api with source=text."""
+
+    def test_text_import_resolves_cards(self, client, monkeypatch):
+        fake_cards = [
+            {"name": "Sol Ring", "types": ["Artifact"], "cmc": 1, "quantity": 1},
+        ]
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.decks.resolve_cards",
+            lambda entries: fake_cards,
+        )
+        response = client.post(
+            "/decks/import/api",
+            data=json.dumps({
+                "source": "text",
+                "deck_name": "my_text_deck",
+                "decklist_text": "1 Sol Ring",
+            }),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+        assert data["deck_name"] == "my_text_deck"
+        assert len(data["cards"]) == 1
+
+    def test_text_import_missing_text_returns_400(self, client):
+        response = client.post(
+            "/decks/import/api",
+            data=json.dumps({"source": "text", "deck_name": "test"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["ok"] is False
+        assert "No decklist text" in data["error"]
+
+    def test_text_import_missing_name_returns_400(self, client):
+        response = client.post(
+            "/decks/import/api",
+            data=json.dumps({"source": "text", "decklist_text": "1 Sol Ring"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "Deck name is required" in data["error"]
+
+    def test_text_import_empty_decklist_returns_400(self, client):
+        response = client.post(
+            "/decks/import/api",
+            data=json.dumps({
+                "source": "text",
+                "deck_name": "test",
+                "decklist_text": "// just a comment",
+            }),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "No cards found" in data["error"]
+
+
+class TestMoxfieldImportAPI:
+    """Tests for POST /decks/import/api with source=moxfield."""
+
+    def test_moxfield_import_calls_adapter(self, client, monkeypatch):
+        fake_cards = [
+            {"name": "Island", "types": ["Land"], "cmc": 0, "quantity": 1},
+        ]
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.decks.fetch_moxfield",
+            lambda url: fake_cards,
+        )
+        response = client.post(
+            "/decks/import/api",
+            data=json.dumps({
+                "source": "moxfield",
+                "deck_url": "https://www.moxfield.com/decks/abc123",
+                "deck_name": "mox_deck",
+            }),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+        assert data["deck_name"] == "mox_deck"
+
+    def test_moxfield_missing_url_returns_400(self, client):
+        response = client.post(
+            "/decks/import/api",
+            data=json.dumps({"source": "moxfield", "deck_name": "test"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "URL is required" in data["error"]
+
+    def test_moxfield_unconfigured_returns_501(self, client, monkeypatch):
+        from auto_goldfish.decklist.moxfield import MoxfieldConfigError
+
+        def raise_config_error(url):
+            raise MoxfieldConfigError("not set")
+
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.decks.fetch_moxfield",
+            raise_config_error,
+        )
+        response = client.post(
+            "/decks/import/api",
+            data=json.dumps({
+                "source": "moxfield",
+                "deck_url": "https://www.moxfield.com/decks/abc",
+            }),
+            content_type="application/json",
+        )
+        assert response.status_code == 501
+
+    def test_moxfield_extracts_name_from_url(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.decks.fetch_moxfield",
+            lambda url: [],
+        )
+        response = client.post(
+            "/decks/import/api",
+            data=json.dumps({
+                "source": "moxfield",
+                "deck_url": "https://www.moxfield.com/decks/my_cool_deck",
+            }),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["deck_name"] == "my_cool_deck"
 
 
 class TestDeckViewPOST:

@@ -332,8 +332,21 @@ autocard coverage [--cards PATH] [--registry PATH]
 Run LLM labeling on unlabeled cards.
 
 ```
-autocard label [--count N] [--model MODEL] [--batch-size N] [--concurrency N]
+autocard label [--api {ollama,claude}] [--count N] [--model MODEL]
+               [--batch-size N] [--concurrency N]
                [--resume] [--cards PATH] [--output PATH]
+```
+
+Examples:
+```bash
+# Local Ollama (default)
+autocard label --model gemma3:12b --batch-size 5 --concurrency 4
+
+# Claude API (Haiku - fast and cheap)
+autocard label --api claude --batch-size 5 --concurrency 4
+
+# Claude with a specific model
+autocard label --api claude --model claude-sonnet-4-6
 ```
 
 ### `autocard validate`
@@ -376,11 +389,25 @@ autocard export [--output PATH] [--merge PATH] [--cards PATH]
 
 ## Dependencies
 
-The labeling pipeline requires [Ollama](https://ollama.ai) running locally with a model pulled:
+The labeling pipeline supports two backends:
+
+### Ollama (local)
 
 ```bash
 pip install auto_goldfish[autocard]
 ollama pull gemma3:12b
+autocard label --api ollama --model gemma3:12b
 ```
 
-All other autocard commands (fetch, coverage, validate, export) work without Ollama.
+### Claude API (Anthropic)
+
+```bash
+pip install auto_goldfish[autocard]
+# Add your API key to .env:
+#   ANTHROPIC_API_KEY=sk-ant-...
+autocard label --api claude --model claude-haiku-4-5-20251001
+```
+
+The `--api` flag defaults to `ollama`. When using `claude`, the API key is read from the `ANTHROPIC_API_KEY` environment variable (auto-loaded from `.env` via python-dotenv).
+
+All other autocard commands (fetch, coverage, validate, export) work without either backend.

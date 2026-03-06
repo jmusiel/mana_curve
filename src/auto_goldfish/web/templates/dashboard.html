@@ -2,6 +2,35 @@
 {% block title %}Auto Goldfish - Dashboard{% endblock %}
 {% block content %}
 
+<!-- Leaderboard -->
+<div id="leaderboard-section" style="display:none;">
+    <h1>Leaderboard</h1>
+    <div class="leaderboard-grid">
+        <div class="leaderboard-col">
+            <h3>Mana Spent</h3>
+            <table class="leaderboard-table" id="lb-mana-spent">
+                <thead><tr><th>#</th><th>Deck</th><th>Value</th><th>Lands</th><th>Draw</th><th>Ramp</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="leaderboard-col">
+            <h3>Consistency</h3>
+            <table class="leaderboard-table" id="lb-consistency">
+                <thead><tr><th>#</th><th>Deck</th><th>Value</th><th>Lands</th><th>Draw</th><th>Ramp</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="leaderboard-col">
+            <h3>Cards Drawn</h3>
+            <table class="leaderboard-table" id="lb-cards-drawn">
+                <thead><tr><th>#</th><th>Deck</th><th>Value</th><th>Lands</th><th>Draw</th><th>Ramp</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+    <button class="btn btn-danger btn-sm" onclick="clearLeaderboard()">Clear Leaderboard</button>
+</div>
+
 <!-- Local (browser) decks -->
 <div id="local-decks-section" style="display:none;">
     <h1>Your Decks</h1>
@@ -37,6 +66,35 @@
 
 <script>
 (function() {
+    // Render leaderboard
+    var board = Leaderboard.getAll();
+    var categories = [
+        {key: 'mana_spent', tableId: 'lb-mana-spent'},
+        {key: 'consistency', tableId: 'lb-consistency'},
+        {key: 'cards_drawn', tableId: 'lb-cards-drawn'},
+    ];
+    var hasAny = false;
+    categories.forEach(function(cat) {
+        var entries = board[cat.key] || [];
+        if (entries.length > 0) hasAny = true;
+        var tbody = document.querySelector('#' + cat.tableId + ' tbody');
+        entries.forEach(function(entry, idx) {
+            var tr = document.createElement('tr');
+            var nameCell = '<a href="javascript:void(0)" onclick="navigateToLeaderboardDeck(\'' + entry.deck_name.replace(/'/g, "\\'") + '\')">' + entry.deck_name + '</a>';
+            var val = typeof entry.value === 'number' ? entry.value.toFixed(2) : entry.value;
+            tr.innerHTML = '<td>' + (idx + 1) + '</td>'
+                + '<td>' + nameCell + '</td>'
+                + '<td>' + val + '</td>'
+                + '<td>' + entry.land_count + '</td>'
+                + '<td>' + entry.draw_count + '</td>'
+                + '<td>' + entry.ramp_count + '</td>';
+            tbody.appendChild(tr);
+        });
+    });
+    if (hasAny) {
+        document.getElementById('leaderboard-section').style.display = '';
+    }
+
     var localDecks = DeckStore.listDecks();
     var section = document.getElementById('local-decks-section');
     var grid = document.getElementById('local-deck-grid');
@@ -70,6 +128,20 @@
         document.getElementById('combined-empty').style.display = '';
     }
 })();
+
+function clearLeaderboard() {
+    if (!confirm('Clear the entire leaderboard?')) return;
+    Leaderboard.clear();
+    location.reload();
+}
+
+function navigateToLeaderboardDeck(name) {
+    if (DeckStore.getDeck(name)) {
+        navigateToDeckView(name);
+    } else {
+        window.location.href = '/decks/' + encodeURIComponent(name);
+    }
+}
 
 function deleteLocalDeck(name) {
     if (!confirm('Delete "' + name + '" from your browser?')) return;

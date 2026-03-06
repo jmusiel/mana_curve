@@ -324,7 +324,7 @@ class TestAsRow:
 
     def test_row_length(self, sequential_result):
         row = sequential_result.as_row()
-        assert len(row) == 13
+        assert len(row) == 14
 
     def test_land_count_first(self, sequential_result):
         row = sequential_result.as_row()

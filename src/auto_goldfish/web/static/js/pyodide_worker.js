@@ -80,11 +80,46 @@ _result
     }
 }
 
+async function runOptimization(deckJson, configJson) {
+    if (!pyodide) {
+        postMessage({type: "error", message: "Pyodide not initialized"});
+        return;
+    }
+
+    try {
+        pyodide.globals.set("_js_enum_callback", function(current, total) {
+            postMessage({type: "progress", current: current, total: total, phase: "enum"});
+        });
+        pyodide.globals.set("_js_eval_callback", function(current, total) {
+            postMessage({type: "progress", current: current, total: total, phase: "eval"});
+        });
+
+        const resultJson = await pyodide.runPythonAsync(`
+from auto_goldfish.pyodide_runner import run_optimization as _run_opt
+
+_result = _run_opt(
+    ${JSON.stringify(deckJson)},
+    ${JSON.stringify(configJson)},
+    enum_callback=_js_enum_callback,
+    eval_callback=_js_eval_callback,
+)
+_result
+`);
+
+        const results = JSON.parse(resultJson);
+        postMessage({type: "result", data: results});
+    } catch (err) {
+        postMessage({type: "error", message: "Optimization failed: " + err.message});
+    }
+}
+
 onmessage = function(e) {
     const msg = e.data;
     if (msg.type === "init") {
         initPyodide(msg.wheelUrl);
     } else if (msg.type === "run") {
         runSimulation(msg.deckJson, msg.configJson);
+    } else if (msg.type === "run_optimization") {
+        runOptimization(msg.deckJson, msg.configJson);
     }
 };

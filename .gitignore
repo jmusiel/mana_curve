@@ -12,5 +12,6 @@ CLAUDE.md
 *DESIGN.md
 **/untracked/**
 src/auto_goldfish/autocard/data/*.json
+!src/auto_goldfish/autocard/data/labeled_cards.json
 decks/**/*.json
 .env

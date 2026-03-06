@@ -18,6 +18,8 @@ except ImportError:
 
 import scrython
 
+from auto_goldfish.decklist import rate_limiter
+
 from .schemas import ScryfallCard
 
 _DEFAULT_DATA_DIR = Path(__file__).parent / "data"
@@ -62,38 +64,43 @@ def _parse_card_dict(raw: dict) -> ScryfallCard:
 def fetch_top_cards(
     count: int = 1000,
     query: str = "f:commander",
+    progress: bool = True,
 ) -> List[ScryfallCard]:
     """Fetch the top `count` commander cards ranked by EDHREC popularity.
 
     Uses scrython's Search with the given query and ``order=edhrec``.
     Paginates manually through results until we have enough cards.
     """
-    import time
+    from tqdm import tqdm
 
     page = 1
     cards: List[ScryfallCard] = []
+    pbar = tqdm(total=count, desc="Fetching cards", unit="card", disable=not progress)
 
     while True:
         search = scrython.cards.Search(q=query, order="edhrec", dir="asc", page=page)
 
         for raw in search.data:
             if len(cards) >= count:
+                pbar.close()
                 return cards
             # scrython may return Object instances; convert to dict
             raw_dict = raw.to_dict() if hasattr(raw, "to_dict") else raw
             try:
                 cards.append(_parse_card_dict(raw_dict))
+                pbar.update(1)
             except Exception as exc:
                 name = raw_dict.get("name", "???") if isinstance(raw_dict, dict) else getattr(raw, "name", "???")
-                print(f"  Warning: skipping {name!r}: {exc}")
+                pbar.write(f"  Warning: skipping {name!r}: {exc}")
 
         if not search.has_more:
             break
 
         page += 1
         # Scryfall asks for 50-100ms between requests
-        time.sleep(0.1)
+        rate_limiter.wait("scryfall")
 
+    pbar.close()
     return cards
 
 
@@ -113,17 +120,19 @@ def fetch_top_cards_by_tags(
         Combined, deduplicated list of ScryfallCards sorted by edhrec_rank,
         with each card's ``otags`` field listing the short tag names it matched.
     """
+    from tqdm import tqdm
+
     # card name -> ScryfallCard (first seen copy)
     seen: dict[str, ScryfallCard] = {}
 
-    for tag in tags:
+    for tag in tqdm(tags, desc="Tags", unit="tag"):
         query = f"{tag} {base_query}"
         # Extract short name: "otag:card-advantage" -> "card-advantage"
         short_name = tag.split(":", 1)[1] if ":" in tag else tag
 
-        print(f"Fetching up to {per_tag_count} cards for {tag!r}...")
+        tqdm.write(f"Fetching up to {per_tag_count} cards for {tag!r}...")
         cards = fetch_top_cards(count=per_tag_count, query=query)
-        print(f"  Got {len(cards)} cards for {tag!r}")
+        tqdm.write(f"  Got {len(cards)} cards for {tag!r}")
 
         for card in cards:
             if card.name in seen:
@@ -136,7 +145,7 @@ def fetch_top_cards_by_tags(
 
     # Sort by edhrec_rank (None sorts last)
     combined = sorted(seen.values(), key=lambda c: c.edhrec_rank if c.edhrec_rank is not None else float("inf"))
-    print(f"Total unique cards: {len(combined)}")
+    tqdm.write(f"Total unique cards: {len(combined)}")
     return combined
 
 

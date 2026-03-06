@@ -114,17 +114,20 @@ class SimulationRunner:
                 registry=registry,
             )
 
-            min_lands = job.config.get("min_lands", goldfisher.land_count)
-            max_lands = job.config.get("max_lands", goldfisher.land_count)
+            if job.config.get("optimization_enabled"):
+                self._run_optimization(job, goldfisher)
+            else:
+                min_lands = job.config.get("min_lands", goldfisher.land_count)
+                max_lands = job.config.get("max_lands", goldfisher.land_count)
 
-            for i in range(min_lands, max_lands + 1):
-                goldfisher.set_lands(i, cuts=job.config.get("cuts", []))
-                result = goldfisher.simulate()
-                result_dict = result_to_dict(result)
+                for i in range(min_lands, max_lands + 1):
+                    goldfisher.set_lands(i, cuts=job.config.get("cuts", []))
+                    result = goldfisher.simulate()
+                    result_dict = result_to_dict(result)
 
-                with self._lock:
-                    job.results.append(result_dict)
-                    job.progress = len(job.results)
+                    with self._lock:
+                        job.results.append(result_dict)
+                        job.progress = len(job.results)
 
             with self._lock:
                 job.status = "completed"
@@ -140,3 +143,63 @@ class SimulationRunner:
             with self._lock:
                 job.status = "failed"
                 job.error = str(e)
+
+    def _run_optimization(self, job: SimJob, goldfisher: Goldfisher) -> None:
+        """Run enumerate-and-evaluate optimization within a simulation job."""
+        from auto_goldfish.optimization.candidate_cards import (
+            ALL_CANDIDATES,
+            make_custom_candidate,
+        )
+        from auto_goldfish.optimization.optimizer import DeckOptimizer
+
+        config = job.config
+        enabled_ids = set(config.get("enabled_candidates", []))
+        candidates = {
+            cid: c for cid, c in ALL_CANDIDATES.items() if cid in enabled_ids
+        }
+
+        custom_draw = config.get("custom_draw")
+        custom_ramp = config.get("custom_ramp")
+        if custom_draw and custom_draw.get("cmc") is not None:
+            cc = make_custom_candidate("draw", custom_draw["cmc"], custom_draw["amount"])
+            candidates[cc.id] = cc
+        if custom_ramp and custom_ramp.get("cmc") is not None:
+            cc = make_custom_candidate("ramp", custom_ramp["cmc"], custom_ramp["amount"])
+            candidates[cc.id] = cc
+
+        sims_per_eval = config.get("sims_per_enum", max(goldfisher.sims // 2, 100))
+        final_sims = goldfisher.sims
+
+        def enum_cb(current: int, total: int) -> None:
+            with self._lock:
+                job.progress = current
+                job.total = total
+
+        def eval_cb(current: int, total: int) -> None:
+            with self._lock:
+                job.progress = current
+                job.total = total
+
+        optimizer = DeckOptimizer(
+            goldfisher=goldfisher,
+            candidates=candidates,
+            swap_mode=config.get("swap_mode", False),
+            max_draw=config.get("max_draw_additions", 2),
+            max_ramp=config.get("max_ramp_additions", 2),
+            optimize_for=config.get("optimize_for", "mean_mana"),
+            sims_per_eval=sims_per_eval,
+        )
+
+        ranked = optimizer.run(
+            final_sims=final_sims,
+            final_top_k=5,
+            enum_progress=enum_cb,
+            eval_progress=eval_cb,
+        )
+
+        for deck_config, result_dict in ranked:
+            result_dict["opt_config"] = deck_config.describe()
+            result_dict["opt_land_delta"] = deck_config.land_delta
+            result_dict["opt_added_cards"] = list(deck_config.added_cards)
+            with self._lock:
+                job.results.append(result_dict)

@@ -123,45 +123,15 @@
 
     <input type="hidden" id="effect-overrides-input" value="{}">
 
-    <!-- Simulation Parameters -->
+    <!-- Shared Parameters -->
     <div class="form-row">
         <div class="form-group">
             <label for="turns">Turns (max {{ max_turns }})</label>
             <input type="number" id="turns" name="turns" value="10" min="1" max="{{ max_turns }}">
         </div>
         <div class="form-group">
-            <label for="sims">Simulations (max {{ max_sims }})</label>
+            <label for="sims" id="sims-label">Simulations per evaluation (max {{ max_sims }})</label>
             <input type="number" id="sims" name="sims" value="1000" min="100" max="{{ max_sims }}" step="100">
-        </div>
-    </div>
-    <div class="form-group">
-        <label>Land Range <span class="hint">(deck has {{ land_count }} lands, max sweep of {{ max_land_sweep }})</span></label>
-        <div class="range-slider-wrap">
-            <div class="range-row">
-                <div class="range-field">
-                    <label for="min-slider">Min Lands: <strong id="min-label">{{ default_min }}</strong></label>
-                    <input type="range" id="min-slider" list="land-ticks"
-                           min="{{ slider_min }}" max="{{ slider_max }}"
-                           value="{{ default_min }}" class="range-input">
-                </div>
-                <div class="range-field">
-                    <label for="max-slider">Max Lands: <strong id="max-label">{{ default_max }}</strong></label>
-                    <input type="range" id="max-slider" list="land-ticks"
-                           min="{{ slider_min }}" max="{{ slider_max }}"
-                           value="{{ default_max }}" class="range-input">
-                </div>
-            </div>
-            <datalist id="land-ticks">
-                {% for i in range(slider_min, slider_max + 1) %}
-                <option value="{{ i }}"{{ ' label="' ~ i ~ '"' if i == slider_min or i == land_count or i == slider_max or i % 5 == 0 else '' }}>
-                {% endfor %}
-            </datalist>
-            <div class="range-sweep-info">
-                Sweep: <strong id="sweep-label">{{ default_max - default_min }}</strong> land counts
-                ({{ default_min }} &ndash; {{ default_max }})
-            </div>
-            <input type="hidden" id="min_lands" name="min_lands" value="{{ default_min }}">
-            <input type="hidden" id="max_lands" name="max_lands" value="{{ default_max }}">
         </div>
     </div>
     <div class="form-row">
@@ -187,6 +157,114 @@
             </select>
         </div>
     </div>
+
+    <!-- Land Sweep Settings (shown by default) -->
+    <div id="sweep-settings">
+        <div class="form-group">
+            <label>Land Range <span class="hint">(deck has {{ land_count }} lands, max sweep of {{ max_land_sweep }})</span></label>
+            <div class="range-slider-wrap">
+                <div class="range-row">
+                    <div class="range-field">
+                        <label for="min-slider">Min Lands: <strong id="min-label">{{ default_min }}</strong></label>
+                        <input type="range" id="min-slider" list="land-ticks"
+                               min="{{ slider_min }}" max="{{ slider_max }}"
+                               value="{{ default_min }}" class="range-input">
+                    </div>
+                    <div class="range-field">
+                        <label for="max-slider">Max Lands: <strong id="max-label">{{ default_max }}</strong></label>
+                        <input type="range" id="max-slider" list="land-ticks"
+                               min="{{ slider_min }}" max="{{ slider_max }}"
+                               value="{{ default_max }}" class="range-input">
+                    </div>
+                </div>
+                <datalist id="land-ticks">
+                    {% for i in range(slider_min, slider_max + 1) %}
+                    <option value="{{ i }}"{{ ' label="' ~ i ~ '"' if i == slider_min or i == land_count or i == slider_max or i % 5 == 0 else '' }}>
+                    {% endfor %}
+                </datalist>
+                <div class="range-sweep-info">
+                    Sweep: <strong id="sweep-label">{{ default_max - default_min }}</strong> land counts
+                    ({{ default_min }} &ndash; {{ default_max }})
+                </div>
+                <input type="hidden" id="min_lands" name="min_lands" value="{{ default_min }}">
+                <input type="hidden" id="max_lands" name="max_lands" value="{{ default_max }}">
+            </div>
+        </div>
+    </div>
+
+    <!-- Card Optimization Toggle -->
+    <div class="form-group" style="margin-top: 0.5rem;">
+        <label class="toggle-label">
+            <input type="checkbox" id="card-optimization-toggle">
+            <strong>Draw/Ramp Optimization</strong>
+            <span class="hint">Enumerate generic draw and ramp cards to find optimal configurations</span>
+        </label>
+    </div>
+
+    <div id="card-optimization-settings" style="display:none; margin-top: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px;">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="optimize-for">Optimize for</label>
+                <select id="optimize-for">
+                    <option value="mean_mana" selected>Mean Mana (EV)</option>
+                    <option value="consistency">Consistency</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="sims-per-enum">Max sims per candidate</label>
+                <input type="number" id="sims-per-enum" value="200" min="50" max="{{ max_sims }}" step="50">
+            </div>
+        </div>
+        <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+            <input type="checkbox" id="swap-mode" style="width:auto;">
+            Swap mode (replace no-effect cards instead of adding)
+        </label>
+
+        <fieldset style="margin: 0.5rem 0; padding: 0.5rem;">
+            <legend>Draw Candidates to Enumerate</legend>
+            <div class="form-group" style="margin-bottom:0.5rem;">
+                <label for="max-draw-additions">Max draw cards to add</label>
+                <select id="max-draw-additions">
+                    <option value="1">1</option>
+                    <option value="2" selected>2</option>
+                    <option value="3">3</option>
+                </select>
+            </div>
+            <label style="display:block;"><input type="checkbox" checked data-candidate="draw_1cmc_1"> 1 Mana Draw 1</label>
+            <label style="display:block;"><input type="checkbox" data-candidate="draw_2cmc_1"> 2 Mana Draw 1</label>
+            <label style="display:block;"><input type="checkbox" checked data-candidate="draw_2cmc_2"> 2 Mana Draw 2</label>
+            <label style="display:block;"><input type="checkbox" checked data-candidate="draw_4cmc_3"> 4 Mana Draw 3</label>
+            <label style="display:block;"><input type="checkbox" checked data-candidate="draw_3cmc_1pt"> 3 Mana Draw 1/turn</label>
+            <label style="display:block;">
+                <input type="checkbox" data-candidate="draw_custom" id="draw-custom-toggle"> Custom:
+                <input type="number" id="custom-draw-cmc" placeholder="CMC" min="0" max="10" style="width:60px" disabled>
+                mana, draw
+                <input type="number" id="custom-draw-amount" placeholder="N" min="1" max="5" style="width:50px" disabled>
+            </label>
+        </fieldset>
+
+        <fieldset style="margin: 0.5rem 0; padding: 0.5rem;">
+            <legend>Ramp Candidates to Enumerate</legend>
+            <div class="form-group" style="margin-bottom:0.5rem;">
+                <label for="max-ramp-additions">Max ramp cards to add</label>
+                <select id="max-ramp-additions">
+                    <option value="1">1</option>
+                    <option value="2" selected>2</option>
+                    <option value="3">3</option>
+                </select>
+            </div>
+            <label style="display:block;"><input type="checkbox" checked data-candidate="ramp_2cmc_1"> 2 Mana Ramp +1</label>
+            <label style="display:block;"><input type="checkbox" data-candidate="ramp_3cmc_1"> 3 Mana Ramp +1</label>
+            <label style="display:block;"><input type="checkbox" checked data-candidate="ramp_4cmc_2"> 4 Mana Ramp +2</label>
+            <label style="display:block;">
+                <input type="checkbox" data-candidate="ramp_custom" id="ramp-custom-toggle"> Custom:
+                <input type="number" id="custom-ramp-cmc" placeholder="CMC" min="0" max="10" style="width:60px" disabled>
+                mana, ramp +
+                <input type="number" id="custom-ramp-amount" placeholder="N" min="1" max="5" style="width:50px" disabled>
+            </label>
+        </fieldset>
+    </div>
+
     <small class="hint" id="local-sim-hint">
         Simulation runs in your browser via WebAssembly.
         <span id="local-sim-estimate"></span>
@@ -624,9 +702,46 @@ function loadSavedOverrides() {
 // Load saved overrides on page load
 loadSavedOverrides();
 
+// For local decks, hydrate overrides from browser storage (takes precedence)
+if (IS_LOCAL_DECK) {
+    (function() {
+        var storedDeck = DeckStore.getDeck(DECK_NAME_FOR_STORE);
+        if (!storedDeck || !storedDeck.overrides) return;
+        var localOverrides = storedDeck.overrides;
+        if (Object.keys(localOverrides).length === 0) return;
+
+        // Merge into hidden input (local wins over server)
+        var current = {};
+        try { current = JSON.parse(document.getElementById('effect-overrides-input').value); } catch(e) {}
+        for (var cardName in localOverrides) {
+            if (localOverrides.hasOwnProperty(cardName)) {
+                current[cardName] = localOverrides[cardName];
+            }
+        }
+        document.getElementById('effect-overrides-input').value = JSON.stringify(current);
+    })();
+}
+
 // --- Card Labeler Wizard ---
 const WIZARD_CARDS = {{ wizard_cards | tojson if wizard_cards is defined else '[]' }};
 const ALL_NONLAND_CARDS = {{ all_nonland_cards | tojson }};
+
+// Hydrate wizard cards with locally-stored overrides so paging shows filled-out state
+if (IS_LOCAL_DECK) {
+    (function() {
+        var storedDeck = DeckStore.getDeck(DECK_NAME_FOR_STORE);
+        if (!storedDeck || !storedDeck.overrides) return;
+        var localOverrides = storedDeck.overrides;
+        [WIZARD_CARDS, ALL_NONLAND_CARDS].forEach(function(cardList) {
+            for (var i = 0; i < cardList.length; i++) {
+                var name = cardList[i].name;
+                if (name in localOverrides) {
+                    cardList[i].prior_annotation = localOverrides[name];
+                }
+            }
+        });
+    })();
+}
 const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
 
 (function() {
@@ -1309,6 +1424,9 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
         document.getElementById('effect-overrides-input').value = JSON.stringify(overrides);
         persistOverrides();
 
+        // Store annotation back on in-memory card so paging back restores state
+        card.prior_annotation = effectData;
+
         postAnnotation(cardName, effectData, 'human');
 
         const cardEl = document.querySelector('.effects-card[data-card-name="' + CSS.escape(cardName) + '"]');
@@ -1415,11 +1533,47 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
         const minLands = parseInt(document.getElementById('min_lands').value) || 36;
         const maxLands = parseInt(document.getElementById('max_lands').value) || 39;
         const landCounts = maxLands - minLands + 1;
-        // Rough estimate: ~3ms per sim per land count on modern hardware
-        const estSeconds = Math.ceil((sims * landCounts * 3) / 1000);
-        document.getElementById('local-sim-estimate').textContent =
-            'Estimated time: ~' + estSeconds + 's for '
-            + sims + ' sims x ' + landCounts + ' land counts.';
+        const msPerSim = 3; // ~3ms per sim on modern hardware
+
+        const optEnabled = document.getElementById('card-optimization-toggle').checked;
+        if (optEnabled) {
+            const simsPerEnum = parseInt(document.getElementById('sims-per-enum').value) || 200;
+            // Count enabled candidates
+            var drawCount = 0, rampCount = 0;
+            document.querySelectorAll('#card-optimization-settings [data-candidate]').forEach(function(cb) {
+                if (!cb.checked) return;
+                var cid = cb.dataset.candidate;
+                if (cid === 'draw_custom' || cid === 'ramp_custom') return;
+                if (cid.startsWith('draw_')) drawCount++;
+                else if (cid.startsWith('ramp_')) rampCount++;
+            });
+            // combinations_with_replacement(n, k) = C(n+k-1, k)
+            function combsWR(n, k) {
+                if (n === 0 || k === 0) return 1;
+                var result = 1;
+                for (var i = 0; i < k; i++) result = result * (n + k - 1 - i) / (i + 1);
+                return Math.round(result);
+            }
+            var maxDraw = parseInt(document.getElementById('max-draw-additions').value) || 2;
+            var maxRamp = parseInt(document.getElementById('max-ramp-additions').value) || 2;
+            var drawCombos = 1, rampCombos = 1;
+            for (var k = 1; k <= maxDraw; k++) drawCombos += combsWR(drawCount, k);
+            for (var k = 1; k <= maxRamp; k++) rampCombos += combsWR(rampCount, k);
+            var totalConfigs = landCounts * drawCombos * rampCombos;
+            var finalTopK = 5;
+
+            var enumSeconds = Math.ceil((simsPerEnum * totalConfigs * msPerSim) / 1000);
+            var evalSeconds = Math.ceil((sims * finalTopK * msPerSim) / 1000);
+            document.getElementById('local-sim-estimate').textContent =
+                'Estimated time: ~' + (enumSeconds + evalSeconds) + 's ('
+                + totalConfigs + ' configs x ' + simsPerEnum + ' sims + '
+                + finalTopK + ' top x ' + sims + ' sims).';
+        } else {
+            var estSeconds = Math.ceil((sims * landCounts * msPerSim) / 1000);
+            document.getElementById('local-sim-estimate').textContent =
+                'Estimated time: ~' + estSeconds + 's for '
+                + sims + ' sims x ' + landCounts + ' land counts.';
+        }
     }
 
     async function initWorker() {
@@ -1460,17 +1614,48 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
             }, 2000);
         } else if (msg.type === 'progress') {
             const pct = Math.round((msg.current / msg.total) * 100);
-            jobStatus.innerHTML = '<div class="job-status">'
-                + '<div class="progress-bar-container">'
-                + '<div class="progress-bar" style="width: ' + pct + '%"></div>'
-                + '</div>'
-                + '<p>Simulating... ' + pct + '% (' + msg.current + '/' + msg.total + ')</p>'
-                + '</div>';
+            var phase = msg.phase || 'eval';
+            var html = '<div class="job-status">';
+            if (phase === 'enum') {
+                // Enumeration phase: show enum bar active, eval bar empty
+                html += '<p>Enumerating configurations... ' + pct + '% (' + msg.current + '/' + msg.total + ')</p>'
+                    + '<div class="progress-bar-container">'
+                    + '<div class="progress-bar" style="width: ' + pct + '%"></div>'
+                    + '</div>'
+                    + '<p class="hint">Final evaluation pending</p>'
+                    + '<div class="progress-bar-container">'
+                    + '<div class="progress-bar" style="width: 0%"></div>'
+                    + '</div>';
+            } else if (phase === 'eval' && lastConfig && lastConfig.optimization_enabled) {
+                // Eval phase of optimization: enum bar complete, eval bar active
+                html += '<p>Enumeration complete</p>'
+                    + '<div class="progress-bar-container">'
+                    + '<div class="progress-bar" style="width: 100%"></div>'
+                    + '</div>'
+                    + '<p>Evaluating top configurations... ' + pct + '% (' + msg.current + '/' + msg.total + ')</p>'
+                    + '<div class="progress-bar-container">'
+                    + '<div class="progress-bar" style="width: ' + pct + '%"></div>'
+                    + '</div>';
+            } else {
+                // Land-only mode: single bar
+                html += '<div class="progress-bar-container">'
+                    + '<div class="progress-bar" style="width: ' + pct + '%"></div>'
+                    + '</div>'
+                    + '<p>Simulating... ' + pct + '% (' + msg.current + '/' + msg.total + ')</p>';
+            }
+            html += '</div>';
+            jobStatus.innerHTML = html;
         } else if (msg.type === 'result') {
             jobStatus.innerHTML = '';
             localResults.innerHTML = '';
             ClientResults.render(localResults, msg.data, DECK_NAME);
             document.getElementById('submit-btn').disabled = false;
+            // Update leaderboard for local decks
+            if (IS_LOCAL_DECK && lastConfig) {
+                var storedDeck = DeckStore.getDeck(DECK_NAME);
+                var deckUrl = storedDeck ? storedDeck.deck_url || '' : '';
+                Leaderboard.update(DECK_NAME, deckUrl, msg.data, lastConfig.effect_overrides);
+            }
             // Fire-and-forget: persist results to database
             if (lastConfig) {
                 fetch('/sim/api/' + DECK_NAME + '/results', {
@@ -1565,10 +1750,18 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
             const seedVal = document.getElementById('seed').value.trim();
             if (seedVal) config.seed = parseInt(seedVal);
 
+            // Check if card optimization is enabled
+            const optConfig = collectOptimizationConfig();
+            let workerType = 'run';
+            if (optConfig) {
+                Object.assign(config, optConfig);
+                workerType = 'run_optimization';
+            }
+
             lastConfig = config;
-            jobStatus.innerHTML = '<div class="job-status"><p>Starting simulation...</p></div>';
+            jobStatus.innerHTML = '<div class="job-status"><p>Starting ' + (optConfig ? 'optimization' : 'simulation') + '...</p></div>';
             worker.postMessage({
-                type: 'run',
+                type: workerType,
                 deckJson: JSON.stringify(deckData),
                 configJson: JSON.stringify(config),
             });
@@ -1582,6 +1775,71 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
     document.getElementById('sims').addEventListener('input', updateEstimate);
     document.getElementById('min-slider').addEventListener('input', updateEstimate);
     document.getElementById('max-slider').addEventListener('input', updateEstimate);
+    document.getElementById('max-draw-additions').addEventListener('change', updateEstimate);
+    document.getElementById('max-ramp-additions').addEventListener('change', updateEstimate);
+
+    // Card optimization toggle
+    document.getElementById('card-optimization-toggle').addEventListener('change', function() {
+        document.getElementById('card-optimization-settings').style.display = this.checked ? 'block' : 'none';
+        updateEstimate();
+    });
+    document.getElementById('sims-per-enum').addEventListener('input', updateEstimate);
+    document.querySelectorAll('#card-optimization-settings [data-candidate]').forEach(function(cb) {
+        cb.addEventListener('change', updateEstimate);
+    });
+
+    // Custom candidate toggles
+    document.getElementById('draw-custom-toggle').addEventListener('change', function() {
+        document.getElementById('custom-draw-cmc').disabled = !this.checked;
+        document.getElementById('custom-draw-amount').disabled = !this.checked;
+    });
+    document.getElementById('ramp-custom-toggle').addEventListener('change', function() {
+        document.getElementById('custom-ramp-cmc').disabled = !this.checked;
+        document.getElementById('custom-ramp-amount').disabled = !this.checked;
+    });
+
+    function collectOptimizationConfig() {
+        if (!document.getElementById('card-optimization-toggle').checked) return null;
+
+        const enabledCandidates = [];
+        document.querySelectorAll('#card-optimization-settings [data-candidate]').forEach(function(cb) {
+            if (cb.checked && cb.dataset.candidate !== 'draw_custom' && cb.dataset.candidate !== 'ramp_custom') {
+                enabledCandidates.push(cb.dataset.candidate);
+            }
+        });
+
+        if (enabledCandidates.length === 0) return null;
+
+        const optConfig = {
+            optimization_enabled: true,
+            optimize_for: document.getElementById('optimize-for').value,
+            swap_mode: document.getElementById('swap-mode').checked,
+            sims_per_enum: parseInt(document.getElementById('sims-per-enum').value) || 200,
+            enabled_candidates: enabledCandidates,
+            max_draw_additions: parseInt(document.getElementById('max-draw-additions').value) || 2,
+            max_ramp_additions: parseInt(document.getElementById('max-ramp-additions').value) || 2,
+        };
+
+        // Custom draw
+        if (document.getElementById('draw-custom-toggle').checked) {
+            const cmc = parseInt(document.getElementById('custom-draw-cmc').value);
+            const amount = parseInt(document.getElementById('custom-draw-amount').value);
+            if (!isNaN(cmc) && !isNaN(amount)) {
+                optConfig.custom_draw = {cmc: cmc, amount: amount};
+            }
+        }
+
+        // Custom ramp
+        if (document.getElementById('ramp-custom-toggle').checked) {
+            const cmc = parseInt(document.getElementById('custom-ramp-cmc').value);
+            const amount = parseInt(document.getElementById('custom-ramp-amount').value);
+            if (!isNaN(cmc) && !isNaN(amount)) {
+                optConfig.custom_ramp = {cmc: cmc, amount: amount};
+            }
+        }
+
+        return optConfig;
+    }
 
     // Initialize Pyodide on page load
     updateEstimate();

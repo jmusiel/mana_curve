@@ -74,10 +74,18 @@ const ClientResults = (function() {
         return div.innerHTML;
     }
 
+    function formatConfig(str) {
+        // Render (mv2) portions as <sub> for compact display
+        return escapeHtml(str).replace(/\(([^)]+)\)/g, '<sub>($1)</sub>');
+    }
+
     // -- Section renderers --
 
-    function renderSummaryTable(results) {
-        let html = '<h2>Summary Statistics</h2>';
+    function renderSummaryTable(results, isOptimization) {
+        let html = '<h2>' + (isOptimization ? 'Optimization Results' : 'Summary Statistics') + '</h2>';
+        if (isOptimization) {
+            html += '<p class="hint">Ranked by optimization target. Top configurations evaluated with full simulation count.</p>';
+        }
         html += `<details class="metric-descriptions">
             <summary>Metric Definitions</summary>
             <dl class="metric-list">
@@ -91,19 +99,28 @@ const ClientResults = (function() {
                 <dd>Average turns with fewer than 2 spells and mana spent below the turn number. Lower = better.</dd>
                 <dt>Avg Lands / Avg Mulls</dt>
                 <dd>Average lands played and mulligans taken per game.</dd>
+                <dt>Avg Draws / Avg Spells</dt>
+                <dd>Average cards drawn and spells cast per game.</dd>
                 <dt>25th / 50th / 75th</dt>
                 <dd>Percentiles of total mana spent showing distribution spread.</dd>
             </dl>
         </details>`;
         html += '<div class="table-wrap"><table class="stats-table"><thead><tr>';
+        if (isOptimization) html += '<th>Rank</th><th>Configuration</th>';
         html += '<th>Lands</th><th>Mana (EV)</th><th>Consistency</th><th>Bad Turns</th>';
         html += '<th>Mid Turns</th><th>Avg Lands</th><th>Avg Mulls</th>';
+        html += '<th>Avg Draws</th><th>Avg Spells</th>';
         html += '<th>25th</th><th>50th</th><th>75th</th></tr></thead><tbody>';
 
-        for (const r of results) {
+        for (let i = 0; i < results.length; i++) {
+            const r = results[i];
             const manaMargin = r.ci_mean_mana ? (r.ci_mean_mana[1] - r.ci_mean_mana[0]) / 2 : 0;
             const conMargin = r.ci_consistency ? (r.ci_consistency[1] - r.ci_consistency[0]) / 2 : 0;
-            html += '<tr>';
+            html += '<tr' + (isOptimization && i === 0 ? ' style="font-weight:bold; background:#e8f5e9;"' : '') + '>';
+            if (isOptimization) {
+                html += '<td>' + (i + 1) + '</td>';
+                html += '<td style="text-align:left">' + formatConfig(r.opt_config || 'Base deck') + '</td>';
+            }
             html += '<td>' + r.land_count + '</td>';
             html += '<td>' + fmt(r.mean_mana, 2) + ' <small>&plusmn;' + fmt(manaMargin, 2) + '</small></td>';
             html += '<td>' + fmt(r.consistency, 3) + ' <small>&plusmn;' + fmt(conMargin, 4) + '</small></td>';
@@ -111,39 +128,11 @@ const ClientResults = (function() {
             html += '<td>' + fmt(r.mean_mid_turns, 2) + '</td>';
             html += '<td>' + fmt(r.mean_lands, 2) + '</td>';
             html += '<td>' + fmt(r.mean_mulls, 2) + '</td>';
+            html += '<td>' + fmt(r.mean_draws ?? 0, 2) + '</td>';
+            html += '<td>' + fmt(r.mean_spells_cast ?? 0, 2) + '</td>';
             html += '<td>' + fmt(r.percentile_25, 1) + '</td>';
             html += '<td>' + fmt(r.percentile_50, 1) + '</td>';
             html += '<td>' + fmt(r.percentile_75, 1) + '</td>';
-            html += '</tr>';
-        }
-        html += '</tbody></table></div>';
-        return html;
-    }
-
-    function renderDistributionTable(results) {
-        if (!results[0].distribution_stats) return '';
-
-        let html = '<h2>Distribution Statistics</h2>';
-        html += `<details class="metric-descriptions">
-            <summary>Distribution Definitions</summary>
-            <dl class="metric-list">
-                <dt>Distribution Stats</dt>
-                <dd>Fraction of games in calibrated performance buckets. Thresholds set from first 10% of simulations. Values above the nominal percentage indicate overperformance.</dd>
-            </dl>
-        </details>`;
-        html += '<div class="table-wrap"><table class="stats-table"><thead><tr>';
-        html += '<th>Lands</th><th>Top 1%</th><th>Top 10%</th><th>Top 25%</th><th>Top 50%</th>';
-        html += '<th>Low 50%</th><th>Low 25%</th><th>Low 10%</th><th>Low 1%</th>';
-        html += '</tr></thead><tbody>';
-
-        const keys = ['top_centile', 'top_decile', 'top_quartile', 'top_half',
-                      'low_half', 'low_quartile', 'low_decile', 'low_centile'];
-
-        for (const r of results) {
-            html += '<tr><td>' + r.land_count + '</td>';
-            for (const k of keys) {
-                html += '<td>' + fmt((r.distribution_stats[k] || 0) * 100, 1) + '%</td>';
-            }
             html += '</tr>';
         }
         html += '</tbody></table></div>';
@@ -195,7 +184,6 @@ const ClientResults = (function() {
         return `<h2>Charts</h2>
         <div class="charts-grid">
             <div class="chart-container"><canvas id="manaChart"></canvas></div>
-            <div class="chart-container"><canvas id="distributionChart"></canvas></div>
             <div class="chart-container"><canvas id="consistencyChart"></canvas></div>
         </div>`;
     }
@@ -241,7 +229,7 @@ const ClientResults = (function() {
         const labels = data.map(d => d.land_count);
 
         // Destroy existing charts
-        ['manaChart', 'distributionChart', 'consistencyChart'].forEach(id => {
+        ['manaChart', 'consistencyChart'].forEach(id => {
             const existing = Chart.getChart(id);
             if (existing) existing.destroy();
         });
@@ -274,36 +262,6 @@ const ClientResults = (function() {
                 }
             }
         });
-
-        // Distribution stats
-        if (data[0].distribution_stats) {
-            const distKeys = ['top_centile', 'top_decile', 'top_quartile', 'top_half',
-                              'low_half', 'low_quartile', 'low_decile', 'low_centile'];
-            const distLabels = ['Top 1%', 'Top 10%', 'Top 25%', 'Top 50%',
-                                'Low 50%', 'Low 25%', 'Low 10%', 'Low 1%'];
-            const colors = ['#16a34a', '#22c55e', '#4ade80', '#86efac',
-                            '#fca5a5', '#f87171', '#ef4444', '#dc2626'];
-
-            new Chart(document.getElementById('distributionChart'), {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: distKeys.map((key, i) => ({
-                        label: distLabels[i],
-                        data: data.map(d => (d.distribution_stats[key] || 0) * 100),
-                        backgroundColor: colors[i],
-                    }))
-                },
-                options: {
-                    responsive: true,
-                    plugins: {title: {display: true, text: 'Distribution Stats (%)'}},
-                    scales: {
-                        x: {title: {display: true, text: 'Land Count'}},
-                        y: {title: {display: true, text: 'Percentage'}}
-                    }
-                }
-            });
-        }
 
         // Consistency
         new Chart(document.getElementById('consistencyChart'), {
@@ -452,19 +410,25 @@ const ClientResults = (function() {
      * @param {string} deckName - Deck name for the title
      */
     function render(container, results, deckName) {
+        const isOptimization = results.length > 0 && results[0].opt_config !== undefined;
+
         let html = '<div class="results-content">';
         html += '<h1>Results: ' + escapeHtml(deckName) + '</h1>';
-        html += renderSummaryTable(results);
-        html += renderDistributionTable(results);
+
+        html += renderSummaryTable(results, isOptimization);
         html += renderCardPerformance(results);
-        html += renderChartCanvases();
+        if (!isOptimization) {
+            html += renderChartCanvases();
+        }
         html += renderReplayHTML(results);
         html += '</div>';
 
         container.innerHTML = html;
 
         // Render interactive components after DOM is updated
-        renderCharts(results);
+        if (!isOptimization) {
+            renderCharts(results);
+        }
         initReplayViewer(results);
         rebindTooltips();
     }

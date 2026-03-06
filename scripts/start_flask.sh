@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Dev server launcher -- kills any existing Flask on :5000, then starts fresh.
+# Dev server launcher -- kills any existing Flask on :5001, then starts fresh.
 # Usage: ./dev.sh
 
 set -euo pipefail
 
-PORT=5000
+PORT=5001
 
 # Load .env if present
 if [ -f .env ]; then
@@ -14,7 +14,7 @@ if [ -f .env ]; then
 fi
 
 # Kill existing Python processes on the port (skip ControlCenter)
-pids=$(lsof -ti :"$PORT" 2>/dev/null | while read pid; do
+pids=$({ lsof -ti :"$PORT" 2>/dev/null || true; } | while read pid; do
     comm=$(ps -p "$pid" -o comm= 2>/dev/null || true)
     if [[ "$comm" == *Python* || "$comm" == *python* || "$comm" == *flask* ]]; then
         echo "$pid"
@@ -32,4 +32,4 @@ echo "Building wheel..."
 uv build --wheel --quiet
 
 echo "Starting Flask dev server on :$PORT"
-exec .venv/bin/flask --app src.auto_goldfish.web:create_app run --debug --port "$PORT"
+exec .venv/bin/flask --app auto_goldfish.web:create_app run --debug --port "$PORT"

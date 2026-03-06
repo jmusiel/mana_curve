@@ -15,6 +15,8 @@
         <dd>Average turns with fewer than 2 spells and mana spent below the turn number. Lower = better.</dd>
         <dt>Avg Lands / Avg Mulls</dt>
         <dd>Average lands played and mulligans taken per game.</dd>
+        <dt>Avg Draws / Avg Spells</dt>
+        <dd>Average cards drawn and spells cast per game.</dd>
         <dt>25th / 50th / 75th</dt>
         <dd>Percentiles of total mana spent showing distribution spread.</dd>
     </dl>
@@ -30,6 +32,8 @@
             <th>Mid Turns</th>
             <th>Avg Lands</th>
             <th>Avg Mulls</th>
+            <th>Avg Draws</th>
+            <th>Avg Spells</th>
             <th>25th</th>
             <th>50th</th>
             <th>75th</th>
@@ -47,6 +51,8 @@
             <td>{{ "%.2f"|format(r.mean_mid_turns) }}</td>
             <td>{{ "%.2f"|format(r.mean_lands) }}</td>
             <td>{{ "%.2f"|format(r.mean_mulls) }}</td>
+            <td>{{ "%.2f"|format(r.mean_draws|default(0)) }}</td>
+            <td>{{ "%.2f"|format(r.mean_spells_cast|default(0)) }}</td>
             <td>{{ "%.1f"|format(r.percentile_25) }}</td>
             <td>{{ "%.1f"|format(r.percentile_50) }}</td>
             <td>{{ "%.1f"|format(r.percentile_75) }}</td>
@@ -55,49 +61,6 @@
     </tbody>
 </table>
 </div>
-
-{% if results and results[0].distribution_stats %}
-<h2>Distribution Statistics</h2>
-<details class="metric-descriptions">
-    <summary>Distribution Definitions</summary>
-    <dl class="metric-list">
-        <dt>Distribution Stats</dt>
-        <dd>Fraction of games in calibrated performance buckets. Thresholds set from first 10% of simulations. Values above the nominal percentage indicate overperformance.</dd>
-    </dl>
-</details>
-<div class="table-wrap">
-<table class="stats-table">
-    <thead>
-        <tr>
-            <th>Lands</th>
-            <th>Top 1%</th>
-            <th>Top 10%</th>
-            <th>Top 25%</th>
-            <th>Top 50%</th>
-            <th>Low 50%</th>
-            <th>Low 25%</th>
-            <th>Low 10%</th>
-            <th>Low 1%</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for r in results %}
-        <tr>
-            <td>{{ r.land_count }}</td>
-            <td>{{ "%.1f"|format(r.distribution_stats.get('top_centile', 0) * 100) }}%</td>
-            <td>{{ "%.1f"|format(r.distribution_stats.get('top_decile', 0) * 100) }}%</td>
-            <td>{{ "%.1f"|format(r.distribution_stats.get('top_quartile', 0) * 100) }}%</td>
-            <td>{{ "%.1f"|format(r.distribution_stats.get('top_half', 0) * 100) }}%</td>
-            <td>{{ "%.1f"|format(r.distribution_stats.get('low_half', 0) * 100) }}%</td>
-            <td>{{ "%.1f"|format(r.distribution_stats.get('low_quartile', 0) * 100) }}%</td>
-            <td>{{ "%.1f"|format(r.distribution_stats.get('low_decile', 0) * 100) }}%</td>
-            <td>{{ "%.1f"|format(r.distribution_stats.get('low_centile', 0) * 100) }}%</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-</div>
-{% endif %}
 
 {% if results[0].card_performance and results[0].card_performance.high_performing %}
 <h2>Card Performance</h2>
@@ -175,9 +138,6 @@
 <div class="charts-grid">
     <div class="chart-container">
         <canvas id="manaChart"></canvas>
-    </div>
-    <div class="chart-container">
-        <canvas id="distributionChart"></canvas>
     </div>
     <div class="chart-container">
         <canvas id="consistencyChart"></canvas>
@@ -270,7 +230,7 @@
             const labels = data.map(d => d.land_count);
 
             // Destroy existing charts before creating new ones (handles re-runs)
-            ['manaChart', 'distributionChart', 'consistencyChart'].forEach(id => {
+            ['manaChart', 'consistencyChart'].forEach(id => {
                 const existing = Chart.getChart(id);
                 if (existing) existing.destroy();
             });
@@ -325,36 +285,6 @@
                     }
                 }
             });
-
-            // Distribution stats bar chart
-            if (data[0].distribution_stats) {
-                const distKeys = ['top_centile', 'top_decile', 'top_quartile', 'top_half',
-                                  'low_half', 'low_quartile', 'low_decile', 'low_centile'];
-                const distLabels = ['Top 1%', 'Top 10%', 'Top 25%', 'Top 50%',
-                                    'Low 50%', 'Low 25%', 'Low 10%', 'Low 1%'];
-                const colors = ['#16a34a', '#22c55e', '#4ade80', '#86efac',
-                                '#fca5a5', '#f87171', '#ef4444', '#dc2626'];
-
-                new Chart(document.getElementById('distributionChart'), {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: distKeys.map((key, i) => ({
-                            label: distLabels[i],
-                            data: data.map(d => (d.distribution_stats[key] || 0) * 100),
-                            backgroundColor: colors[i],
-                        }))
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { title: { display: true, text: 'Distribution Stats (%)' } },
-                        scales: {
-                            x: { title: { display: true, text: 'Land Count' } },
-                            y: { title: { display: true, text: 'Percentage' } }
-                        }
-                    }
-                });
-            }
 
             // Consistency line chart
             new Chart(document.getElementById('consistencyChart'), {

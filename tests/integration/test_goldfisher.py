@@ -85,7 +85,7 @@ def test_as_row():
     assert row[0] == 37
     assert "15.50" in row[1]  # formatted with CI margin
     assert "0.9000" in row[2]  # consistency with CI margin
-    assert len(row) == 13
+    assert len(row) == 14
 
 
 def test_set_lands():

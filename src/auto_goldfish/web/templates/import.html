@@ -1,57 +1,155 @@
 {% extends "base.html" %}
 {% block title %}Import Deck{% endblock %}
 {% block content %}
-<h1>Import from Archidekt</h1>
+<h1>Import Deck</h1>
 <div id="import-flash" style="display:none;" class="flash"></div>
+
+<div class="import-tabs">
+    <button class="tab-btn active" data-source="archidekt">Archidekt</button>
+    {% if moxfield_available %}
+    <button class="tab-btn" data-source="moxfield">Moxfield</button>
+    {% endif %}
+    <button class="tab-btn" data-source="text">Paste Decklist</button>
+</div>
+
 <form id="import-form">
-    <div class="form-group">
-        <label for="deck_url">Archidekt Deck URL</label>
+    <input type="hidden" id="import-source" value="archidekt">
+
+    <div id="url-group" class="form-group">
+        <label for="deck_url" id="url-label">Archidekt Deck URL</label>
         <input type="text" id="deck_url" name="deck_url"
                placeholder="https://archidekt.com/decks/81320/the_rr_connection">
     </div>
+
+    <div id="text-group" class="form-group" style="display:none;">
+        <label for="decklist_text">Decklist</label>
+        <textarea id="decklist_text" name="decklist_text" rows="15"
+                  placeholder="// Commander
+1 Vren, the Relentless
+
+// Ramp
+1 Sol Ring
+1x Arcane Signet
+
+// Lands
+36 Island"></textarea>
+    </div>
+
     <div class="form-group">
         <label for="deck_name">Deck Name</label>
         <input type="text" id="deck_name" name="deck_name"
-               placeholder="the_rr_connection">
+               placeholder="my_deck">
     </div>
     <button type="submit" class="btn btn-primary" id="import-btn">Import</button>
 </form>
+
+<style>
+.import-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #444;
+}
+.tab-btn {
+    padding: 0.5rem 1.2rem;
+    border: none;
+    background: transparent;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 1rem;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+}
+.tab-btn:hover { color: #ddd; }
+.tab-btn.active {
+    color: #fff;
+    border-bottom-color: #58a6ff;
+}
+#decklist_text {
+    width: 100%;
+    font-family: monospace;
+    font-size: 0.9rem;
+    resize: vertical;
+}
+</style>
+
 <script>
-document.getElementById('import-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    var flashEl = document.getElementById('import-flash');
-    var btn = document.getElementById('import-btn');
-    btn.disabled = true;
-    btn.textContent = 'Importing...';
-    flashEl.style.display = 'none';
+(function() {
+    var tabs = document.querySelectorAll('.tab-btn');
+    var urlGroup = document.getElementById('url-group');
+    var textGroup = document.getElementById('text-group');
+    var urlLabel = document.getElementById('url-label');
+    var urlInput = document.getElementById('deck_url');
+    var sourceInput = document.getElementById('import-source');
 
-    var deckUrl = document.getElementById('deck_url').value.trim();
-    var deckName = document.getElementById('deck_name').value.trim();
+    var placeholders = {
+        archidekt: {label: 'Archidekt Deck URL', placeholder: 'https://archidekt.com/decks/81320/the_rr_connection'},
+        moxfield: {label: 'Moxfield Deck URL', placeholder: 'https://www.moxfield.com/decks/AbCdEf123'}
+    };
 
-    try {
-        var resp = await fetch('{{ url_for("decks.import_deck_api") }}', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({deck_url: deckUrl, deck_name: deckName})
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            tabs.forEach(function(t) { t.classList.remove('active'); });
+            tab.classList.add('active');
+            var source = tab.getAttribute('data-source');
+            sourceInput.value = source;
+
+            if (source === 'text') {
+                urlGroup.style.display = 'none';
+                textGroup.style.display = 'block';
+            } else {
+                urlGroup.style.display = 'block';
+                textGroup.style.display = 'none';
+                urlLabel.textContent = placeholders[source].label;
+                urlInput.placeholder = placeholders[source].placeholder;
+            }
         });
-        var data = await resp.json();
-        if (!data.ok) {
+    });
+
+    document.getElementById('import-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var flashEl = document.getElementById('import-flash');
+        var btn = document.getElementById('import-btn');
+        btn.disabled = true;
+        btn.textContent = 'Importing...';
+        flashEl.style.display = 'none';
+
+        var source = sourceInput.value;
+        var deckName = document.getElementById('deck_name').value.trim();
+        var payload = {source: source, deck_name: deckName};
+
+        if (source === 'text') {
+            payload.decklist_text = document.getElementById('decklist_text').value;
+        } else {
+            payload.deck_url = urlInput.value.trim();
+        }
+
+        try {
+            var resp = await fetch('{{ url_for("decks.import_deck_api") }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            var data = await resp.json();
+            if (!data.ok) {
+                flashEl.className = 'flash flash-error';
+                flashEl.textContent = 'Import failed: ' + (data.error || 'Unknown error');
+                flashEl.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = 'Import';
+                return;
+            }
+            var deckUrl = (source === 'text') ? '' : (payload.deck_url || '');
+            DeckStore.saveDeck(data.deck_name, data.cards, {}, deckUrl);
+            navigateToSim(data.deck_name);
+        } catch (err) {
             flashEl.className = 'flash flash-error';
-            flashEl.textContent = 'Import failed: ' + (data.error || 'Unknown error');
+            flashEl.textContent = 'Import failed: ' + err.message;
             flashEl.style.display = 'block';
             btn.disabled = false;
             btn.textContent = 'Import';
-            return;
         }
-        DeckStore.saveDeck(data.deck_name, data.cards, {});
-        navigateToSim(data.deck_name);
-    } catch (err) {
-        flashEl.className = 'flash flash-error';
-        flashEl.textContent = 'Import failed: ' + err.message;
-        flashEl.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Import';
-    }
-});
+    });
+})();
 </script>
 {% endblock %}

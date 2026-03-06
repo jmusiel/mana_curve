@@ -7,15 +7,22 @@ import os
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 
-from auto_goldfish.decklist.archidekt import fetch_and_save, fetch_decklist
+from auto_goldfish.decklist.archidekt import fetch_and_save, fetch_decklist as fetch_archidekt
+from auto_goldfish.decklist.card_resolver import resolve_cards
 from auto_goldfish.decklist.loader import get_deckpath, load_decklist
+from auto_goldfish.decklist.moxfield import (
+    MoxfieldConfigError,
+    fetch_decklist as fetch_moxfield,
+    is_configured as moxfield_is_configured,
+)
+from auto_goldfish.decklist.text_import import parse_decklist
 
 bp = Blueprint("decks", __name__, url_prefix="/decks")
 
 
 @bp.route("/import")
 def import_form():
-    return render_template("import.html")
+    return render_template("import.html", moxfield_available=moxfield_is_configured())
 
 
 @bp.route("/import", methods=["POST"])
@@ -33,7 +40,7 @@ def import_deck():
         fetch_and_save(deck_url, deck_name)
     except Exception as e:
         flash(f"Import failed: {e}", "error")
-        return render_template("import.html"), 400
+        return render_template("import.html", moxfield_available=moxfield_is_configured()), 400
 
     flash(f"Deck '{deck_name}' imported successfully.", "success")
     return redirect(url_for("decks.view_deck", name=deck_name))
@@ -41,21 +48,44 @@ def import_deck():
 
 @bp.route("/import/api", methods=["POST"])
 def import_deck_api():
-    """Fetch deck from Archidekt and return JSON (no server-side save)."""
+    """Import a deck from Archidekt, Moxfield, or pasted text. Returns JSON."""
     try:
         body = request.get_json(force=True)
     except Exception:
         return jsonify({"ok": False, "error": "Invalid JSON"}), 400
 
-    default_url = "https://archidekt.com/decks/81320/the_rr_connection"
-    deck_url = (body.get("deck_url") or "").strip() or default_url
+    source = (body.get("source") or "archidekt").strip().lower()
     deck_name = (body.get("deck_name") or "").strip()
 
-    if not deck_name:
-        deck_name = deck_url.rstrip("/").rsplit("/", 1)[-1]
-
     try:
-        cards = fetch_decklist(deck_url)
+        if source == "text":
+            decklist_text = (body.get("decklist_text") or "").strip()
+            if not decklist_text:
+                return jsonify({"ok": False, "error": "No decklist text provided"}), 400
+            if not deck_name:
+                return jsonify({"ok": False, "error": "Deck name is required for text import"}), 400
+            entries = parse_decklist(decklist_text)
+            if not entries:
+                return jsonify({"ok": False, "error": "No cards found in decklist text"}), 400
+            cards = resolve_cards(entries)
+
+        elif source == "moxfield":
+            deck_url = (body.get("deck_url") or "").strip()
+            if not deck_url:
+                return jsonify({"ok": False, "error": "Moxfield URL is required"}), 400
+            if not deck_name:
+                deck_name = deck_url.rstrip("/").rsplit("/", 1)[-1]
+            cards = fetch_moxfield(deck_url)
+
+        else:  # archidekt (default)
+            default_url = "https://archidekt.com/decks/81320/the_rr_connection"
+            deck_url = (body.get("deck_url") or "").strip() or default_url
+            if not deck_name:
+                deck_name = deck_url.rstrip("/").rsplit("/", 1)[-1]
+            cards = fetch_archidekt(deck_url)
+
+    except MoxfieldConfigError as e:
+        return jsonify({"ok": False, "error": str(e)}), 501
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 400
 

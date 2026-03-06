@@ -1,6 +1,8 @@
 # auto_goldfish
 
-A Magic: The Gathering commander deck simulation tool. Runs "goldfishing" simulations (playing games without an opponent) to evaluate deck performance, mana curves, and consistency metrics across thousands of games.
+A Hyperband-scheduled Monte Carlo global optimizer for goldfishing commander games.
+
+Runs "goldfishing" simulations (playing games without an opponent) to evaluate deck performance, mana curves, and consistency metrics across thousands of games.
 
 ## Features
 
