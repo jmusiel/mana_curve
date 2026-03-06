@@ -256,6 +256,7 @@ The registry groups cards with identical categories together:
 - An empty `{}` for a card means it inherits all defaults from its group.
 - Per-card `categories` completely replace the group default categories.
 - Per-card metadata fields (like `priority`) override the group defaults for that field only.
+- Cards with empty `categories` (no simulatable effect) are filtered out during export.
 
 ---
 

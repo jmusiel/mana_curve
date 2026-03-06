@@ -8,7 +8,7 @@ Runs "goldfishing" simulations (playing games without an opponent) to evaluate d
 
 - **Goldfishing engine** -- simulates drawing, mulligans, land drops, and spell casting over N turns
 - **Parallel simulation** -- uses multiple CPU cores via `ProcessPoolExecutor` for fast results (configurable `workers` parameter, defaults to all CPUs)
-- **Data-driven card effects** -- 118 cards with special abilities (ramp, draw, cost reduction, tutors) defined as composable effects. Adding a new card is a single `register()` call in `effects/card_database.py`
+- **Data-driven card effects** -- ~4,750 cards with special abilities (ramp, draw, cost reduction) defined as composable effects in `card_effects.json`. 109 hand-curated + ~4,640 auto-labeled via LLM (Gemini/Ollama/Claude)
 - **Archidekt integration** -- pull decklists directly from Archidekt URLs via the API
 - **Land count sweeping** -- test a range of land counts and compare EV, consistency, bad turns, and percentile distributions
 - **Card performance analysis** -- identifies which cards are overrepresented in high- vs low-performing games
@@ -108,6 +108,7 @@ src/auto_goldfish/
 ├── engine/          # Goldfisher simulation, mana calculation, mulligan strategy
 ├── metrics/         # MetricsCollector, built-in metrics, aggregation, reporting
 ├── decklist/        # JSON loader, Archidekt API, deck builder
+├── autocard/        # LLM-powered card effect labeling pipeline (Gemini/Ollama/Claude)
 ├── db/              # Optional Neon Postgres persistence (SQLAlchemy 2.0)
 ├── web/             # Flask web UI (routes, templates, simulation runner)
 │   └── static/js/   # Client-side JS (Pyodide worker, results renderer)
