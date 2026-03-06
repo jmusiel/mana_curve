@@ -21,6 +21,13 @@ a:hover { text-decoration: underline; }
     color: #fff;
     font-size: 1.25rem;
     font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.nav-logo {
+    height: 1.75rem;
+    width: 1.75rem;
 }
 .nav-brand:hover { text-decoration: none; color: #93c5fd; }
 .nav-links { display: flex; gap: 1.5rem; }
