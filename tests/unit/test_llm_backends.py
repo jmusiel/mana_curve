@@ -46,6 +46,7 @@ class TestGeminiBackend:
             GeminiBackend()
 
     def test_chat_calls_api(self, monkeypatch):
+        genai = pytest.importorskip("google.genai")
         monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
 
         mock_client = MagicMock()
@@ -53,7 +54,6 @@ class TestGeminiBackend:
         mock_response.text = '{"categories": [], "metadata": {}}'
         mock_client.models.generate_content.return_value = mock_response
 
-        from google import genai
         monkeypatch.setattr(genai, "Client", lambda **kw: mock_client)
 
         backend = GeminiBackend(model="gemini-2.0-flash")
@@ -73,6 +73,7 @@ class TestGeminiBackend:
         assert config.temperature == 0
 
     def test_chat_without_schema(self, monkeypatch):
+        genai = pytest.importorskip("google.genai")
         monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
 
         mock_client = MagicMock()
@@ -80,7 +81,6 @@ class TestGeminiBackend:
         mock_response.text = '{"categories": []}'
         mock_client.models.generate_content.return_value = mock_response
 
-        from google import genai
         monkeypatch.setattr(genai, "Client", lambda **kw: mock_client)
 
         backend = GeminiBackend(model="gemini-2.0-flash")
@@ -92,11 +92,11 @@ class TestGeminiBackend:
         assert config.response_mime_type is None
 
     def test_rate_limit_retry(self, monkeypatch):
+        genai = pytest.importorskip("google.genai")
+        from google.genai import errors as genai_errors
         monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
 
         mock_client = MagicMock()
-        from google import genai
-        from google.genai import errors as genai_errors
         monkeypatch.setattr(genai, "Client", lambda **kw: mock_client)
 
         # First call raises 429, second succeeds
@@ -112,11 +112,11 @@ class TestGeminiBackend:
         assert mock_client.models.generate_content.call_count == 2
 
     def test_429_without_rate_limit_raises(self, monkeypatch):
+        genai = pytest.importorskip("google.genai")
+        from google.genai import errors as genai_errors
         monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
 
         mock_client = MagicMock()
-        from google import genai
-        from google.genai import errors as genai_errors
         monkeypatch.setattr(genai, "Client", lambda **kw: mock_client)
 
         rate_error = genai_errors.ClientError(429, {"error": {"message": "429 RESOURCE_EXHAUSTED"}})
@@ -127,15 +127,15 @@ class TestGeminiBackend:
             backend.chat(system="sys", user="usr")
 
     def test_repr(self, monkeypatch):
+        genai = pytest.importorskip("google.genai")
         monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
-        from google import genai
         monkeypatch.setattr(genai, "Client", lambda **kw: MagicMock())
         backend = GeminiBackend(model="gemini-2.0-flash")
         assert "gemini-2.0-flash" in repr(backend)
 
     def test_repr_rate_limit(self, monkeypatch):
+        genai = pytest.importorskip("google.genai")
         monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
-        from google import genai
         monkeypatch.setattr(genai, "Client", lambda **kw: MagicMock())
         backend = GeminiBackend(model="gemini-2.0-flash", rate_limit=True)
         assert "rate_limit=True" in repr(backend)
@@ -152,16 +152,16 @@ class TestCreateBackend:
         assert backend.model == "llama4:16x17b"
 
     def test_create_gemini(self, monkeypatch):
+        genai = pytest.importorskip("google.genai")
         monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
-        from google import genai
         monkeypatch.setattr(genai, "Client", lambda **kw: MagicMock())
         backend = create_backend("gemini")
         assert isinstance(backend, GeminiBackend)
         assert backend.model == "gemini-2.0-flash"
 
     def test_create_gemini_custom_model(self, monkeypatch):
+        genai = pytest.importorskip("google.genai")
         monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
-        from google import genai
         monkeypatch.setattr(genai, "Client", lambda **kw: MagicMock())
         backend = create_backend("gemini", model="gemini-1.5-pro")
         assert backend.model == "gemini-1.5-pro"
