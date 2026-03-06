@@ -150,9 +150,9 @@ class TestExportToRegistry:
         # Cards with effects are loadable
         assert registry.has("Test Card A")
         assert registry.has("Test Card B")
-        # No-effect card is also registered (with empty effect lists)
-        assert registry.has("Test Card C")
-        assert len(registry) == 3
+        # Empty-category cards are filtered out during export
+        assert not registry.has("Test Card C")
+        assert len(registry) == 2
 
     def test_export_no_existing(self):
         """Export without an existing registry just writes new groups."""

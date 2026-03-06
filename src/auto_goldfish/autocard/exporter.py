@@ -99,11 +99,11 @@ def export_to_registry(
         for group in existing_groups:
             existing_names.update(group.get("cards", {}).keys())
 
-    # Filter out cards already in the existing registry
+    # Filter out cards already in the existing registry and cards with no categories
     new_labeled = {
         name: label
         for name, label in labeled.items()
-        if name not in existing_names
+        if name not in existing_names and label.get("categories")
     }
 
     # Group new cards

@@ -300,10 +300,9 @@ def test_scaling_mana_approximated_as_producer(registry):
 
 
 def test_card_count(registry):
-    """Registry should contain the expected number of cards after migration."""
-    # Lost: 4 Cryptolith, 2 EnchantmentSanctum, 2 GreenTutors, 1 Urza's Cave = 9 removed
-    # Original was 118, now 118 - 9 = 109
-    assert len(registry) == 109
+    """Registry should contain hand-curated + auto-labeled cards."""
+    # 109 hand-curated + ~4639 auto-labeled with effects
+    assert len(registry) > 4000
 
 
 # ---------------------------------------------------------------------------

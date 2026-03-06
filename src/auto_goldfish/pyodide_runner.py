@@ -103,3 +103,119 @@ def run_simulation(
         results.append(result_to_dict(result))
 
     return json.dumps(results)
+
+
+def run_optimization(
+    deck_json: str,
+    config_json: str,
+    enum_callback: Optional[Callable[[int, int], None]] = None,
+    eval_callback: Optional[Callable[[int, int], None]] = None,
+) -> str:
+    """Run card optimization from JavaScript via Pyodide.
+
+    Args:
+        deck_json: JSON string of deck card list.
+        config_json: JSON string with optimization configuration:
+            - turns, sims, seed, record_results, effect_overrides, mulligan
+              (same as run_simulation; sims controls final evaluation count)
+            - optimize_for (str): "mean_mana" or "consistency"
+            - swap_mode (bool): Replace cards or add extra
+            - sims_per_enum (int): Max sims per candidate during Hyperband selection (default sims//2)
+            - enabled_candidates (list[str]): Candidate IDs that are enabled
+            - custom_draw (dict|null): {cmc, amount} for custom draw candidate
+            - custom_ramp (dict|null): {cmc, amount} for custom ramp candidate
+            - max_draw_additions (int): Max draw cards to add (0-2)
+            - max_ramp_additions (int): Max ramp cards to add (0-2)
+        enum_callback: Optional callable(current, total) for enumeration progress.
+        eval_callback: Optional callable(current, total) for evaluation progress.
+
+    Returns:
+        JSON string of list[{config_description, ...result_fields}].
+    """
+    from auto_goldfish.optimization.candidate_cards import (
+        ALL_CANDIDATES,
+        make_custom_candidate,
+    )
+    from auto_goldfish.optimization.optimizer import DeckOptimizer
+
+    deck_list: List[Dict[str, Any]] = json.loads(deck_json)
+    config: Dict[str, Any] = json.loads(config_json)
+
+    turns = config.get("turns", 10)
+    sims = config.get("sims", 500)
+    seed = config.get("seed")
+    record_results = config.get("record_results", "quartile")
+    effect_overrides = config.get("effect_overrides", {})
+    mulligan_type = config.get("mulligan", "default")
+
+    # Optimization config
+    optimize_for = config.get("optimize_for", "mean_mana")
+    swap_mode = config.get("swap_mode", False)
+    enabled_ids = set(config.get("enabled_candidates", []))
+    custom_draw = config.get("custom_draw")
+    custom_ramp = config.get("custom_ramp")
+    max_draw = config.get("max_draw_additions", 2)
+    max_ramp = config.get("max_ramp_additions", 2)
+
+    # Build registry
+    registry = None
+    if effect_overrides:
+        registry = build_overridden_registry(DEFAULT_REGISTRY, effect_overrides)
+
+    mulligan_strategy = None
+    if mulligan_type == "curve_aware":
+        mulligan_strategy = CurveAwareMulligan()
+
+    sims_per_eval = config.get("sims_per_enum", max(sims // 2, 100))
+
+    goldfisher = Goldfisher(
+        deck_list,
+        turns=turns,
+        sims=sims,
+        verbose=False,
+        record_results=record_results,
+        seed=seed,
+        workers=1,
+        mulligan_strategy=mulligan_strategy,
+        registry=registry,
+    )
+
+    # Build enabled candidates dict
+    candidates = {
+        cid: c for cid, c in ALL_CANDIDATES.items() if cid in enabled_ids
+    }
+
+    # Add custom candidates if provided
+    if custom_draw and custom_draw.get("cmc") is not None:
+        cc = make_custom_candidate("draw", custom_draw["cmc"], custom_draw["amount"])
+        candidates[cc.id] = cc
+    if custom_ramp and custom_ramp.get("cmc") is not None:
+        cc = make_custom_candidate("ramp", custom_ramp["cmc"], custom_ramp["amount"])
+        candidates[cc.id] = cc
+
+    optimizer = DeckOptimizer(
+        goldfisher=goldfisher,
+        candidates=candidates,
+        swap_mode=swap_mode,
+        max_draw=max_draw,
+        max_ramp=max_ramp,
+        optimize_for=optimize_for,
+        sims_per_eval=sims_per_eval,
+    )
+
+    ranked = optimizer.run(
+        final_sims=sims,
+        final_top_k=5,
+        enum_progress=enum_callback,
+        eval_progress=eval_callback,
+    )
+
+    # Annotate results with config descriptions
+    output: List[Dict[str, Any]] = []
+    for deck_config, result_dict in ranked:
+        result_dict["opt_config"] = deck_config.describe()
+        result_dict["opt_land_delta"] = deck_config.land_delta
+        result_dict["opt_added_cards"] = list(deck_config.added_cards)
+        output.append(result_dict)
+
+    return json.dumps(output)

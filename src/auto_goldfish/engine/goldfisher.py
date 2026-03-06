@@ -55,6 +55,7 @@ class SimulationResult:
     mean_lands: float = 0.0
     mean_mulls: float = 0.0
     mean_draws: float = 0.0
+    mean_spells_cast: float = 0.0
     percentile_25: float = 0.0
     percentile_50: float = 0.0
     percentile_75: float = 0.0
@@ -84,6 +85,7 @@ class SimulationResult:
             self.mean_lands,
             self.mean_mulls,
             self.mean_draws,
+            self.mean_spells_cast,
             self.percentile_25,
             self.percentile_50,
             self.percentile_75,
@@ -187,6 +189,7 @@ def _worker_run_batch(
     mulls = []
     lands_played = []
     cards_drawn = []
+    spells_cast = []
     bad_turns = []
     mid_turns = []
     card_cast_turns: list[list] = [[] for _ in gf.decklist]
@@ -208,6 +211,7 @@ def _worker_run_batch(
         game_lands = 0
         game_bad = 0
         game_mid = 0
+        game_spells_cast = 0
 
         # Decide whether to capture this game's replay
         _capture_this = (
@@ -235,6 +239,7 @@ def _worker_run_batch(
                     game_lands += 1
                 if card.spell:
                     spells_played += 1
+            game_spells_cast += spells_played
             if spells_played == 0 and state.deck:
                 game_bad += 1
             if spells_played < 2 and state.deck and turn_mana < i + 1:
@@ -266,6 +271,7 @@ def _worker_run_batch(
         lands_played.append(game_lands)
         mulls.append(mulligans)
         cards_drawn.append(state.draws)
+        spells_cast.append(game_spells_cast)
         bad_turns.append(game_bad)
         mid_turns.append(game_mid)
 
@@ -290,6 +296,7 @@ def _worker_run_batch(
         "mulls": mulls,
         "lands_played": lands_played,
         "cards_drawn": cards_drawn,
+        "spells_cast": spells_cast,
         "bad_turns": bad_turns,
         "mid_turns": mid_turns,
         "card_cast_turns": card_cast_turns,
@@ -370,6 +377,11 @@ class Goldfisher:
 
         self.land_count = sum(1 for c in self.decklist if c.land)
         self.original_card_count = len(self.decklist)
+
+        # Save original state for optimizer restore
+        self._original_decklist_dicts = list(non_commander_dicts)
+        self._original_registry = self.registry
+        self._original_land_count = self.land_count
 
         # Recording config
         self.record_quartile = False
@@ -732,6 +744,15 @@ class Goldfisher:
         )
         self.land_count = sum(1 for c in self.decklist if c.land)
 
+    def restore_original_decklist(self) -> None:
+        """Reset decklist to its original state (before any set_lands or optimizer modifications)."""
+        self.registry = self._original_registry
+        self.decklist = [
+            self._make_card(d, i) for i, d in enumerate(self._original_decklist_dicts)
+        ]
+        self.deckdict = {c.name: c for c in self.decklist}
+        self.land_count = self._original_land_count
+
     def _compute_distribution_stats(self, mana_spent_list: list) -> Dict[str, float]:
         """Compute distribution bucket fractions from raw mana data.
 
@@ -897,7 +918,7 @@ class Goldfisher:
         # Merge results from all workers
         merged = {
             "mana_spent": [], "mulls": [], "lands_played": [],
-            "cards_drawn": [], "bad_turns": [], "mid_turns": [],
+            "cards_drawn": [], "spells_cast": [], "bad_turns": [], "mid_turns": [],
             "played_cards_per_game": [],
         }
         card_cast_turns: list[list] = [[] for _ in self.decklist]
@@ -906,7 +927,7 @@ class Goldfisher:
         for future in futures:
             batch = future.result()
             for key in ["mana_spent", "mulls", "lands_played",
-                        "cards_drawn", "bad_turns", "mid_turns"]:
+                        "cards_drawn", "spells_cast", "bad_turns", "mid_turns"]:
                 merged[key].extend(batch[key])
             for k, turns_list in enumerate(batch["card_cast_turns"]):
                 card_cast_turns[k].extend(turns_list)
@@ -941,6 +962,7 @@ class Goldfisher:
         lands_played_list = raw["lands_played"]
         mulls_list = raw["mulls"]
         cards_drawn_list = raw["cards_drawn"]
+        spells_cast_list = raw["spells_cast"]
         bad_turns_list = raw["bad_turns"]
         mid_turns_list = raw["mid_turns"]
 
@@ -948,6 +970,7 @@ class Goldfisher:
         mean_lands = float(np.mean(lands_played_list))
         mean_mulls = float(np.mean(mulls_list))
         mean_draws = float(np.mean(cards_drawn_list))
+        mean_spells_cast = float(np.mean(spells_cast_list))
         mean_bad_turns = float(np.mean(bad_turns_list))
         mean_mid_turns = float(np.mean(mid_turns_list))
         percentile_25 = float(np.percentile(mana_spent_list, 25))
@@ -1007,6 +1030,7 @@ class Goldfisher:
             mean_lands=mean_lands,
             mean_mulls=mean_mulls,
             mean_draws=mean_draws,
+            mean_spells_cast=mean_spells_cast,
             percentile_25=percentile_25,
             percentile_50=percentile_50,
             percentile_75=percentile_75,
@@ -1046,6 +1070,7 @@ class Goldfisher:
         mulls_list = []
         lands_played_list = []
         cards_drawn_list = []
+        spells_cast_list = []
         bad_turns_list = []
         mid_turns_list = []
         card_cast_turn_list: list[list] = [[] for _ in self.decklist]
@@ -1068,6 +1093,7 @@ class Goldfisher:
             lands_played = 0
             bad_turns = 0
             mid_turns = 0
+            total_spells_cast = 0
             all_cards_played: list[Card] = []
 
             # Replay capture: only when thresholds are available and buckets not full
@@ -1098,6 +1124,7 @@ class Goldfisher:
                     if card.spell:
                         spells_played += 1
 
+                total_spells_cast += spells_played
                 if spells_played == 0 and state.deck:
                     bad_turns += 1
                 if spells_played < 2 and state.deck and mana_spent < i + 1:
@@ -1129,6 +1156,7 @@ class Goldfisher:
             lands_played_list.append(lands_played)
             mulls_list.append(mulligans)
             cards_drawn_list.append(state.draws)
+            spells_cast_list.append(total_spells_cast)
             bad_turns_list.append(bad_turns)
             mid_turns_list.append(mid_turns)
 
@@ -1240,6 +1268,7 @@ class Goldfisher:
         mean_lands = float(np.mean(lands_played_list))
         mean_mulls = float(np.mean(mulls_list))
         mean_draws = float(np.mean(cards_drawn_list))
+        mean_spells_cast = float(np.mean(spells_cast_list))
         mean_bad_turns = float(np.mean(bad_turns_list))
         mean_mid_turns = float(np.mean(mid_turns_list))
         percentile_25 = float(np.percentile(mana_spent_list, 25))
@@ -1295,6 +1324,7 @@ class Goldfisher:
             mean_lands=mean_lands,
             mean_mulls=mean_mulls,
             mean_draws=mean_draws,
+            mean_spells_cast=mean_spells_cast,
             percentile_25=percentile_25,
             percentile_50=percentile_50,
             percentile_75=percentile_75,

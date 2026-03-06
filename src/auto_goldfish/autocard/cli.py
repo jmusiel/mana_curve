@@ -43,7 +43,16 @@ def cmd_label(args: argparse.Namespace) -> None:
     """Run LLM labeling on unlabeled cards."""
     from .coverage import analyze_coverage
     from .labeler import label_cards
+    from .llm_backends import create_backend
     from .scryfall import load_cards
+
+    # Load .env for API keys (GEMINI_API_KEY, etc.)
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        pass
 
     cards_path = Path(args.cards) if args.cards else None
     cards = load_cards(cards_path)
@@ -59,15 +68,16 @@ def cmd_label(args: argparse.Namespace) -> None:
         print("All cards are already labeled!", flush=True)
         return
 
+    backend = create_backend(args.api, model=args.model, rate_limit=args.rate_limit)
     print(
-        f"Labeling {len(unlabeled)} cards with model {args.model}"
+        f"Labeling {len(unlabeled)} cards with {backend}"
         f" (concurrency={args.concurrency}, batch_size={args.batch_size})...",
         flush=True,
     )
     output_path = Path(args.output) if args.output else None
     results = label_cards(
         unlabeled,
-        model=args.model,
+        backend=backend,
         output_path=output_path,
         resume=args.resume,
         concurrency=args.concurrency,
@@ -204,8 +214,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Max number of cards to label",
     )
     label_parser.add_argument(
-        "--model", type=str, default="llama4:16x17b",
-        help="Ollama model name (default: llama4:16x17b)",
+        "--api", type=str, default="ollama", choices=["ollama", "gemini"],
+        help="LLM backend: 'ollama' (local) or 'gemini' (Google API, requires GEMINI_API_KEY in .env)",
+    )
+    label_parser.add_argument(
+        "--model", type=str, default=None,
+        help="Model name (default: llama4:16x17b for ollama, gemini-2.0-flash for gemini)",
     )
     label_parser.add_argument(
         "--resume", action="store_true", default=True,
@@ -226,6 +240,10 @@ def build_parser() -> argparse.ArgumentParser:
     label_parser.add_argument(
         "--batch-size", type=int, default=1,
         help="Cards per LLM call (default: 1, max ~5 due to schema size limits)",
+    )
+    label_parser.add_argument(
+        "--rate-limit", action="store_true", default=False,
+        help="Auto-retry on 429 rate-limit errors (for Gemini free tier)",
     )
     label_parser.set_defaults(func=cmd_label)
 

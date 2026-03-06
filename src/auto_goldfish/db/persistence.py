@@ -152,6 +152,7 @@ def save_simulation_run(
             mean_bad_turns=r.get("mean_bad_turns", 0.0),
             mean_lands=r.get("mean_lands", 0.0),
             mean_mulls=r.get("mean_mulls", 0.0),
+            mean_spells_cast=r.get("mean_spells_cast", 0.0),
             ci_mean_mana_low=ci_mana[0] if len(ci_mana) > 0 else 0.0,
             ci_mean_mana_high=ci_mana[1] if len(ci_mana) > 1 else 0.0,
             consistency=r.get("consistency", 0.0),

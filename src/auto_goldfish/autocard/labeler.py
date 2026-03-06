@@ -1,4 +1,4 @@
-"""LLM-based card labeling using Ollama."""
+"""LLM-based card labeling using Ollama or Gemini API."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Any
 
 from auto_goldfish.effects.json_loader import METADATA_FIELDS, VALID_CATEGORIES
 
+from .llm_backends import LLMBackend, OllamaBackend, create_backend
 from .schemas import ScryfallCard
 from .validator import validate_label
 
@@ -279,33 +280,28 @@ def build_batch_prompt(cards: list[ScryfallCard]) -> str:
 
 def label_card_batch(
     cards: list[ScryfallCard],
+    backend: LLMBackend | None = None,
     model: str = "llama4:16x17b",
     max_retries: int = 3,
 ) -> dict[str, dict]:
-    """Label a batch of cards in a single Ollama call.
+    """Label a batch of cards in a single LLM call.
 
     Returns a dict mapping card name to label dict.
     Retries up to max_retries times on JSON parse failure.
     """
-    import ollama
+    if backend is None:
+        backend = OllamaBackend(model=model)
 
     card_names = [c.name for c in cards]
     schema = batch_json_schema(card_names)
 
-    messages = [
-        {"role": "system", "content": BATCH_SYSTEM_PROMPT},
-        {"role": "user", "content": build_batch_prompt(cards)},
-    ]
-
     for attempt in range(max_retries):
         try:
-            response = ollama.chat(
-                model=model,
-                messages=messages,
-                format=schema,
-                options={"temperature": 0},
+            content = backend.chat(
+                system=BATCH_SYSTEM_PROMPT,
+                user=build_batch_prompt(cards),
+                json_schema=schema,
             )
-            content = response["message"]["content"]
             parsed = json.loads(content)
             # Normalize each card's label
             parsed = {name: _normalize_label(lbl) for name, lbl in parsed.items()}
@@ -345,30 +341,25 @@ def _normalize_label(raw: dict) -> dict:
 
 def label_card(
     card: ScryfallCard,
+    backend: LLMBackend | None = None,
     model: str = "llama4:16x17b",
     max_retries: int = 3,
 ) -> dict:
-    """Label a single card using an Ollama LLM.
+    """Label a single card using an LLM backend.
 
     Returns the parsed label dict with 'categories' and 'metadata' keys.
     Retries up to max_retries times on JSON parse failure.
     """
-    import ollama
-
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": build_card_prompt(card)},
-    ]
+    if backend is None:
+        backend = OllamaBackend(model=model)
 
     for attempt in range(max_retries):
         try:
-            response = ollama.chat(
-                model=model,
-                messages=messages,
-                format=JSON_SCHEMA,
-                options={"temperature": 0},
+            content = backend.chat(
+                system=SYSTEM_PROMPT,
+                user=build_card_prompt(card),
+                json_schema=JSON_SCHEMA,
             )
-            content = response["message"]["content"]
             parsed = json.loads(content)
             return _normalize_label(parsed)
         except (json.JSONDecodeError, KeyError) as exc:
@@ -407,6 +398,7 @@ def save_labeled(labeled: dict[str, dict], path: Path | None = None) -> Path:
 
 def label_cards(
     cards: list[ScryfallCard],
+    backend: LLMBackend | None = None,
     model: str = "llama4:16x17b",
     output_path: Path | None = None,
     resume: bool = True,
@@ -417,10 +409,11 @@ def label_cards(
 
     Args:
         cards: List of cards to label.
-        model: Ollama model name.
+        backend: LLM backend to use. If None, creates an OllamaBackend with *model*.
+        model: Ollama model name (ignored when *backend* is provided).
         output_path: Path to save results (default: data/labeled_cards.json).
         resume: If True, skip cards already in the output file.
-        concurrency: Number of parallel Ollama requests.
+        concurrency: Number of parallel requests.
         batch_size: Number of cards per LLM call (>1 uses batch mode).
 
     Returns:
@@ -430,6 +423,9 @@ def label_cards(
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from tqdm import tqdm
+
+    if backend is None:
+        backend = OllamaBackend(model=model)
 
     if output_path is None:
         output_path = _DEFAULT_LABELED_PATH
@@ -451,7 +447,7 @@ def label_cards(
     def _label_and_validate(card: ScryfallCard) -> dict | None:
         """Label a single card, returning None if it fails validation."""
         try:
-            label = label_card(card, model=model)
+            label = label_card(card, backend=backend)
         except ValueError:
             logger.error("Failed to label %s, skipping", card.name)
             return None
@@ -476,7 +472,7 @@ def label_cards(
 
         # Multi-card batch
         try:
-            batch_labels = label_card_batch(batch, model=model)
+            batch_labels = label_card_batch(batch, backend=backend)
         except ValueError:
             # Batch failed — fall back to single-card for each
             logger.warning("Batch failed, falling back to single-card labeling")

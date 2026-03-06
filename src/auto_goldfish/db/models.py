@@ -91,6 +91,7 @@ class SimulationResultRow(Base):
     mean_bad_turns: Mapped[float] = mapped_column(Float, nullable=False)
     mean_lands: Mapped[float] = mapped_column(Float, nullable=False)
     mean_mulls: Mapped[float] = mapped_column(Float, nullable=False)
+    mean_spells_cast: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     ci_mean_mana_low: Mapped[float] = mapped_column(Float, nullable=False)
     ci_mean_mana_high: Mapped[float] = mapped_column(Float, nullable=False)
     consistency: Mapped[float] = mapped_column(Float, nullable=False)

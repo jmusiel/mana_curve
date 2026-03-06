@@ -34,16 +34,14 @@ def test_all_names_registered():
         assert DEFAULT_REGISTRY.has(name), f"{name} not in registry"
 
 
-def test_removed_cards_not_in_registry():
-    """Cards with deleted effects should not be in the registry."""
-    removed = [
+def test_auto_labeled_cards_in_registry():
+    """Cards auto-labeled by the LLM pipeline should be in the registry."""
+    auto_labeled = [
         "Gemhide Sliver", "Cryptolith Rite", "Manaweft Sliver",
-        "Serra's Sanctum", "Sanctum Weaver",
-        "Green Sun's Zenith", "Finale of Devastation",
-        "Urza's Cave",
+        "Sanctum Weaver",
     ]
-    for name in removed:
-        assert not DEFAULT_REGISTRY.has(name), f"{name} should not be in registry"
+    for name in auto_labeled:
+        assert DEFAULT_REGISTRY.has(name), f"{name} should be in registry via auto-labeling"
 
 
 def test_sol_ring_effects():

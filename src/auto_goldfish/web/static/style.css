@@ -51,6 +51,7 @@ a:hover { text-decoration: underline; }
 .btn-secondary { background: #e2e8f0; color: #334155; }
 .btn-secondary:hover { background: #cbd5e1; text-decoration: none; }
 
+
 /* Forms */
 .form-group { margin-bottom: 1rem; }
 .form-group label { display: block; font-weight: 500; margin-bottom: 0.25rem; }
@@ -740,4 +741,42 @@ h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
 .job-status.error p {
     color: #dc2626;
     font-weight: 500;
+}
+
+/* Leaderboard */
+.leaderboard-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+    margin-bottom: 1rem;
+}
+@media (max-width: 1200px) {
+    .leaderboard-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.leaderboard-col h3 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+.leaderboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+.leaderboard-table th,
+.leaderboard-table td {
+    padding: 0.35rem 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+.leaderboard-table th {
+    color: #64748b;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+.leaderboard-table td:first-child,
+.leaderboard-table th:first-child {
+    width: 2rem;
+    text-align: center;
 }
