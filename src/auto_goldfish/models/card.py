@@ -64,6 +64,7 @@ class Card:
     priority: int = field(init=False, default=0)
     land_priority: int = field(init=False, default=0)
     ramp: bool = field(init=False, default=False)
+    draw: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
         self.cost = self.cost.lower() if self.cost else ""

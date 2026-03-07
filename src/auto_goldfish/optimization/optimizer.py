@@ -290,10 +290,18 @@ class DeckOptimizer:
         """Extract the optimization target from a SimulationResult."""
         if self.optimize_for == "consistency":
             return result.consistency
+        if self.optimize_for == "mean_mana_value":
+            return result.mean_mana_value
+        if self.optimize_for == "mean_mana_total":
+            return result.mean_mana_total
         return result.mean_mana
 
     def _extract_score_from_dict(self, result_dict: dict) -> float:
         """Extract score from a result_to_dict output."""
         if self.optimize_for == "consistency":
             return result_dict.get("consistency", 0.0)
+        if self.optimize_for == "mean_mana_value":
+            return result_dict.get("mean_mana_value", 0.0)
+        if self.optimize_for == "mean_mana_total":
+            return result_dict.get("mean_mana_total", 0.0)
         return result_dict.get("mean_mana", 0.0)

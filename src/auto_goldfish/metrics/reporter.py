@@ -109,6 +109,11 @@ def result_to_dict(result: SimulationResult) -> Dict[str, Any]:
     return {
         "land_count": result.land_count,
         "mean_mana": result.mean_mana,
+        "mean_mana_value": result.mean_mana_value,
+        "mean_mana_draw": result.mean_mana_draw,
+        "mean_mana_ramp": result.mean_mana_ramp,
+        "mean_mana_total": result.mean_mana_total,
+        "mean_hand_sum": result.mean_hand_sum,
         "consistency": result.consistency,
         "mean_bad_turns": result.mean_bad_turns,
         "mean_mid_turns": result.mean_mid_turns,

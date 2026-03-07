@@ -13,6 +13,26 @@ def mean_mana_spent(records: List[GameRecord]) -> float:
     return float(np.mean([r.total_mana_spent for r in records]))
 
 
+def mean_mana_value(records: List[GameRecord]) -> float:
+    return float(np.mean([r.mana_value for r in records]))
+
+
+def mean_mana_draw(records: List[GameRecord]) -> float:
+    return float(np.mean([r.mana_draw for r in records]))
+
+
+def mean_mana_ramp(records: List[GameRecord]) -> float:
+    return float(np.mean([r.mana_ramp for r in records]))
+
+
+def mean_mana_total(records: List[GameRecord]) -> float:
+    return float(np.mean([r.mana_value + r.mana_draw + r.mana_ramp for r in records]))
+
+
+def mean_hand_sum(records: List[GameRecord]) -> float:
+    return float(np.mean([r.hand_sum for r in records]))
+
+
 def mean_lands_played(records: List[GameRecord]) -> float:
     return float(np.mean([r.lands_played for r in records]))
 

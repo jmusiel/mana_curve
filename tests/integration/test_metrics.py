@@ -78,6 +78,41 @@ class TestCoreMetrics:
     def test_mean_mana_positive(self, sequential_result):
         assert sequential_result.mean_mana > 0
 
+    def test_mean_mana_value_nonnegative(self, sequential_result):
+        assert sequential_result.mean_mana_value >= 0
+
+    def test_mean_mana_draw_nonnegative(self, sequential_result):
+        assert sequential_result.mean_mana_draw >= 0
+
+    def test_mean_mana_ramp_nonnegative(self, sequential_result):
+        assert sequential_result.mean_mana_ramp >= 0
+
+    def test_mean_mana_total_nonnegative(self, sequential_result):
+        assert sequential_result.mean_mana_total >= 0
+
+    def test_mean_hand_sum_positive(self, sequential_result):
+        assert sequential_result.mean_hand_sum > 0
+
+    def test_mean_mana_equals_value_plus_draw(self, sequential_result):
+        """mean_mana should equal mean_mana_value + mean_mana_draw (backward compat)."""
+        r = sequential_result
+        assert r.mean_mana == pytest.approx(r.mean_mana_value + r.mean_mana_draw, abs=0.01)
+
+    def test_mean_mana_total_equals_all_three(self, sequential_result):
+        """mean_mana_total should equal value + draw + ramp."""
+        r = sequential_result
+        assert r.mean_mana_total == pytest.approx(
+            r.mean_mana_value + r.mean_mana_draw + r.mean_mana_ramp, abs=0.01
+        )
+
+    def test_vanilla_deck_all_value_mana(self, sequential_result):
+        """A deck with only vanilla creatures should have all mana as value."""
+        r = sequential_result
+        # No ramp or draw cards in the test deck
+        assert r.mean_mana_draw == 0
+        assert r.mean_mana_ramp == 0
+        assert r.mean_mana == pytest.approx(r.mean_mana_value, abs=0.01)
+
     def test_mean_lands_positive(self, sequential_result):
         assert sequential_result.mean_lands > 0
 
@@ -254,6 +289,21 @@ class TestParallelParity:
 
     def test_mean_draws_matches(self, sequential_result, parallel_result):
         assert sequential_result.mean_draws == parallel_result.mean_draws
+
+    def test_mean_mana_value_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_mana_value == parallel_result.mean_mana_value
+
+    def test_mean_mana_draw_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_mana_draw == parallel_result.mean_mana_draw
+
+    def test_mean_mana_ramp_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_mana_ramp == parallel_result.mean_mana_ramp
+
+    def test_mean_mana_total_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_mana_total == parallel_result.mean_mana_total
+
+    def test_mean_hand_sum_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_hand_sum == parallel_result.mean_hand_sum
 
     def test_mean_bad_turns_matches(self, sequential_result, parallel_result):
         assert sequential_result.mean_bad_turns == parallel_result.mean_bad_turns

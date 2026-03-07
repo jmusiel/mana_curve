@@ -156,6 +156,7 @@ class TestTranslateCategory:
         assert slot == "on_play"
         assert isinstance(eff, builtin.DrawCards)
         assert eff.amount == 3
+        assert meta["draw"] is True
 
     def test_draw_per_turn(self):
         effects, meta = _translate_category({
@@ -166,6 +167,7 @@ class TestTranslateCategory:
         assert slot == "per_turn"
         assert isinstance(eff, builtin.PerTurnDraw)
         assert eff.amount == 1
+        assert meta["draw"] is True
 
     def test_draw_per_cast(self):
         effects, meta = _translate_category({
@@ -177,6 +179,7 @@ class TestTranslateCategory:
         assert isinstance(eff, builtin.PerCastDraw)
         assert eff.amount == 1
         assert eff.trigger == "creature"
+        assert meta["draw"] is True
 
     def test_discard(self):
         effects, meta = _translate_category({

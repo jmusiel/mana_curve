@@ -11,6 +11,10 @@ class GameRecord:
     """Data recorded for a single simulated game."""
 
     total_mana_spent: int = 0
+    mana_value: int = 0
+    mana_draw: int = 0
+    mana_ramp: int = 0
+    hand_sum: int = 0
     lands_played: int = 0
     mulligans: int = 0
     draws: int = 0

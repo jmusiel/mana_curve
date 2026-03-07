@@ -38,7 +38,7 @@ Card effects live in `card_effects.json`. The file uses a grouped structure with
 
 **Metadata defaults** (`priority`, etc.) merge with per-card metadata -- per-card values win.
 
-**Derived metadata**: `ramp` and `tapped` are automatically derived from categories (any ramp category sets `ramp=true`; tapped tempo or tapped land sets `tapped=true`). Explicit metadata overrides derived values.
+**Derived metadata**: `ramp`, `draw`, and `tapped` are automatically derived from categories (any ramp category sets `ramp=true`; any draw category sets `draw=true`; tapped tempo or tapped land sets `tapped=true`). Explicit metadata overrides derived values.
 
 ## Categories
 
@@ -123,6 +123,7 @@ There are 4 categories. Each card gets a list of categories (can have multiple).
 |---|---|---|---|
 | `priority` | int | 0 | Play order priority (higher = played later within a turn) |
 | `ramp` | bool | false | *Derived* from ramp categories; can be explicitly overridden |
+| `draw` | bool | false | *Derived* from draw categories; can be explicitly overridden |
 | `tapped` | bool | false | *Derived* from tapped tempo/land categories; can be explicitly overridden |
 | `extra_types` | list[str] | null | Additional types for simulation (e.g. `["sorcery"]`, `["land"]`) |
 | `override_cmc` | int | null | Override the card's CMC for simulation |

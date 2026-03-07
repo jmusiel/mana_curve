@@ -5,8 +5,14 @@
 <details class="metric-descriptions">
     <summary>Metric Definitions</summary>
     <dl class="metric-list">
-        <dt>Mana (EV)</dt>
-        <dd>Total mana spent on non-ramp spells over all turns. Ramp cards excluded because they pay for themselves. Higher = more resources deployed.</dd>
+        <dt>Mana V+D</dt>
+        <dd>Total mana spent on value (no-effect) and draw spells. Ramp excluded because it pays for itself. Higher = more resources deployed.</dd>
+        <dt>Value / Draw / Ramp</dt>
+        <dd>Mana breakdown by card type. Draw > ramp priority (cards with both count as draw).</dd>
+        <dt>Total</dt>
+        <dd>Total mana spent on all spells (value + draw + ramp).</dd>
+        <dt>Hand Sum</dt>
+        <dd>Sum of min(hand_size, 7) per turn. Measures card availability across the game.</dd>
         <dt>Consistency</dt>
         <dd>How reliably the deck avoids low-mana games (0&ndash;1.2 scale). 1.0 = perfectly consistent. Computed from cumulative mana distribution.</dd>
         <dt>Bad Turns</dt>
@@ -18,7 +24,7 @@
         <dt>Avg Draws / Avg Spells</dt>
         <dd>Average cards drawn and spells cast per game.</dd>
         <dt>25th / 50th / 75th</dt>
-        <dd>Percentiles of total mana spent showing distribution spread.</dd>
+        <dd>Percentiles of value+draw mana spent showing distribution spread.</dd>
     </dl>
 </details>
 <div class="table-wrap">
@@ -26,7 +32,12 @@
     <thead>
         <tr>
             <th>Lands</th>
-            <th>Mana (EV)</th>
+            <th>Mana V+D</th>
+            <th>Value</th>
+            <th>Draw</th>
+            <th>Ramp</th>
+            <th>Total</th>
+            <th>Hand Sum</th>
             <th>Consistency</th>
             <th>Bad Turns</th>
             <th>Mid Turns</th>
@@ -46,6 +57,11 @@
         <tr>
             <td>{{ r.land_count }}</td>
             <td>{{ "%.2f"|format(r.mean_mana) }} <small>&plusmn;{{ "%.2f"|format(mana_margin) }}</small></td>
+            <td>{{ "%.2f"|format(r.mean_mana_value|default(0)) }}</td>
+            <td>{{ "%.2f"|format(r.mean_mana_draw|default(0)) }}</td>
+            <td>{{ "%.2f"|format(r.mean_mana_ramp|default(0)) }}</td>
+            <td>{{ "%.2f"|format(r.mean_mana_total|default(0)) }}</td>
+            <td>{{ "%.1f"|format(r.mean_hand_sum|default(0)) }}</td>
             <td>{{ "%.3f"|format(r.consistency) }} <small>&plusmn;{{ "%.4f"|format(con_margin) }}</small></td>
             <td>{{ "%.2f"|format(r.mean_bad_turns) }}</td>
             <td>{{ "%.2f"|format(r.mean_mid_turns) }}</td>
