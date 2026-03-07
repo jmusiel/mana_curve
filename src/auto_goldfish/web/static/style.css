@@ -501,7 +501,12 @@ a:hover { text-decoration: underline; }
     align-items: center;
     gap: 0.25rem;
 }
-.override-actions { margin-top: 0.5rem; }
+.override-actions { margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; }
+.override-checkmark {
+    color: #16a34a;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
 
 /* Card Labeler Wizard */
 .labeler-pane {
