@@ -17,10 +17,19 @@ a:hover { text-decoration: underline; }
     background: #1a1a2e;
     padding: 0.75rem 2rem;
 }
+.nav-brand-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
 .nav-brand {
     color: #fff;
     font-size: 1.25rem;
     font-weight: 700;
+}
+.nav-logo {
+    height: 3.75rem;
+    width: 3.75rem;
 }
 .nav-brand:hover { text-decoration: none; color: #93c5fd; }
 .nav-links { display: flex; gap: 1.5rem; }

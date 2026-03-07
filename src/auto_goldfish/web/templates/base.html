@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Auto Goldfish{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
+    <link rel="icon" href="{{ url_for('static', filename='icon-192.png') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -12,9 +15,12 @@
 </head>
 <body>
     <nav class="navbar">
-        <div>
-            <a href="{{ url_for('dashboard.index') }}" class="nav-brand">Auto Goldfish</a>
-            <div style="color:#94a3b8; font-size:0.75rem; padding-left:1rem;">A Hyperband-scheduled Monte Carlo global optimizer for goldfishing commander games.</div>
+        <div class="nav-brand-group">
+            <a href="{{ url_for('dashboard.index') }}"><img src="{{ url_for('static', filename='icon-192.png') }}" alt="" class="nav-logo"></a>
+            <div>
+                <a href="{{ url_for('dashboard.index') }}" class="nav-brand">Auto Goldfish</a>
+                <div style="color:#94a3b8; font-size:0.75rem;">A Hyperband-scheduled Monte Carlo global optimizer for goldfishing commander games.</div>
+            </div>
         </div>
         <div class="nav-links">
             <a href="{{ url_for('dashboard.index') }}">Decks</a>
