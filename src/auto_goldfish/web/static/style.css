@@ -28,8 +28,8 @@ a:hover { text-decoration: underline; }
     font-weight: 700;
 }
 .nav-logo {
-    height: 2.5rem;
-    width: 2.5rem;
+    height: 3.25rem;
+    width: 3.25rem;
 }
 .nav-brand:hover { text-decoration: none; color: #93c5fd; }
 .nav-links { display: flex; gap: 1.5rem; }
