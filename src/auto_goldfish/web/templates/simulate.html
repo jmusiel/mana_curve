@@ -71,6 +71,7 @@
                         <span class="effects-card-name">{{ card.name }}</span>
                         <span class="effects-card-cmc">CMC {{ card.cmc }}</span>
                         <span class="effects-card-badges">{{ card.effects_display }}</span>
+                        <span class="override-checkmark" style="display:none;">&#10003;</span>
                         <button type="button" class="btn btn-secondary btn-sm override-toggle" onclick="toggleOverride(this)">Override</button>
                     </div>
                     <div class="override-panel" style="display:none;">
@@ -81,6 +82,7 @@
                             <label>override_cmc <input type="number" class="meta-override-cmc" value="" placeholder="-" min="0" max="20" style="width:3rem"></label>
                         </div>
                         <div class="override-actions">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="saveOverride(this)">Save</button>
                             <button type="button" class="btn btn-secondary btn-sm" onclick="removeOverride(this)">Remove Override</button>
                         </div>
                     </div>
@@ -100,6 +102,7 @@
                         <span class="effects-card-name">{{ card.name }}</span>
                         <span class="effects-card-cmc">CMC {{ card.cmc }}</span>
                         <span class="effects-card-badges no-effects">No effects</span>
+                        <span class="override-checkmark" style="display:none;">&#10003;</span>
                         <button type="button" class="btn btn-secondary btn-sm override-toggle" onclick="toggleOverride(this)">Add Effect</button>
                     </div>
                     <div class="override-panel" style="display:none;">
@@ -110,6 +113,7 @@
                             <label>override_cmc <input type="number" class="meta-override-cmc" value="" placeholder="-" min="0" max="20" style="width:3rem"></label>
                         </div>
                         <div class="override-actions">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="saveOverride(this)">Save</button>
                             <button type="button" class="btn btn-secondary btn-sm" onclick="removeOverride(this)">Remove Override</button>
                         </div>
                     </div>
@@ -482,14 +486,30 @@ function toggleOverride(btn) {
         btn.textContent = 'Hide';
         if (panel.querySelector('.override-effects-list').children.length === 0) {
             const cardName = card.dataset.cardName;
-            const cardData = CARD_EFFECTS.find(c => c.name === cardName);
-            const regOverride = cardData && cardData.registry_override;
-            if (regOverride && regOverride.categories && regOverride.categories.length > 0) {
-                regOverride.categories.forEach(cat => addCategoryRowWithData(panel, cat));
-                if (regOverride.priority) panel.querySelector('.meta-priority').value = regOverride.priority;
+            // Check hidden input first for wizard-saved overrides
+            let savedOverride = null;
+            try {
+                const currentOverrides = JSON.parse(document.getElementById('effect-overrides-input').value);
+                savedOverride = currentOverrides[cardName];
+            } catch(e) {}
+
+            if (savedOverride && savedOverride.categories && savedOverride.categories.length > 0) {
+                savedOverride.categories.forEach(cat => addCategoryRowWithData(panel, cat));
+                if (savedOverride.priority) panel.querySelector('.meta-priority').value = savedOverride.priority;
+                if (savedOverride.override_cmc !== undefined && savedOverride.override_cmc !== null) {
+                    panel.querySelector('.meta-override-cmc').value = savedOverride.override_cmc;
+                }
                 collectOverrides();
             } else {
-                addEffectRow(panel.querySelector('.override-effects-list').nextElementSibling, 'ramp_producer');
+                const cardData = CARD_EFFECTS.find(c => c.name === cardName);
+                const regOverride = cardData && cardData.registry_override;
+                if (regOverride && regOverride.categories && regOverride.categories.length > 0) {
+                    regOverride.categories.forEach(cat => addCategoryRowWithData(panel, cat));
+                    if (regOverride.priority) panel.querySelector('.meta-priority').value = regOverride.priority;
+                    collectOverrides();
+                } else {
+                    addEffectRow(panel.querySelector('.override-effects-list').nextElementSibling, 'ramp_producer');
+                }
             }
         }
     }
@@ -580,8 +600,29 @@ function removeOverride(btn) {
         if (inp.classList.contains('meta-priority')) inp.value = '0';
         else if (inp.classList.contains('meta-override-cmc')) inp.value = '';
     });
+    // Explicitly delete this card from overrides before collecting
+    let overrides = {};
+    try { overrides = JSON.parse(document.getElementById('effect-overrides-input').value); } catch(e) {}
+    delete overrides[cardName];
+    document.getElementById('effect-overrides-input').value = JSON.stringify(overrides);
     collectOverrides();
     persistOverrides();
+    // Hide the checkmark
+    const checkmark = card.querySelector('.override-checkmark');
+    if (checkmark) checkmark.style.display = 'none';
+}
+
+function saveOverride(btn) {
+    collectOverrides();
+    persistOverrides();
+    const card = btn.closest('.effects-card');
+    const checkmark = card.querySelector('.override-checkmark');
+    if (checkmark) checkmark.style.display = 'inline';
+    const badges = card.querySelector('.effects-card-badges');
+    if (badges) {
+        badges.textContent = 'User override';
+        badges.classList.remove('no-effects');
+    }
 }
 
 function collectOverrides() {
@@ -705,6 +746,9 @@ function loadSavedOverrides() {
         if (override.override_cmc !== undefined && override.override_cmc !== null) {
             panel.querySelector('.meta-override-cmc').value = override.override_cmc;
         }
+        // Show checkmark for saved overrides
+        const checkmark = card.querySelector('.override-checkmark');
+        if (checkmark) checkmark.style.display = 'inline';
     });
     collectOverrides();
 }
@@ -729,6 +773,14 @@ if (IS_LOCAL_DECK) {
             }
         }
         document.getElementById('effect-overrides-input').value = JSON.stringify(current);
+        // Show checkmarks for locally-stored overrides
+        document.querySelectorAll('.effects-card').forEach(function(card) {
+            var cn = card.dataset.cardName;
+            if (cn in current) {
+                var checkmark = card.querySelector('.override-checkmark');
+                if (checkmark) checkmark.style.display = 'inline';
+            }
+        });
     })();
 }
 
@@ -1446,6 +1498,8 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
                 badges.textContent = 'User override';
                 badges.classList.remove('no-effects');
             }
+            const checkmark = cardEl.querySelector('.override-checkmark');
+            if (checkmark) checkmark.style.display = 'inline';
         }
 
         currentIndex++;
