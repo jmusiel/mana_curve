@@ -190,6 +190,33 @@ class TestConfidenceIntervals:
         r = sequential_result
         assert r.ci_consistency[1] > r.ci_consistency[0]
 
+    def test_ci_mana_value_positive(self, sequential_result):
+        """CI half-width for value mana should be positive."""
+        assert sequential_result.ci_mana_value > 0
+
+    def test_ci_mana_positive(self, sequential_result):
+        """CI half-width for V+D mana should be positive."""
+        assert sequential_result.ci_mana > 0
+
+    def test_ci_mana_total_positive(self, sequential_result):
+        """CI half-width for total mana should be positive."""
+        assert sequential_result.ci_mana_total > 0
+
+    def test_ci_mana_draw_nonnegative(self, sequential_result):
+        """CI half-width for draw mana should be non-negative (zero in vanilla deck)."""
+        assert sequential_result.ci_mana_draw >= 0
+
+    def test_ci_mana_ramp_nonnegative(self, sequential_result):
+        """CI half-width for ramp mana should be non-negative (zero in vanilla deck)."""
+        assert sequential_result.ci_mana_ramp >= 0
+
+    def test_ci_half_widths_smaller_than_means(self, sequential_result):
+        """CI half-widths should be much smaller than the means (with 500 sims)."""
+        r = sequential_result
+        assert r.ci_mana_value < r.mean_mana_value
+        assert r.ci_mana < r.mean_mana
+        assert r.ci_mana_total < r.mean_mana_total
+
     def test_ci_narrows_with_more_sims(self):
         """More sims should yield a tighter CI."""
         deck = _simple_deck()
@@ -202,6 +229,19 @@ class TestConfidenceIntervals:
         ci_width_small = r_small.ci_mean_mana[1] - r_small.ci_mean_mana[0]
         ci_width_big = r_big.ci_mean_mana[1] - r_big.ci_mean_mana[0]
         assert ci_width_big < ci_width_small
+
+    def test_ci_half_width_narrows_with_more_sims(self):
+        """CI half-widths should narrow with more sims."""
+        deck = _simple_deck()
+        gf_small = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED)
+        r_small = gf_small.simulate()
+
+        gf_big = Goldfisher(deck, turns=5, sims=2000, record_results="quartile", seed=SEED)
+        r_big = gf_big.simulate()
+
+        assert r_big.ci_mana_value < r_small.ci_mana_value
+        assert r_big.ci_mana < r_small.ci_mana
+        assert r_big.ci_mana_total < r_small.ci_mana_total
 
 
 # ---------------------------------------------------------------------------
@@ -322,6 +362,21 @@ class TestParallelParity:
     def test_threshold_matches(self, sequential_result, parallel_result):
         assert sequential_result.threshold_percent == parallel_result.threshold_percent
         assert sequential_result.threshold_mana == parallel_result.threshold_mana
+
+    def test_ci_mana_value_matches(self, sequential_result, parallel_result):
+        assert sequential_result.ci_mana_value == pytest.approx(parallel_result.ci_mana_value, rel=0.01)
+
+    def test_ci_mana_draw_matches(self, sequential_result, parallel_result):
+        assert sequential_result.ci_mana_draw == parallel_result.ci_mana_draw
+
+    def test_ci_mana_ramp_matches(self, sequential_result, parallel_result):
+        assert sequential_result.ci_mana_ramp == parallel_result.ci_mana_ramp
+
+    def test_ci_mana_matches(self, sequential_result, parallel_result):
+        assert sequential_result.ci_mana == pytest.approx(parallel_result.ci_mana, rel=0.01)
+
+    def test_ci_mana_total_matches(self, sequential_result, parallel_result):
+        assert sequential_result.ci_mana_total == pytest.approx(parallel_result.ci_mana_total, rel=0.01)
 
 
 class TestParallelDistributionStats:
