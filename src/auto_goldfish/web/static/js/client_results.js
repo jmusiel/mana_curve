@@ -98,7 +98,7 @@ const ClientResults = (function() {
                 <dt>Hand Sum</dt>
                 <dd>Sum of min(hand_size, 7) per turn. Measures card availability across the game.</dd>
                 <dt>Consistency</dt>
-                <dd>How reliably the deck avoids low-value-mana games (0&ndash;1.2 scale). 1.0 = perfectly consistent. Computed from cumulative value mana distribution.</dd>
+                <dd>How reliably the deck avoids low-mana games (0&ndash;1.2 scale). 1.0 = perfectly consistent. Computed from cumulative mana distribution based on selected mana mode.</dd>
                 <dt>Bad Turns</dt>
                 <dd>Average turns where no spells were cast and the deck wasn&rsquo;t empty. Lower = better.</dd>
                 <dt>Mid Turns</dt>
@@ -108,7 +108,7 @@ const ClientResults = (function() {
                 <dt>Avg Draws / Avg Spells</dt>
                 <dd>Average cards drawn and spells cast per game.</dd>
                 <dt>Mana Percentiles (25th / 50th / 75th)</dt>
-                <dd>Percentiles of value mana spent showing distribution spread.</dd>
+                <dd>Percentiles of mana spent (based on selected mana mode) showing distribution spread.</dd>
             </dl>
         </details>`;
         html += '<div class="table-wrap"><table class="stats-table"><thead><tr>';

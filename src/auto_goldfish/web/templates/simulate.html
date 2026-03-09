@@ -157,6 +157,23 @@
             </select>
         </div>
     </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label for="mana-mode">Consider mana spent on</label>
+            <select id="mana-mode" name="mana_mode">
+                <option value="value" selected>Value spells only</option>
+                <option value="value_draw">Value + Draw spells</option>
+                <option value="total">All spells (incl. Ramp)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="optimize-target">Optimize for</label>
+            <select id="optimize-target" name="optimize_target">
+                <option value="mana" selected>Mana</option>
+                <option value="consistency">Consistency</option>
+            </select>
+        </div>
+    </div>
 
     <!-- Land Sweep Settings (shown by default) -->
     <div id="sweep-settings">
@@ -203,15 +220,6 @@
 
     <div id="card-optimization-settings" style="display:none; margin-top: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px;">
         <div class="form-row">
-            <div class="form-group">
-                <label for="optimize-for">Optimize for</label>
-                <select id="optimize-for">
-                    <option value="mean_mana_value" selected>Value Only Mana</option>
-                    <option value="mean_mana">Value + Draw Mana</option>
-                    <option value="mean_mana_total">Total Mana</option>
-                    <option value="consistency">Consistency</option>
-                </select>
-            </div>
             <div class="form-group">
                 <label for="sims-per-enum">Max sims per candidate</label>
                 <input type="number" id="sims-per-enum" value="200" min="50" max="{{ max_sims }}" step="50">
@@ -1746,6 +1754,7 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
                 max_lands: parseInt(document.getElementById('max_lands').value),
                 record_results: document.getElementById('record_results').value || 'quartile',
                 mulligan: document.getElementById('mulligan').value || 'default',
+                mana_mode: document.getElementById('mana-mode').value || 'value',
                 effect_overrides: mergedOverrides,
             };
 
@@ -1812,9 +1821,20 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
 
         if (enabledCandidates.length === 0) return null;
 
+        const optimizeTarget = document.getElementById('optimize-target').value;
+        const manaMode = document.getElementById('mana-mode').value;
+        let optimize_for;
+        if (optimizeTarget === 'consistency') {
+            optimize_for = 'consistency';
+        } else {
+            optimize_for = manaMode === 'value' ? 'mean_mana_value'
+                         : manaMode === 'value_draw' ? 'mean_mana'
+                         : 'mean_mana_total';
+        }
+
         const optConfig = {
             optimization_enabled: true,
-            optimize_for: document.getElementById('optimize-for').value,
+            optimize_for: optimize_for,
             swap_mode: document.getElementById('swap-mode').checked,
             sims_per_enum: parseInt(document.getElementById('sims-per-enum').value) || 200,
             enabled_candidates: enabledCandidates,

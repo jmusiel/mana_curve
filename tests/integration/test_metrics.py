@@ -731,3 +731,65 @@ class TestGameRecords:
         for bucket, data in gr.items():
             if "logs" in data:
                 assert len(data["logs"]) <= 10, f"{bucket} has {len(data['logs'])} logs"
+
+
+# ---------------------------------------------------------------------------
+# Mana mode
+# ---------------------------------------------------------------------------
+
+class TestManaMode:
+    """Tests for configurable mana_mode parameter."""
+
+    def test_mana_mode_default_is_value(self):
+        """Default mana_mode should be 'value' and produce identical results to explicit 'value'."""
+        deck = _simple_deck()
+        gf_default = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED)
+        gf_value = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED, mana_mode="value")
+        r_default = gf_default.simulate()
+        r_value = gf_value.simulate()
+        assert r_default.percentile_50 == r_value.percentile_50
+        assert r_default.consistency == r_value.consistency
+
+    def test_mana_mode_invalid_raises(self):
+        """Invalid mana_mode should raise ValueError."""
+        deck = _simple_deck()
+        with pytest.raises(ValueError, match="Invalid mana_mode"):
+            Goldfisher(deck, turns=5, sims=100, mana_mode="invalid")
+
+    def test_mana_mode_value_draw_accepted(self):
+        """mana_mode='value_draw' should run without error."""
+        deck = _simple_deck()
+        gf = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED, mana_mode="value_draw")
+        result = gf.simulate()
+        assert isinstance(result, SimulationResult)
+
+    def test_mana_mode_total_accepted(self):
+        """mana_mode='total' should run without error."""
+        deck = _simple_deck()
+        gf = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED, mana_mode="total")
+        result = gf.simulate()
+        assert isinstance(result, SimulationResult)
+
+    def test_mana_mode_vanilla_deck_all_modes_equal(self):
+        """For a vanilla deck (no draw/ramp), all mana modes should produce identical percentiles."""
+        deck = _simple_deck()
+        results = {}
+        for mode in ("value", "value_draw", "total"):
+            gf = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED, mana_mode=mode)
+            results[mode] = gf.simulate()
+        # All modes should produce the same percentiles since there are no draw/ramp cards
+        assert results["value"].percentile_50 == results["value_draw"].percentile_50
+        assert results["value"].percentile_50 == results["total"].percentile_50
+        assert results["value"].consistency == results["value_draw"].consistency
+        assert results["value"].consistency == results["total"].consistency
+
+    def test_mana_mode_parallel_parity(self):
+        """Sequential and parallel paths should agree for mana_mode='value_draw'."""
+        deck = _simple_deck()
+        gf_seq = Goldfisher(deck, turns=5, sims=SIMS, record_results="quartile", seed=SEED, mana_mode="value_draw")
+        r_seq = gf_seq.simulate()
+        gf_par = Goldfisher(deck, turns=5, sims=SIMS, record_results="quartile", seed=SEED, mana_mode="value_draw", workers=2)
+        r_par = gf_par.simulate()
+        assert r_seq.percentile_50 == r_par.percentile_50
+        assert r_seq.consistency == r_par.consistency
+        assert r_seq.mean_mana_value == r_par.mean_mana_value
