@@ -89,10 +89,16 @@ const ClientResults = (function() {
         html += `<details class="metric-descriptions">
             <summary>Metric Definitions</summary>
             <dl class="metric-list">
-                <dt>Mana (EV)</dt>
-                <dd>Total mana spent on non-ramp spells over all turns. Ramp cards excluded because they pay for themselves. Higher = more resources deployed.</dd>
+                <dt>Mana Spent: V+D</dt>
+                <dd>Total mana spent on value (no-effect) and draw spells. Ramp excluded because it pays for itself. Higher = more resources deployed.</dd>
+                <dt>Mana Spent: Value / Draw / Ramp</dt>
+                <dd>Mana breakdown by card type. Draw > ramp priority (cards with both count as draw).</dd>
+                <dt>Mana Spent: All</dt>
+                <dd>Total mana spent on all spells (value + draw + ramp).</dd>
+                <dt>Hand Sum</dt>
+                <dd>Sum of min(hand_size, 7) per turn. Measures card availability across the game.</dd>
                 <dt>Consistency</dt>
-                <dd>How reliably the deck avoids low-mana games (0&ndash;1.2 scale). 1.0 = perfectly consistent. Computed from cumulative mana distribution.</dd>
+                <dd>How reliably the deck avoids low-mana games (0&ndash;1.2 scale). 1.0 = perfectly consistent. Computed from cumulative mana distribution based on selected mana mode.</dd>
                 <dt>Bad Turns</dt>
                 <dd>Average turns where no spells were cast and the deck wasn&rsquo;t empty. Lower = better.</dd>
                 <dt>Mid Turns</dt>
@@ -101,20 +107,22 @@ const ClientResults = (function() {
                 <dd>Average lands played and mulligans taken per game.</dd>
                 <dt>Avg Draws / Avg Spells</dt>
                 <dd>Average cards drawn and spells cast per game.</dd>
-                <dt>25th / 50th / 75th</dt>
-                <dd>Percentiles of total mana spent showing distribution spread.</dd>
+                <dt>Mana Percentiles (25th / 50th / 75th)</dt>
+                <dd>Percentiles of mana spent (based on selected mana mode) showing distribution spread.</dd>
             </dl>
         </details>`;
         html += '<div class="table-wrap"><table class="stats-table"><thead><tr>';
-        if (isOptimization) html += '<th>Rank</th><th>Configuration</th>';
-        html += '<th>Lands</th><th>Mana (EV)</th><th>Consistency</th><th>Bad Turns</th>';
-        html += '<th>Mid Turns</th><th>Avg Lands</th><th>Avg Mulls</th>';
-        html += '<th>Avg Draws</th><th>Avg Spells</th>';
+        if (isOptimization) html += '<th rowspan="2">Rank</th><th rowspan="2">Configuration</th>';
+        html += '<th rowspan="2">Lands</th><th colspan="5">Mana Spent</th>';
+        html += '<th rowspan="2">Hand Sum</th><th rowspan="2">Consistency</th><th rowspan="2">Bad Turns</th>';
+        html += '<th rowspan="2">Mid Turns</th><th rowspan="2">Avg Lands</th><th rowspan="2">Avg Mulls</th>';
+        html += '<th rowspan="2">Avg Draws</th><th rowspan="2">Avg Spells</th>';
+        html += '<th colspan="3">Mana Percentiles</th></tr><tr>';
+        html += '<th>Value</th><th>Draw</th><th>Ramp</th><th>V+D</th><th>All</th>';
         html += '<th>25th</th><th>50th</th><th>75th</th></tr></thead><tbody>';
 
         for (let i = 0; i < results.length; i++) {
             const r = results[i];
-            const manaMargin = r.ci_mean_mana ? (r.ci_mean_mana[1] - r.ci_mean_mana[0]) / 2 : 0;
             const conMargin = r.ci_consistency ? (r.ci_consistency[1] - r.ci_consistency[0]) / 2 : 0;
             html += '<tr' + (isOptimization && i === 0 ? ' style="font-weight:bold; background:#e8f5e9;"' : '') + '>';
             if (isOptimization) {
@@ -122,7 +130,12 @@ const ClientResults = (function() {
                 html += '<td style="text-align:left">' + formatConfig(r.opt_config || 'Base deck') + '</td>';
             }
             html += '<td>' + r.land_count + '</td>';
-            html += '<td>' + fmt(r.mean_mana, 2) + ' <small>&plusmn;' + fmt(manaMargin, 2) + '</small></td>';
+            html += '<td>' + fmt(r.mean_mana_value ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_value ?? 0, 2) + '</small></td>';
+            html += '<td>' + fmt(r.mean_mana_draw ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_draw ?? 0, 2) + '</small></td>';
+            html += '<td>' + fmt(r.mean_mana_ramp ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_ramp ?? 0, 2) + '</small></td>';
+            html += '<td>' + fmt(r.mean_mana, 2) + ' <small>&plusmn;' + fmt(r.ci_mana ?? 0, 2) + '</small></td>';
+            html += '<td>' + fmt(r.mean_mana_total ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_total ?? 0, 2) + '</small></td>';
+            html += '<td>' + fmt(r.mean_hand_sum ?? 0, 1) + '</td>';
             html += '<td>' + fmt(r.consistency, 3) + ' <small>&plusmn;' + fmt(conMargin, 4) + '</small></td>';
             html += '<td>' + fmt(r.mean_bad_turns, 2) + '</td>';
             html += '<td>' + fmt(r.mean_mid_turns, 2) + '</td>';

@@ -64,6 +64,8 @@ def run_simulation(
     if mulligan_type == "curve_aware":
         mulligan_strategy = CurveAwareMulligan()
 
+    mana_mode = config.get("mana_mode", "value")
+
     goldfisher = Goldfisher(
         deck_list,
         turns=turns,
@@ -74,6 +76,7 @@ def run_simulation(
         workers=1,  # Always sequential in Pyodide
         mulligan_strategy=mulligan_strategy,
         registry=registry,
+        mana_mode=mana_mode,
     )
 
     # Determine land range
@@ -166,6 +169,7 @@ def run_optimization(
     if mulligan_type == "curve_aware":
         mulligan_strategy = CurveAwareMulligan()
 
+    mana_mode = config.get("mana_mode", "value")
     sims_per_eval = config.get("sims_per_enum", max(sims // 2, 100))
 
     goldfisher = Goldfisher(
@@ -178,6 +182,7 @@ def run_optimization(
         workers=1,
         mulligan_strategy=mulligan_strategy,
         registry=registry,
+        mana_mode=mana_mode,
     )
 
     # Build enabled candidates dict

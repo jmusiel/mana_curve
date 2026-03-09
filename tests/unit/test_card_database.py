@@ -73,6 +73,20 @@ def test_per_turn_draw():
     assert effects is not None
     assert len(effects.per_turn) == 1
     assert isinstance(effects.per_turn[0], PerTurnEffect)
+    assert effects.draw is True
+
+
+def test_draw_only_cards_have_draw_flag():
+    """Cards with only draw effects should have draw=True and ramp=False."""
+    draw_only_cards = [
+        "Rishkar's Expertise", "Read the Bones", "Brainstorm",
+        "Phyrexian Arena", "Archmage Emeritus", "Beast Whisperer",
+    ]
+    for name in draw_only_cards:
+        effects = DEFAULT_REGISTRY.get(name)
+        assert effects is not None, f"{name} not in registry"
+        assert effects.draw is True, f"{name} should have draw=True"
+        assert effects.ramp is False, f"{name} should have ramp=False"
 
 
 def test_build_fresh_registry():

@@ -49,6 +49,11 @@ class SimulationResult:
 
     land_count: int = 0
     mean_mana: float = 0.0
+    mean_mana_value: float = 0.0
+    mean_mana_draw: float = 0.0
+    mean_mana_ramp: float = 0.0
+    mean_mana_total: float = 0.0
+    mean_hand_sum: float = 0.0
     consistency: float = 0.0
     mean_bad_turns: float = 0.0
     mean_mid_turns: float = 0.0
@@ -67,7 +72,14 @@ class SimulationResult:
     game_records: Dict[str, Dict[str, list]] = field(default_factory=dict)
     replay_data: Dict[str, Any] = field(default_factory=dict)
 
-    # 95% confidence intervals (low, high)
+    # 95% CI half-widths (z * std / sqrt(n))
+    ci_mana_value: float = 0.0
+    ci_mana_draw: float = 0.0
+    ci_mana_ramp: float = 0.0
+    ci_mana: float = 0.0
+    ci_mana_total: float = 0.0
+
+    # 95% confidence intervals (low, high) — legacy tuple form
     ci_mean_mana: Tuple[float, float] = (0.0, 0.0)
     ci_consistency: Tuple[float, float] = (0.0, 0.0)
     ci_mean_bad_turns: Tuple[float, float] = (0.0, 0.0)
@@ -186,6 +198,10 @@ def _worker_run_batch(
     )
     # Adjust seed offset so each batch uses the correct per-game seeds
     mana_spent = []
+    mana_value = []
+    mana_draw = []
+    mana_ramp = []
+    hand_sum = []
     mulls = []
     lands_played = []
     cards_drawn = []
@@ -208,6 +224,10 @@ def _worker_run_batch(
         mulligans = gf._mulligan(state)
 
         total_mana_spent = 0
+        game_mana_value = 0
+        game_mana_draw = 0
+        game_mana_ramp = 0
+        game_hand_sum = 0
         game_lands = 0
         game_bad = 0
         game_mid = 0
@@ -225,7 +245,9 @@ def _worker_run_batch(
             starting_hand_names = [gf.decklist[idx].name for idx in state.hand]
 
         for i in range(turns):
-            turn_mana = 0
+            turn_mana_value = 0
+            turn_mana_draw = 0
+            turn_mana_ramp = 0
             spells_played = 0
 
             if _capture_this:
@@ -233,12 +255,22 @@ def _worker_run_batch(
 
             played = gf._take_turn(state)
             for card in played:
-                if not card.ramp:
-                    turn_mana += card.mana_spent_when_played
                 if card.land:
                     game_lands += 1
                 if card.spell:
                     spells_played += 1
+                    cost = card.mana_spent_when_played
+                    if card.draw:
+                        turn_mana_draw += cost
+                    elif card.ramp:
+                        turn_mana_ramp += cost
+                    else:
+                        turn_mana_value += cost
+            turn_mana = turn_mana_value + turn_mana_draw
+            game_mana_value += turn_mana_value
+            game_mana_draw += turn_mana_draw
+            game_mana_ramp += turn_mana_ramp
+            game_hand_sum += min(len(state.hand), 7)
             game_spells_cast += spells_played
             if spells_played == 0 and state.deck:
                 game_bad += 1
@@ -268,6 +300,10 @@ def _worker_run_batch(
                 })
 
         mana_spent.append(total_mana_spent)
+        mana_value.append(game_mana_value)
+        mana_draw.append(game_mana_draw)
+        mana_ramp.append(game_mana_ramp)
+        hand_sum.append(game_hand_sum)
         lands_played.append(game_lands)
         mulls.append(mulligans)
         cards_drawn.append(state.draws)
@@ -284,7 +320,7 @@ def _worker_run_batch(
         played_cards_per_game.append(game_played)
 
         if _capture_this:
-            raw_replays.append((total_mana_spent, {
+            raw_replays.append((game_mana_value, game_mana_draw, game_mana_ramp, total_mana_spent, {
                 "total_mana": total_mana_spent,
                 "mulligans": mulligans,
                 "starting_hand": starting_hand_names,
@@ -293,6 +329,10 @@ def _worker_run_batch(
 
     result: dict = {
         "mana_spent": mana_spent,
+        "mana_value": mana_value,
+        "mana_draw": mana_draw,
+        "mana_ramp": mana_ramp,
+        "hand_sum": hand_sum,
         "mulls": mulls,
         "lands_played": lands_played,
         "cards_drawn": cards_drawn,
@@ -342,8 +382,12 @@ class Goldfisher:
         deck_name: str | None = None,
         seed: int | None = None,
         workers: int = 1,
+        mana_mode: str = "value",
         **kwargs,
     ):
+        if mana_mode not in ("value", "value_draw", "total"):
+            raise ValueError(f"Invalid mana_mode: {mana_mode!r}. Must be 'value', 'value_draw', or 'total'.")
+        self.mana_mode = mana_mode
         self.registry = registry or DEFAULT_REGISTRY
         self.mulligan_strategy = mulligan_strategy or DefaultMulligan()
         self.turns = turns
@@ -434,6 +478,7 @@ class Goldfisher:
         # Apply card-level flags from registry
         if effects:
             card.ramp = effects.ramp
+            card.draw = effects.draw
             card.priority = effects.priority
             card.tapped = effects.tapped
 
@@ -917,7 +962,8 @@ class Goldfisher:
 
         # Merge results from all workers
         merged = {
-            "mana_spent": [], "mulls": [], "lands_played": [],
+            "mana_spent": [], "mana_value": [], "mana_draw": [], "mana_ramp": [],
+            "hand_sum": [], "mulls": [], "lands_played": [],
             "cards_drawn": [], "spells_cast": [], "bad_turns": [], "mid_turns": [],
             "played_cards_per_game": [],
         }
@@ -926,7 +972,8 @@ class Goldfisher:
 
         for future in futures:
             batch = future.result()
-            for key in ["mana_spent", "mulls", "lands_played",
+            for key in ["mana_spent", "mana_value", "mana_draw", "mana_ramp",
+                        "hand_sum", "mulls", "lands_played",
                         "cards_drawn", "spells_cast", "bad_turns", "mid_turns"]:
                 merged[key].extend(batch[key])
             for k, turns_list in enumerate(batch["card_cast_turns"]):
@@ -936,16 +983,25 @@ class Goldfisher:
 
         merged["card_cast_turns"] = card_cast_turns
 
-        # Classify pooled replays using the full mana distribution
+        # Classify pooled replays using the primary mana distribution
         replay_buckets: dict[str, list] = {"top": [], "mid": [], "low": []}
-        if all_raw_replays and merged["mana_spent"]:
-            top_threshold = float(np.percentile(merged["mana_spent"], 75))
-            low_threshold = float(np.percentile(merged["mana_spent"], 25))
-            for mana_val, replay in all_raw_replays:
-                if mana_val >= top_threshold:
+        if all_raw_replays and merged["mana_value"]:
+            primary_merged = self._get_primary_mana(
+                merged["mana_value"], merged["mana_draw"], merged["mana_ramp"], merged["mana_spent"],
+            )
+            top_threshold = float(np.percentile(primary_merged, 75))
+            low_threshold = float(np.percentile(primary_merged, 25))
+            for mana_val, mana_drw, mana_rmp, mana_spt, replay in all_raw_replays:
+                if self.mana_mode == "value":
+                    primary_val = mana_val
+                elif self.mana_mode == "value_draw":
+                    primary_val = mana_spt
+                else:
+                    primary_val = mana_val + mana_drw + mana_rmp
+                if primary_val >= top_threshold:
                     if len(replay_buckets["top"]) < 10:
                         replay_buckets["top"].append(replay)
-                elif mana_val <= low_threshold:
+                elif primary_val <= low_threshold:
                     if len(replay_buckets["low"]) < 10:
                         replay_buckets["low"].append(replay)
                 else:
@@ -954,11 +1010,24 @@ class Goldfisher:
         merged["replay_data"] = replay_buckets
         return merged
 
+    def _get_primary_mana(self, mana_value, mana_draw, mana_ramp, mana_spent=None):
+        """Return the mana list selected by ``self.mana_mode``."""
+        if self.mana_mode == "value":
+            return mana_value
+        elif self.mana_mode == "value_draw":
+            return mana_spent if mana_spent is not None else [v + d for v, d in zip(mana_value, mana_draw)]
+        else:  # "total"
+            return [v + d + r for v, d, r in zip(mana_value, mana_draw, mana_ramp)]
+
     def _simulate_from_raw(self, raw: dict) -> SimulationResult:
         """Compute summary stats from raw per-game data (used by parallel path)."""
         import bisect
 
         mana_spent_list = raw["mana_spent"]
+        mana_value_list = raw["mana_value"]
+        mana_draw_list = raw["mana_draw"]
+        mana_ramp_list = raw["mana_ramp"]
+        hand_sum_list = raw["hand_sum"]
         lands_played_list = raw["lands_played"]
         mulls_list = raw["mulls"]
         cards_drawn_list = raw["cards_drawn"]
@@ -966,39 +1035,53 @@ class Goldfisher:
         bad_turns_list = raw["bad_turns"]
         mid_turns_list = raw["mid_turns"]
 
+        primary_list = self._get_primary_mana(mana_value_list, mana_draw_list, mana_ramp_list, mana_spent_list)
+
         mean_mana = float(np.mean(mana_spent_list))
+        mean_mana_value = float(np.mean(mana_value_list))
+        mean_mana_draw = float(np.mean(mana_draw_list))
+        mean_mana_ramp = float(np.mean(mana_ramp_list))
+        mean_mana_total = float(np.mean([v + d + r for v, d, r in zip(mana_value_list, mana_draw_list, mana_ramp_list)]))
+        mean_hand_sum = float(np.mean(hand_sum_list))
         mean_lands = float(np.mean(lands_played_list))
         mean_mulls = float(np.mean(mulls_list))
         mean_draws = float(np.mean(cards_drawn_list))
         mean_spells_cast = float(np.mean(spells_cast_list))
         mean_bad_turns = float(np.mean(bad_turns_list))
         mean_mid_turns = float(np.mean(mid_turns_list))
-        percentile_25 = float(np.percentile(mana_spent_list, 25))
-        percentile_50 = float(np.percentile(mana_spent_list, 50))
-        percentile_75 = float(np.percentile(mana_spent_list, 75))
+        percentile_25 = float(np.percentile(primary_list, 25))
+        percentile_50 = float(np.percentile(primary_list, 50))
+        percentile_75 = float(np.percentile(primary_list, 75))
 
-        total_mana = float(np.sum(mana_spent_list))
-        sorted_mana = sorted(mana_spent_list)
+        total_mana = float(np.sum(primary_list))
+        sorted_mana = sorted(primary_list)
         cumulative_mana = np.cumsum(sorted_mana)
 
         con_threshold = 0.25
         threshold_index = bisect.bisect_left(cumulative_mana, total_mana * con_threshold)
-        threshold_percent = threshold_index / len(mana_spent_list)
+        threshold_percent = threshold_index / len(primary_list)
         threshold_mana = float(sorted_mana[threshold_index])
         consistency = (1 - threshold_percent) / (1 - con_threshold)
 
         n = len(mana_spent_list)
         z = 1.96
 
-        mana_se = float(np.std(mana_spent_list, ddof=1) / np.sqrt(n))
-        ci_mean_mana = (mean_mana - z * mana_se, mean_mana + z * mana_se)
+        sqrt_n = np.sqrt(n)
+        mana_total_list = [v + d + r for v, d, r in zip(mana_value_list, mana_draw_list, mana_ramp_list)]
+        ci_mana_value = z * float(np.std(mana_value_list, ddof=1)) / sqrt_n
+        ci_mana_draw = z * float(np.std(mana_draw_list, ddof=1)) / sqrt_n
+        ci_mana_ramp = z * float(np.std(mana_ramp_list, ddof=1)) / sqrt_n
+        ci_mana = z * float(np.std(mana_spent_list, ddof=1)) / sqrt_n
+        ci_mana_total = z * float(np.std(mana_total_list, ddof=1)) / sqrt_n
 
-        bad_se = float(np.std(bad_turns_list, ddof=1) / np.sqrt(n))
+        ci_mean_mana = (mean_mana - ci_mana, mean_mana + ci_mana)
+
+        bad_se = float(np.std(bad_turns_list, ddof=1) / sqrt_n)
         ci_mean_bad_turns = (mean_bad_turns - z * bad_se, mean_bad_turns + z * bad_se)
 
         n_boot = min(1000, n)
         boot_consistencies = []
-        mana_arr = np.array(mana_spent_list)
+        mana_arr = np.array(primary_list)
         for _ in range(n_boot):
             boot_sample = np.random.choice(mana_arr, size=n, replace=True)
             boot_total = float(np.sum(boot_sample))
@@ -1013,17 +1096,22 @@ class Goldfisher:
         )
 
         # Compute distribution stats (same calibration approach as sequential path)
-        distribution_stats = self._compute_distribution_stats(mana_spent_list)
+        distribution_stats = self._compute_distribution_stats(primary_list)
 
         # Compute card performance
         played_cards_per_game = raw.get("played_cards_per_game", [])
-        card_performance = self._compute_card_performance(mana_spent_list, played_cards_per_game)
+        card_performance = self._compute_card_performance(primary_list, played_cards_per_game)
 
         replay_data = raw.get("replay_data", {})
 
         return SimulationResult(
             land_count=self.land_count,
             mean_mana=mean_mana,
+            mean_mana_value=mean_mana_value,
+            mean_mana_draw=mean_mana_draw,
+            mean_mana_ramp=mean_mana_ramp,
+            mean_mana_total=mean_mana_total,
+            mean_hand_sum=mean_hand_sum,
             consistency=consistency,
             mean_bad_turns=mean_bad_turns,
             mean_mid_turns=mean_mid_turns,
@@ -1037,6 +1125,11 @@ class Goldfisher:
             threshold_percent=threshold_percent,
             threshold_mana=threshold_mana,
             con_threshold=con_threshold,
+            ci_mana_value=ci_mana_value,
+            ci_mana_draw=ci_mana_draw,
+            ci_mana_ramp=ci_mana_ramp,
+            ci_mana=ci_mana,
+            ci_mana_total=ci_mana_total,
             ci_mean_mana=ci_mean_mana,
             ci_consistency=ci_consistency,
             ci_mean_bad_turns=ci_mean_bad_turns,
@@ -1067,6 +1160,11 @@ class Goldfisher:
         }
 
         mana_spent_list = []
+        mana_value_list = []
+        mana_draw_list = []
+        mana_ramp_list = []
+        primary_list = []
+        hand_sum_list = []
         mulls_list = []
         lands_played_list = []
         cards_drawn_list = []
@@ -1090,6 +1188,10 @@ class Goldfisher:
             mulligans = self._mulligan(state)
 
             total_mana_spent = 0
+            game_mana_value = 0
+            game_mana_draw = 0
+            game_mana_ramp = 0
+            game_hand_sum = 0
             lands_played = 0
             bad_turns = 0
             mid_turns = 0
@@ -1107,7 +1209,9 @@ class Goldfisher:
                 starting_hand_names = [self.decklist[idx].name for idx in state.hand]
 
             for i in range(self.turns):
-                mana_spent = 0
+                turn_mana_value = 0
+                turn_mana_draw = 0
+                turn_mana_ramp = 0
                 spells_played = 0
 
                 if _capture_replay:
@@ -1117,13 +1221,22 @@ class Goldfisher:
 
                 for card in played:
                     all_cards_played.append(card)
-                    if not card.ramp:
-                        mana_spent += card.mana_spent_when_played
                     if card.land:
                         lands_played += 1
                     if card.spell:
                         spells_played += 1
-
+                        cost = card.mana_spent_when_played
+                        if card.draw:
+                            turn_mana_draw += cost
+                        elif card.ramp:
+                            turn_mana_ramp += cost
+                        else:
+                            turn_mana_value += cost
+                mana_spent = turn_mana_value + turn_mana_draw
+                game_mana_value += turn_mana_value
+                game_mana_draw += turn_mana_draw
+                game_mana_ramp += turn_mana_ramp
+                game_hand_sum += min(len(state.hand), 7)
                 total_spells_cast += spells_played
                 if spells_played == 0 and state.deck:
                     bad_turns += 1
@@ -1153,6 +1266,18 @@ class Goldfisher:
                     })
 
             mana_spent_list.append(total_mana_spent)
+            mana_value_list.append(game_mana_value)
+            mana_draw_list.append(game_mana_draw)
+            mana_ramp_list.append(game_mana_ramp)
+
+            if self.mana_mode == "value":
+                game_primary = game_mana_value
+            elif self.mana_mode == "value_draw":
+                game_primary = total_mana_spent
+            else:
+                game_primary = game_mana_value + game_mana_draw + game_mana_ramp
+            primary_list.append(game_primary)
+            hand_sum_list.append(game_hand_sum)
             lands_played_list.append(lands_played)
             mulls_list.append(mulligans)
             cards_drawn_list.append(state.draws)
@@ -1168,34 +1293,34 @@ class Goldfisher:
                         game_played.add(k)
             played_cards_per_game.append(game_played)
 
-            # Record games in buckets
+            # Record games in buckets (based on primary mana mode)
             if j > sample_games:
                 if top_centile_threshold is None:
-                    top_centile_threshold = np.percentile(mana_spent_list, 99)
-                    low_centile_threshold = np.percentile(mana_spent_list, 1)
-                    top_decile_threshold = np.percentile(mana_spent_list, 90)
-                    low_decile_threshold = np.percentile(mana_spent_list, 10)
-                    top_quartile_threshold = np.percentile(mana_spent_list, 75)
-                    low_quartile_threshold = np.percentile(mana_spent_list, 25)
-                    median_threshold = np.percentile(mana_spent_list, 50)
+                    top_centile_threshold = np.percentile(primary_list, 99)
+                    low_centile_threshold = np.percentile(primary_list, 1)
+                    top_decile_threshold = np.percentile(primary_list, 90)
+                    low_decile_threshold = np.percentile(primary_list, 10)
+                    top_quartile_threshold = np.percentile(primary_list, 75)
+                    low_quartile_threshold = np.percentile(primary_list, 25)
+                    median_threshold = np.percentile(primary_list, 50)
                 else:
                     record_games = []
-                    if self.record_centile and total_mana_spent >= top_centile_threshold:
+                    if self.record_centile and game_primary >= top_centile_threshold:
                         record_games.extend(["top_centile", "top_decile", "top_quartile", "top_half"])
-                    elif self.record_decile and total_mana_spent >= top_decile_threshold:
+                    elif self.record_decile and game_primary >= top_decile_threshold:
                         record_games.extend(["top_decile", "top_quartile", "top_half"])
-                    elif self.record_quartile and total_mana_spent >= top_quartile_threshold:
+                    elif self.record_quartile and game_primary >= top_quartile_threshold:
                         record_games.extend(["top_quartile", "top_half"])
-                    elif self.record_half and total_mana_spent >= median_threshold:
+                    elif self.record_half and game_primary >= median_threshold:
                         record_games.append("top_half")
 
-                    if self.record_centile and total_mana_spent <= low_centile_threshold:
+                    if self.record_centile and game_primary <= low_centile_threshold:
                         record_games.extend(["low_centile", "low_decile", "low_quartile", "low_half"])
-                    elif self.record_decile and total_mana_spent <= low_decile_threshold:
+                    elif self.record_decile and game_primary <= low_decile_threshold:
                         record_games.extend(["low_decile", "low_quartile", "low_half"])
-                    elif self.record_quartile and total_mana_spent <= low_quartile_threshold:
+                    elif self.record_quartile and game_primary <= low_quartile_threshold:
                         record_games.extend(["low_quartile", "low_half"])
-                    elif self.record_half and total_mana_spent < median_threshold:
+                    elif self.record_half and game_primary < median_threshold:
                         record_games.append("low_half")
 
                     for rg in record_games:
@@ -1238,7 +1363,7 @@ class Goldfisher:
                             [c.unique_name for c in all_cards_played]
                         )
 
-            # Classify game into replay buckets
+            # Classify game into replay buckets (based on primary mana mode)
             if _capture_replay:
                 game_replay = {
                     "total_mana": total_mana_spent,
@@ -1246,10 +1371,10 @@ class Goldfisher:
                     "starting_hand": starting_hand_names,
                     "turns": turn_snapshots,
                 }
-                if total_mana_spent >= top_quartile_threshold:
+                if game_primary >= top_quartile_threshold:
                     if len(replay_buckets["top"]) < 10:
                         replay_buckets["top"].append(game_replay)
-                elif total_mana_spent <= low_quartile_threshold:
+                elif game_primary <= low_quartile_threshold:
                     if len(replay_buckets["low"]) < 10:
                         replay_buckets["low"].append(game_replay)
                 else:
@@ -1265,40 +1390,52 @@ class Goldfisher:
         import bisect
 
         mean_mana = float(np.mean(mana_spent_list))
+        mean_mana_value = float(np.mean(mana_value_list))
+        mean_mana_draw = float(np.mean(mana_draw_list))
+        mean_mana_ramp = float(np.mean(mana_ramp_list))
+        mean_mana_total = float(np.mean([v + d + r for v, d, r in zip(mana_value_list, mana_draw_list, mana_ramp_list)]))
+        mean_hand_sum = float(np.mean(hand_sum_list))
         mean_lands = float(np.mean(lands_played_list))
         mean_mulls = float(np.mean(mulls_list))
         mean_draws = float(np.mean(cards_drawn_list))
         mean_spells_cast = float(np.mean(spells_cast_list))
         mean_bad_turns = float(np.mean(bad_turns_list))
         mean_mid_turns = float(np.mean(mid_turns_list))
-        percentile_25 = float(np.percentile(mana_spent_list, 25))
-        percentile_50 = float(np.percentile(mana_spent_list, 50))
-        percentile_75 = float(np.percentile(mana_spent_list, 75))
+        percentile_25 = float(np.percentile(primary_list, 25))
+        percentile_50 = float(np.percentile(primary_list, 50))
+        percentile_75 = float(np.percentile(primary_list, 75))
 
-        total_mana = float(np.sum(mana_spent_list))
-        sorted_mana = sorted(mana_spent_list)
+        total_mana = float(np.sum(primary_list))
+        sorted_mana = sorted(primary_list)
         cumulative_mana = np.cumsum(sorted_mana)
 
         con_threshold = 0.25
         threshold_index = bisect.bisect_left(cumulative_mana, total_mana * con_threshold)
-        threshold_percent = threshold_index / len(mana_spent_list)
+        threshold_percent = threshold_index / len(primary_list)
         threshold_mana = float(sorted_mana[threshold_index])
         consistency = (1 - threshold_percent) / (1 - con_threshold)
 
-        # Compute 95% confidence intervals (normal approximation)
+        # Compute 95% confidence intervals
         n = len(mana_spent_list)
         z = 1.96
+        sqrt_n = np.sqrt(n)
 
-        mana_se = float(np.std(mana_spent_list, ddof=1) / np.sqrt(n))
-        ci_mean_mana = (mean_mana - z * mana_se, mean_mana + z * mana_se)
+        mana_total_list = [v + d + r for v, d, r in zip(mana_value_list, mana_draw_list, mana_ramp_list)]
+        ci_mana_value = z * float(np.std(mana_value_list, ddof=1)) / sqrt_n
+        ci_mana_draw = z * float(np.std(mana_draw_list, ddof=1)) / sqrt_n
+        ci_mana_ramp = z * float(np.std(mana_ramp_list, ddof=1)) / sqrt_n
+        ci_mana = z * float(np.std(mana_spent_list, ddof=1)) / sqrt_n
+        ci_mana_total = z * float(np.std(mana_total_list, ddof=1)) / sqrt_n
 
-        bad_se = float(np.std(bad_turns_list, ddof=1) / np.sqrt(n))
+        ci_mean_mana = (mean_mana - ci_mana, mean_mana + ci_mana)
+
+        bad_se = float(np.std(bad_turns_list, ddof=1) / sqrt_n)
         ci_mean_bad_turns = (mean_bad_turns - z * bad_se, mean_bad_turns + z * bad_se)
 
         # Bootstrap CI for consistency (not directly a sample mean)
         n_boot = min(1000, n)
         boot_consistencies = []
-        mana_arr = np.array(mana_spent_list)
+        mana_arr = np.array(primary_list)
         for _ in range(n_boot):
             boot_sample = np.random.choice(mana_arr, size=n, replace=True)
             boot_total = float(np.sum(boot_sample))
@@ -1312,12 +1449,17 @@ class Goldfisher:
             float(np.percentile(boot_consistencies, 97.5)),
         )
 
-        distribution_stats = self._compute_distribution_stats(mana_spent_list)
-        card_performance = self._compute_card_performance(mana_spent_list, played_cards_per_game)
+        distribution_stats = self._compute_distribution_stats(primary_list)
+        card_performance = self._compute_card_performance(primary_list, played_cards_per_game)
 
         return SimulationResult(
             land_count=self.land_count,
             mean_mana=mean_mana,
+            mean_mana_value=mean_mana_value,
+            mean_mana_draw=mean_mana_draw,
+            mean_mana_ramp=mean_mana_ramp,
+            mean_mana_total=mean_mana_total,
+            mean_hand_sum=mean_hand_sum,
             consistency=consistency,
             mean_bad_turns=mean_bad_turns,
             mean_mid_turns=mean_mid_turns,
@@ -1331,6 +1473,11 @@ class Goldfisher:
             threshold_percent=threshold_percent,
             threshold_mana=threshold_mana,
             con_threshold=con_threshold,
+            ci_mana_value=ci_mana_value,
+            ci_mana_draw=ci_mana_draw,
+            ci_mana_ramp=ci_mana_ramp,
+            ci_mana=ci_mana,
+            ci_mana_total=ci_mana_total,
             distribution_stats=distribution_stats,
             card_performance=card_performance,
             game_records=dict(game_records),

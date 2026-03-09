@@ -112,6 +112,7 @@ class SimulationRunner:
                 workers=job.config.get("workers", 1),
                 mulligan_strategy=mulligan_strategy,
                 registry=registry,
+                mana_mode=job.config.get("mana_mode", "value"),
             )
 
             if job.config.get("optimization_enabled"):

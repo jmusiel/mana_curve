@@ -18,6 +18,10 @@ def aggregate_bucket(records: List[GameRecord]) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "count": len(records),
         "mana": float(np.mean([r.total_mana_spent for r in records])),
+        "mana_value": float(np.mean([r.mana_value for r in records])),
+        "mana_draw": float(np.mean([r.mana_draw for r in records])),
+        "mana_ramp": float(np.mean([r.mana_ramp for r in records])),
+        "hand_sum": float(np.mean([r.hand_sum for r in records])),
         "lands": float(np.mean([r.lands_played for r in records])),
         "mulls": float(np.mean([r.mulligans for r in records])),
         "draws": float(np.mean([r.draws for r in records])),

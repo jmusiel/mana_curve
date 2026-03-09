@@ -78,6 +78,41 @@ class TestCoreMetrics:
     def test_mean_mana_positive(self, sequential_result):
         assert sequential_result.mean_mana > 0
 
+    def test_mean_mana_value_nonnegative(self, sequential_result):
+        assert sequential_result.mean_mana_value >= 0
+
+    def test_mean_mana_draw_nonnegative(self, sequential_result):
+        assert sequential_result.mean_mana_draw >= 0
+
+    def test_mean_mana_ramp_nonnegative(self, sequential_result):
+        assert sequential_result.mean_mana_ramp >= 0
+
+    def test_mean_mana_total_nonnegative(self, sequential_result):
+        assert sequential_result.mean_mana_total >= 0
+
+    def test_mean_hand_sum_positive(self, sequential_result):
+        assert sequential_result.mean_hand_sum > 0
+
+    def test_mean_mana_equals_value_plus_draw(self, sequential_result):
+        """mean_mana should equal mean_mana_value + mean_mana_draw (backward compat)."""
+        r = sequential_result
+        assert r.mean_mana == pytest.approx(r.mean_mana_value + r.mean_mana_draw, abs=0.01)
+
+    def test_mean_mana_total_equals_all_three(self, sequential_result):
+        """mean_mana_total should equal value + draw + ramp."""
+        r = sequential_result
+        assert r.mean_mana_total == pytest.approx(
+            r.mean_mana_value + r.mean_mana_draw + r.mean_mana_ramp, abs=0.01
+        )
+
+    def test_vanilla_deck_all_value_mana(self, sequential_result):
+        """A deck with only vanilla creatures should have all mana as value."""
+        r = sequential_result
+        # No ramp or draw cards in the test deck
+        assert r.mean_mana_draw == 0
+        assert r.mean_mana_ramp == 0
+        assert r.mean_mana == pytest.approx(r.mean_mana_value, abs=0.01)
+
     def test_mean_lands_positive(self, sequential_result):
         assert sequential_result.mean_lands > 0
 
@@ -155,6 +190,33 @@ class TestConfidenceIntervals:
         r = sequential_result
         assert r.ci_consistency[1] > r.ci_consistency[0]
 
+    def test_ci_mana_value_positive(self, sequential_result):
+        """CI half-width for value mana should be positive."""
+        assert sequential_result.ci_mana_value > 0
+
+    def test_ci_mana_positive(self, sequential_result):
+        """CI half-width for V+D mana should be positive."""
+        assert sequential_result.ci_mana > 0
+
+    def test_ci_mana_total_positive(self, sequential_result):
+        """CI half-width for total mana should be positive."""
+        assert sequential_result.ci_mana_total > 0
+
+    def test_ci_mana_draw_nonnegative(self, sequential_result):
+        """CI half-width for draw mana should be non-negative (zero in vanilla deck)."""
+        assert sequential_result.ci_mana_draw >= 0
+
+    def test_ci_mana_ramp_nonnegative(self, sequential_result):
+        """CI half-width for ramp mana should be non-negative (zero in vanilla deck)."""
+        assert sequential_result.ci_mana_ramp >= 0
+
+    def test_ci_half_widths_smaller_than_means(self, sequential_result):
+        """CI half-widths should be much smaller than the means (with 500 sims)."""
+        r = sequential_result
+        assert r.ci_mana_value < r.mean_mana_value
+        assert r.ci_mana < r.mean_mana
+        assert r.ci_mana_total < r.mean_mana_total
+
     def test_ci_narrows_with_more_sims(self):
         """More sims should yield a tighter CI."""
         deck = _simple_deck()
@@ -167,6 +229,19 @@ class TestConfidenceIntervals:
         ci_width_small = r_small.ci_mean_mana[1] - r_small.ci_mean_mana[0]
         ci_width_big = r_big.ci_mean_mana[1] - r_big.ci_mean_mana[0]
         assert ci_width_big < ci_width_small
+
+    def test_ci_half_width_narrows_with_more_sims(self):
+        """CI half-widths should narrow with more sims."""
+        deck = _simple_deck()
+        gf_small = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED)
+        r_small = gf_small.simulate()
+
+        gf_big = Goldfisher(deck, turns=5, sims=2000, record_results="quartile", seed=SEED)
+        r_big = gf_big.simulate()
+
+        assert r_big.ci_mana_value < r_small.ci_mana_value
+        assert r_big.ci_mana < r_small.ci_mana
+        assert r_big.ci_mana_total < r_small.ci_mana_total
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +330,21 @@ class TestParallelParity:
     def test_mean_draws_matches(self, sequential_result, parallel_result):
         assert sequential_result.mean_draws == parallel_result.mean_draws
 
+    def test_mean_mana_value_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_mana_value == parallel_result.mean_mana_value
+
+    def test_mean_mana_draw_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_mana_draw == parallel_result.mean_mana_draw
+
+    def test_mean_mana_ramp_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_mana_ramp == parallel_result.mean_mana_ramp
+
+    def test_mean_mana_total_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_mana_total == parallel_result.mean_mana_total
+
+    def test_mean_hand_sum_matches(self, sequential_result, parallel_result):
+        assert sequential_result.mean_hand_sum == parallel_result.mean_hand_sum
+
     def test_mean_bad_turns_matches(self, sequential_result, parallel_result):
         assert sequential_result.mean_bad_turns == parallel_result.mean_bad_turns
 
@@ -272,6 +362,21 @@ class TestParallelParity:
     def test_threshold_matches(self, sequential_result, parallel_result):
         assert sequential_result.threshold_percent == parallel_result.threshold_percent
         assert sequential_result.threshold_mana == parallel_result.threshold_mana
+
+    def test_ci_mana_value_matches(self, sequential_result, parallel_result):
+        assert sequential_result.ci_mana_value == pytest.approx(parallel_result.ci_mana_value, rel=0.01)
+
+    def test_ci_mana_draw_matches(self, sequential_result, parallel_result):
+        assert sequential_result.ci_mana_draw == parallel_result.ci_mana_draw
+
+    def test_ci_mana_ramp_matches(self, sequential_result, parallel_result):
+        assert sequential_result.ci_mana_ramp == parallel_result.ci_mana_ramp
+
+    def test_ci_mana_matches(self, sequential_result, parallel_result):
+        assert sequential_result.ci_mana == pytest.approx(parallel_result.ci_mana, rel=0.01)
+
+    def test_ci_mana_total_matches(self, sequential_result, parallel_result):
+        assert sequential_result.ci_mana_total == pytest.approx(parallel_result.ci_mana_total, rel=0.01)
 
 
 class TestParallelDistributionStats:
@@ -626,3 +731,65 @@ class TestGameRecords:
         for bucket, data in gr.items():
             if "logs" in data:
                 assert len(data["logs"]) <= 10, f"{bucket} has {len(data['logs'])} logs"
+
+
+# ---------------------------------------------------------------------------
+# Mana mode
+# ---------------------------------------------------------------------------
+
+class TestManaMode:
+    """Tests for configurable mana_mode parameter."""
+
+    def test_mana_mode_default_is_value(self):
+        """Default mana_mode should be 'value' and produce identical results to explicit 'value'."""
+        deck = _simple_deck()
+        gf_default = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED)
+        gf_value = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED, mana_mode="value")
+        r_default = gf_default.simulate()
+        r_value = gf_value.simulate()
+        assert r_default.percentile_50 == r_value.percentile_50
+        assert r_default.consistency == r_value.consistency
+
+    def test_mana_mode_invalid_raises(self):
+        """Invalid mana_mode should raise ValueError."""
+        deck = _simple_deck()
+        with pytest.raises(ValueError, match="Invalid mana_mode"):
+            Goldfisher(deck, turns=5, sims=100, mana_mode="invalid")
+
+    def test_mana_mode_value_draw_accepted(self):
+        """mana_mode='value_draw' should run without error."""
+        deck = _simple_deck()
+        gf = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED, mana_mode="value_draw")
+        result = gf.simulate()
+        assert isinstance(result, SimulationResult)
+
+    def test_mana_mode_total_accepted(self):
+        """mana_mode='total' should run without error."""
+        deck = _simple_deck()
+        gf = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED, mana_mode="total")
+        result = gf.simulate()
+        assert isinstance(result, SimulationResult)
+
+    def test_mana_mode_vanilla_deck_all_modes_equal(self):
+        """For a vanilla deck (no draw/ramp), all mana modes should produce identical percentiles."""
+        deck = _simple_deck()
+        results = {}
+        for mode in ("value", "value_draw", "total"):
+            gf = Goldfisher(deck, turns=5, sims=200, record_results="quartile", seed=SEED, mana_mode=mode)
+            results[mode] = gf.simulate()
+        # All modes should produce the same percentiles since there are no draw/ramp cards
+        assert results["value"].percentile_50 == results["value_draw"].percentile_50
+        assert results["value"].percentile_50 == results["total"].percentile_50
+        assert results["value"].consistency == results["value_draw"].consistency
+        assert results["value"].consistency == results["total"].consistency
+
+    def test_mana_mode_parallel_parity(self):
+        """Sequential and parallel paths should agree for mana_mode='value_draw'."""
+        deck = _simple_deck()
+        gf_seq = Goldfisher(deck, turns=5, sims=SIMS, record_results="quartile", seed=SEED, mana_mode="value_draw")
+        r_seq = gf_seq.simulate()
+        gf_par = Goldfisher(deck, turns=5, sims=SIMS, record_results="quartile", seed=SEED, mana_mode="value_draw", workers=2)
+        r_par = gf_par.simulate()
+        assert r_seq.percentile_50 == r_par.percentile_50
+        assert r_seq.consistency == r_par.consistency
+        assert r_seq.mean_mana_value == r_par.mean_mana_value

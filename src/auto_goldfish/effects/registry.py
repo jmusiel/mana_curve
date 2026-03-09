@@ -20,6 +20,7 @@ class CardEffects:
     mana_function: List[Any] = field(default_factory=list)
     priority: int = 0
     ramp: bool = False
+    draw: bool = False
 
     def describe_effects(self) -> str:
         """Return a human-readable summary of all effects on this card."""

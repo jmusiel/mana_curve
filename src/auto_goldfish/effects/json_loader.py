@@ -24,7 +24,7 @@ from .registry import CardEffects, EffectRegistry
 
 VALID_SLOTS = {"on_play", "per_turn", "cast_trigger", "mana_function"}
 
-METADATA_FIELDS = {"priority", "ramp", "extra_types", "override_cmc", "tapped"}
+METADATA_FIELDS = {"priority", "ramp", "draw", "extra_types", "override_cmc", "tapped"}
 
 _DEFAULT_JSON = Path(__file__).parent / "card_effects.json"
 
@@ -77,6 +77,7 @@ def _translate_category(cat: dict) -> Tuple[List[Tuple[str, Any]], dict]:
             )))
 
     elif category == "draw":
+        meta["draw"] = True
         immediate = cat.get("immediate", True)
         if immediate:
             effects.append(("on_play", DrawCards(amount=cat["amount"])))
