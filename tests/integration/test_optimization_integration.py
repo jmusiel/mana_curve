@@ -240,3 +240,37 @@ def test_pyodide_runner_optimization():
     assert len(results) > 0
     assert "opt_config" in results[0]
     assert "mean_mana" in results[0]
+
+
+def test_optimizer_mean_spells_cast_target():
+    """DeckOptimizer can optimize for mean_spells_cast."""
+    deck = _simple_deck()
+    gf = Goldfisher(deck, turns=5, sims=50, seed=42, record_results="quartile")
+    enabled = {
+        cid: c for cid, c in ALL_CANDIDATES.items()
+        if cid in ("draw_2cmc_2", "ramp_2cmc_1")
+    }
+
+    optimizer = DeckOptimizer(
+        goldfisher=gf,
+        candidates=enabled,
+        swap_mode=False,
+        max_draw=1,
+        max_ramp=1,
+        land_range=1,
+        optimize_for="mean_spells_cast",
+        sims_per_eval=50,
+    )
+
+    results = optimizer.run(final_sims=50, final_top_k=3)
+    assert len(results) > 0
+    assert len(results) <= 3
+
+    for config, result_dict in results:
+        assert isinstance(config, DeckConfig)
+        assert "mean_spells_cast" in result_dict
+        assert result_dict["mean_spells_cast"] >= 0
+
+    # Results should be sorted by mean_spells_cast descending
+    scores = [r[1]["mean_spells_cast"] for r in results]
+    assert scores == sorted(scores, reverse=True)

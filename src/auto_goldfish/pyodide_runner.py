@@ -121,7 +121,7 @@ def run_optimization(
         config_json: JSON string with optimization configuration:
             - turns, sims, seed, record_results, effect_overrides, mulligan
               (same as run_simulation; sims controls final evaluation count)
-            - optimize_for (str): "mean_mana" or "consistency"
+            - optimize_for (str): "mean_mana", "consistency", or "mean_spells_cast"
             - swap_mode (bool): Replace cards or add extra
             - sims_per_enum (int): Max sims per candidate during Hyperband selection (default sims//2)
             - enabled_candidates (list[str]): Candidate IDs that are enabled

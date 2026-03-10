@@ -175,6 +175,7 @@
             <select id="optimize-target" name="optimize_target">
                 <option value="mana" selected>Mana</option>
                 <option value="consistency">Consistency</option>
+                <option value="spells_cast">Num spells cast</option>
             </select>
         </div>
     </div>
@@ -1852,6 +1853,8 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
         let optimize_for;
         if (optimizeTarget === 'consistency') {
             optimize_for = 'consistency';
+        } else if (optimizeTarget === 'spells_cast') {
+            optimize_for = 'mean_spells_cast';
         } else {
             optimize_for = manaMode === 'value' ? 'mean_mana_value'
                          : manaMode === 'value_draw' ? 'mean_mana'
