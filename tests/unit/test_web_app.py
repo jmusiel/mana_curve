@@ -876,6 +876,170 @@ class TestDeckViewPOST:
         assert b"navigateToSim" in response.data
 
 
+class TestAnnotateAPI:
+    """Tests for POST /sim/<deck_name>/annotate endpoint."""
+
+    def _mock_deck(self, monkeypatch, tmp_path):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.simulation.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        return root
+
+    def test_annotate_returns_ok(self, client, tmp_path, monkeypatch):
+        """Valid annotation POST returns ok (DB persistence is best-effort)."""
+        self._mock_deck(monkeypatch, tmp_path)
+        payload = {
+            "card_name": "Sol Ring",
+            "effects": {"categories": [{"category": "ramp", "immediate": False, "producer": {"mana_amount": 2}}]},
+            "source": "human",
+            "session_id": "test-session-123",
+        }
+        response = client.post(
+            "/sim/testdeck/annotate",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+
+    def test_annotate_missing_card_name_returns_400(self, client, tmp_path, monkeypatch):
+        """POST without card_name returns 400."""
+        self._mock_deck(monkeypatch, tmp_path)
+        response = client.post(
+            "/sim/testdeck/annotate",
+            data=json.dumps({"effects": {}}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["ok"] is False
+
+    def test_annotate_invalid_json_returns_400(self, client, tmp_path, monkeypatch):
+        """POST with invalid JSON returns 400."""
+        self._mock_deck(monkeypatch, tmp_path)
+        response = client.post(
+            "/sim/testdeck/annotate",
+            data="not json at all {{{",
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+
+    def test_annotate_defaults_source_to_human(self, client, tmp_path, monkeypatch):
+        """If source is omitted, it defaults to 'human'."""
+        self._mock_deck(monkeypatch, tmp_path)
+        payload = {"card_name": "Sol Ring", "effects": {"categories": []}}
+        response = client.post(
+            "/sim/testdeck/annotate",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+
+
+class TestEffectsToOverrideRoundTrip:
+    """Test that _effects_to_override output can be consumed by _translate_category."""
+
+    def test_produce_mana_round_trips(self):
+        from auto_goldfish.effects.builtin import ProduceMana
+        from auto_goldfish.effects.json_loader import _translate_category
+        from auto_goldfish.effects.registry import CardEffects
+        from auto_goldfish.web.routes.simulation import _effects_to_override
+
+        effects = CardEffects(on_play=[ProduceMana(amount=2)])
+        override = _effects_to_override(effects)
+        # Verify the override can be parsed back
+        for cat in override["categories"]:
+            translated_effects, meta = _translate_category(cat)
+            assert len(translated_effects) > 0
+
+    def test_draw_cards_round_trips(self):
+        from auto_goldfish.effects.builtin import DrawCards
+        from auto_goldfish.effects.json_loader import _translate_category
+        from auto_goldfish.effects.registry import CardEffects
+        from auto_goldfish.web.routes.simulation import _effects_to_override
+
+        effects = CardEffects(on_play=[DrawCards(amount=3)])
+        override = _effects_to_override(effects)
+        for cat in override["categories"]:
+            translated_effects, meta = _translate_category(cat)
+            assert len(translated_effects) > 0
+
+    def test_land_to_battlefield_round_trips(self):
+        from auto_goldfish.effects.builtin import LandToBattlefield
+        from auto_goldfish.effects.json_loader import _translate_category
+        from auto_goldfish.effects.registry import CardEffects
+        from auto_goldfish.web.routes.simulation import _effects_to_override
+
+        effects = CardEffects(on_play=[LandToBattlefield(count=1, tapped=True)])
+        override = _effects_to_override(effects)
+        for cat in override["categories"]:
+            translated_effects, meta = _translate_category(cat)
+            assert len(translated_effects) > 0
+
+    def test_reduce_cost_round_trips(self):
+        from auto_goldfish.effects.builtin import ReduceCost
+        from auto_goldfish.effects.json_loader import _translate_category
+        from auto_goldfish.effects.registry import CardEffects
+        from auto_goldfish.web.routes.simulation import _effects_to_override
+
+        effects = CardEffects(on_play=[ReduceCost(spell_type="creature", amount=1)])
+        override = _effects_to_override(effects)
+        for cat in override["categories"]:
+            translated_effects, meta = _translate_category(cat)
+            assert len(translated_effects) > 0
+
+    def test_per_turn_draw_round_trips(self):
+        from auto_goldfish.effects.builtin import PerTurnDraw
+        from auto_goldfish.effects.json_loader import _translate_category
+        from auto_goldfish.effects.registry import CardEffects
+        from auto_goldfish.web.routes.simulation import _effects_to_override
+
+        effects = CardEffects(per_turn=[PerTurnDraw(amount=1)])
+        override = _effects_to_override(effects)
+        for cat in override["categories"]:
+            translated_effects, meta = _translate_category(cat)
+            assert len(translated_effects) > 0
+
+    def test_per_cast_draw_round_trips(self):
+        from auto_goldfish.effects.builtin import PerCastDraw
+        from auto_goldfish.effects.json_loader import _translate_category
+        from auto_goldfish.effects.registry import CardEffects
+        from auto_goldfish.web.routes.simulation import _effects_to_override
+
+        effects = CardEffects(cast_trigger=[PerCastDraw(amount=1, trigger="creature")])
+        override = _effects_to_override(effects)
+        for cat in override["categories"]:
+            translated_effects, meta = _translate_category(cat)
+            assert len(translated_effects) > 0
+
+    def test_immediate_mana_round_trips(self):
+        from auto_goldfish.effects.builtin import ImmediateMana
+        from auto_goldfish.effects.json_loader import _translate_category
+        from auto_goldfish.effects.registry import CardEffects
+        from auto_goldfish.web.routes.simulation import _effects_to_override
+
+        effects = CardEffects(on_play=[ImmediateMana(amount=3)])
+        override = _effects_to_override(effects)
+        for cat in override["categories"]:
+            translated_effects, meta = _translate_category(cat)
+            assert len(translated_effects) > 0
+
+    def test_discard_round_trips(self):
+        from auto_goldfish.effects.builtin import DiscardCards
+        from auto_goldfish.effects.json_loader import _translate_category
+        from auto_goldfish.effects.registry import CardEffects
+        from auto_goldfish.web.routes.simulation import _effects_to_override
+
+        effects = CardEffects(on_play=[DiscardCards(amount=1)])
+        override = _effects_to_override(effects)
+        for cat in override["categories"]:
+            translated_effects, meta = _translate_category(cat)
+            assert len(translated_effects) > 0
+
+
 class TestSimulationPOST:
     """Tests for POST /sim/<deck_name> with local deck data."""
 

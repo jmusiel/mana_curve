@@ -21,11 +21,14 @@ web/
 │   ├── simulate.html        # Config form + Pyodide simulation client
 │   ├── results.html         # Standalone results page
 │   └── partials/            # HTMX fragments (job_status, results_content, validation_error)
+├── wizard.py                # Card labeling wizard prioritization logic
 └── static/
     ├── style.css
     └── js/
         ├── pyodide_worker.js   # Web Worker: loads Pyodide, runs simulation
-        └── client_results.js   # Renders results tables, charts, replay viewer
+        ├── client_results.js   # Renders results tables, charts, replay viewer
+        ├── deck_store.js       # localStorage CRUD for deck data
+        └── labeler_wizard.js   # Pure logic for card labeler decision tree (testable)
 ```
 
 ## How Simulation Works
@@ -44,6 +47,7 @@ All simulation runs client-side via Pyodide (CPython in WebAssembly):
 |--------|------|-------------|
 | GET | `/sim/<deck>` | Config page with effect editor |
 | POST | `/sim/<deck>/overrides` | Save card effect overrides |
+| POST | `/sim/<deck>/annotate` | Save card annotation (fire-and-forget, DB optional) |
 | GET | `/sim/api/<deck>/deck` | Deck card list (JSON) |
 | GET | `/sim/api/<deck>/effects` | Merged effect overrides + registry (JSON) |
 | POST | `/sim/api/<deck>/results` | Persist client-side simulation results |
