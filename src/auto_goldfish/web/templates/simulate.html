@@ -213,16 +213,7 @@
         </div>
     </div>
 
-    <!-- Card Optimization Toggle -->
-    <div class="form-group" style="margin-top: 0.5rem;">
-        <label class="toggle-label">
-            <input type="checkbox" id="card-optimization-toggle">
-            <strong>Draw/Ramp Optimization</strong>
-            <span class="hint">Enumerate generic draw and ramp cards to find optimal configurations</span>
-        </label>
-    </div>
-
-    <div id="card-optimization-settings" style="display:none; margin-top: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px;">
+    <div id="card-optimization-settings" style="margin-top: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px;">
         <div class="form-row">
             <div class="form-group">
                 <label for="sims-per-enum">Max sims per candidate</label>
@@ -239,6 +230,7 @@
             <div class="form-group" style="margin-bottom:0.5rem;">
                 <label for="max-draw-additions">Max draw cards to add</label>
                 <select id="max-draw-additions">
+                    <option value="0">0</option>
                     <option value="1">1</option>
                     <option value="2" selected>2</option>
                     <option value="3">3</option>
@@ -262,6 +254,7 @@
             <div class="form-group" style="margin-bottom:0.5rem;">
                 <label for="max-ramp-additions">Max ramp cards to add</label>
                 <select id="max-ramp-additions">
+                    <option value="0">0</option>
                     <option value="1">1</option>
                     <option value="2" selected>2</option>
                     <option value="3">3</option>
@@ -1599,45 +1592,37 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
         const landCounts = maxLands - minLands + 1;
         const msPerSim = 3; // ~3ms per sim on modern hardware
 
-        const optEnabled = document.getElementById('card-optimization-toggle').checked;
-        if (optEnabled) {
-            const simsPerEnum = parseInt(document.getElementById('sims-per-enum').value) || 200;
-            // Count enabled candidates
-            var drawCount = 0, rampCount = 0;
-            document.querySelectorAll('#card-optimization-settings [data-candidate]').forEach(function(cb) {
-                if (!cb.checked) return;
-                var cid = cb.dataset.candidate;
-                if (cid === 'draw_custom' || cid === 'ramp_custom') return;
-                if (cid.startsWith('draw_')) drawCount++;
-                else if (cid.startsWith('ramp_')) rampCount++;
-            });
-            // combinations_with_replacement(n, k) = C(n+k-1, k)
-            function combsWR(n, k) {
-                if (n === 0 || k === 0) return 1;
-                var result = 1;
-                for (var i = 0; i < k; i++) result = result * (n + k - 1 - i) / (i + 1);
-                return Math.round(result);
-            }
-            var maxDraw = parseInt(document.getElementById('max-draw-additions').value) || 2;
-            var maxRamp = parseInt(document.getElementById('max-ramp-additions').value) || 2;
-            var drawCombos = 1, rampCombos = 1;
-            for (var k = 1; k <= maxDraw; k++) drawCombos += combsWR(drawCount, k);
-            for (var k = 1; k <= maxRamp; k++) rampCombos += combsWR(rampCount, k);
-            var totalConfigs = landCounts * drawCombos * rampCombos;
-            var finalTopK = 5;
-
-            var enumSeconds = Math.ceil((simsPerEnum * totalConfigs * msPerSim) / 1000);
-            var evalSeconds = Math.ceil((sims * finalTopK * msPerSim) / 1000);
-            document.getElementById('local-sim-estimate').textContent =
-                'Estimated time: ~' + (enumSeconds + evalSeconds) + 's ('
-                + totalConfigs + ' configs x ' + simsPerEnum + ' sims + '
-                + finalTopK + ' top x ' + sims + ' sims).';
-        } else {
-            var estSeconds = Math.ceil((sims * landCounts * msPerSim) / 1000);
-            document.getElementById('local-sim-estimate').textContent =
-                'Estimated time: ~' + estSeconds + 's for '
-                + sims + ' sims x ' + landCounts + ' land counts.';
+        const simsPerEnum = parseInt(document.getElementById('sims-per-enum').value) || 200;
+        // Count enabled candidates
+        var drawCount = 0, rampCount = 0;
+        document.querySelectorAll('#card-optimization-settings [data-candidate]').forEach(function(cb) {
+            if (!cb.checked) return;
+            var cid = cb.dataset.candidate;
+            if (cid === 'draw_custom' || cid === 'ramp_custom') return;
+            if (cid.startsWith('draw_')) drawCount++;
+            else if (cid.startsWith('ramp_')) rampCount++;
+        });
+        // combinations_with_replacement(n, k) = C(n+k-1, k)
+        function combsWR(n, k) {
+            if (n === 0 || k === 0) return 1;
+            var result = 1;
+            for (var i = 0; i < k; i++) result = result * (n + k - 1 - i) / (i + 1);
+            return Math.round(result);
         }
+        var maxDraw = parseInt(document.getElementById('max-draw-additions').value) || 0;
+        var maxRamp = parseInt(document.getElementById('max-ramp-additions').value) || 0;
+        var drawCombos = 1, rampCombos = 1;
+        for (var k = 1; k <= maxDraw; k++) drawCombos += combsWR(drawCount, k);
+        for (var k = 1; k <= maxRamp; k++) rampCombos += combsWR(rampCount, k);
+        var totalConfigs = landCounts * drawCombos * rampCombos;
+        var finalTopK = 5;
+
+        var enumSeconds = Math.ceil((simsPerEnum * totalConfigs * msPerSim) / 1000);
+        var evalSeconds = Math.ceil((sims * finalTopK * msPerSim) / 1000);
+        document.getElementById('local-sim-estimate').textContent =
+            'Estimated time: ~' + (enumSeconds + evalSeconds) + 's ('
+            + totalConfigs + ' configs x ' + simsPerEnum + ' sims + '
+            + finalTopK + ' top x ' + sims + ' sims).';
     }
 
     async function initWorker() {
@@ -1815,16 +1800,12 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
             const seedVal = document.getElementById('seed').value.trim();
             if (seedVal) config.seed = parseInt(seedVal);
 
-            // Check if card optimization is enabled
             const optConfig = collectOptimizationConfig();
-            let workerType = 'run';
-            if (optConfig) {
-                Object.assign(config, optConfig);
-                workerType = 'run_optimization';
-            }
+            Object.assign(config, optConfig);
+            const workerType = 'run_optimization';
 
             lastConfig = config;
-            jobStatus.innerHTML = '<div class="job-status"><p>Starting ' + (optConfig ? 'optimization' : 'simulation') + '...</p></div>';
+            jobStatus.innerHTML = '<div class="job-status"><p>Starting optimization...</p></div>';
             worker.postMessage({
                 type: workerType,
                 deckJson: JSON.stringify(deckData),
@@ -1843,11 +1824,6 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
     document.getElementById('max-draw-additions').addEventListener('change', updateEstimate);
     document.getElementById('max-ramp-additions').addEventListener('change', updateEstimate);
 
-    // Card optimization toggle
-    document.getElementById('card-optimization-toggle').addEventListener('change', function() {
-        document.getElementById('card-optimization-settings').style.display = this.checked ? 'block' : 'none';
-        updateEstimate();
-    });
     document.getElementById('sims-per-enum').addEventListener('input', updateEstimate);
     document.querySelectorAll('#card-optimization-settings [data-candidate]').forEach(function(cb) {
         cb.addEventListener('change', updateEstimate);
@@ -1864,16 +1840,12 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
     });
 
     function collectOptimizationConfig() {
-        if (!document.getElementById('card-optimization-toggle').checked) return null;
-
         const enabledCandidates = [];
         document.querySelectorAll('#card-optimization-settings [data-candidate]').forEach(function(cb) {
             if (cb.checked && cb.dataset.candidate !== 'draw_custom' && cb.dataset.candidate !== 'ramp_custom') {
                 enabledCandidates.push(cb.dataset.candidate);
             }
         });
-
-        if (enabledCandidates.length === 0) return null;
 
         const optimizeTarget = document.getElementById('optimize-target').value;
         const manaMode = document.getElementById('mana-mode').value;
@@ -1892,8 +1864,8 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
             swap_mode: document.getElementById('swap-mode').checked,
             sims_per_enum: parseInt(document.getElementById('sims-per-enum').value) || 200,
             enabled_candidates: enabledCandidates,
-            max_draw_additions: parseInt(document.getElementById('max-draw-additions').value) || 2,
-            max_ramp_additions: parseInt(document.getElementById('max-ramp-additions').value) || 2,
+            max_draw_additions: parseInt(document.getElementById('max-draw-additions').value) || 0,
+            max_ramp_additions: parseInt(document.getElementById('max-ramp-additions').value) || 0,
         };
 
         // Custom draw
