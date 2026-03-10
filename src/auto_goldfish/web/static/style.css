@@ -590,7 +590,8 @@ a:hover { text-decoration: underline; }
     background: #f8f9fa;
     color: #cbd5e1;
 }
-.labeler-tag-active {
+.labeler-tag-active,
+.labeler-card-info .labeler-tag-active {
     background: #3b82f6;
     border-color: #3b82f6;
     color: #fff;
