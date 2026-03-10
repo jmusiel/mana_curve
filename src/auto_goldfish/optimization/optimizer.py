@@ -39,7 +39,7 @@ class DeckOptimizer:
         max_draw: Maximum number of draw candidates to add (0-2).
         max_ramp: Maximum number of ramp candidates to add (0-2).
         land_range: Land delta range (-land_range to +land_range).
-        optimize_for: Target metric - "mean_mana" or "consistency".
+        optimize_for: Target metric - "mean_mana", "consistency", or "mean_spells_cast".
         sims_per_eval: Max simulations per config during enumeration.
             Higher values give more accurate rankings but take longer.
     """
@@ -294,6 +294,8 @@ class DeckOptimizer:
             return result.mean_mana_value
         if self.optimize_for == "mean_mana_total":
             return result.mean_mana_total
+        if self.optimize_for == "mean_spells_cast":
+            return result.mean_spells_cast
         return result.mean_mana
 
     def _extract_score_from_dict(self, result_dict: dict) -> float:
@@ -304,4 +306,6 @@ class DeckOptimizer:
             return result_dict.get("mean_mana_value", 0.0)
         if self.optimize_for == "mean_mana_total":
             return result_dict.get("mean_mana_total", 0.0)
+        if self.optimize_for == "mean_spells_cast":
+            return result_dict.get("mean_spells_cast", 0.0)
         return result_dict.get("mean_mana", 0.0)
