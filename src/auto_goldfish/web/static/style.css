@@ -747,11 +747,12 @@ h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
     overflow: hidden;
     margin-bottom: 0.5rem;
 }
-.progress-bar {
+.progress-bar-container .progress-bar {
     height: 100%;
     background: #2563eb;
     border-radius: 4px;
     transition: width 0.2s ease;
+    margin: 0;
 }
 .job-status.error p {
     color: #dc2626;
