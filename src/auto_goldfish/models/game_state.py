@@ -68,3 +68,6 @@ class GameState:
     # References to the decklist (set by engine, used by module-level helpers)
     decklist: List[Card] = field(default_factory=list, repr=False)
     deckdict: dict = field(default_factory=dict, repr=False)
+
+    # Card play algorithm settings (set by engine from Goldfisher config)
+    min_cost_floor: int = 1

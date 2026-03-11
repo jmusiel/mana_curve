@@ -65,6 +65,10 @@ def run_simulation(
         mulligan_strategy = CurveAwareMulligan()
 
     mana_mode = config.get("mana_mode", "value")
+    spell_priority = config.get("spell_priority", "priority_then_cmc")
+    mana_efficiency = config.get("mana_efficiency", "greedy")
+    ramp_cutoff_turn = config.get("ramp_cutoff_turn", 0)
+    min_cost_floor = config.get("min_cost_floor", 1)
 
     goldfisher = Goldfisher(
         deck_list,
@@ -77,6 +81,10 @@ def run_simulation(
         mulligan_strategy=mulligan_strategy,
         registry=registry,
         mana_mode=mana_mode,
+        spell_priority=spell_priority,
+        mana_efficiency=mana_efficiency,
+        ramp_cutoff_turn=ramp_cutoff_turn,
+        min_cost_floor=min_cost_floor,
     )
 
     # Determine land range
@@ -170,6 +178,10 @@ def run_optimization(
         mulligan_strategy = CurveAwareMulligan()
 
     mana_mode = config.get("mana_mode", "value")
+    spell_priority = config.get("spell_priority", "priority_then_cmc")
+    mana_efficiency = config.get("mana_efficiency", "greedy")
+    ramp_cutoff_turn = config.get("ramp_cutoff_turn", 0)
+    min_cost_floor = config.get("min_cost_floor", 1)
     sims_per_eval = config.get("sims_per_enum", max(sims // 2, 100))
 
     goldfisher = Goldfisher(
@@ -183,6 +195,10 @@ def run_optimization(
         mulligan_strategy=mulligan_strategy,
         registry=registry,
         mana_mode=mana_mode,
+        spell_priority=spell_priority,
+        mana_efficiency=mana_efficiency,
+        ramp_cutoff_turn=ramp_cutoff_turn,
+        min_cost_floor=min_cost_floor,
     )
 
     # Build enabled candidates dict

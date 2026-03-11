@@ -392,6 +392,67 @@ a:hover { text-decoration: underline; }
     border-color: #86efac;
 }
 
+/* Collapsible settings groups */
+.settings-group {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+}
+.settings-group > summary {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #475569;
+    cursor: pointer;
+    list-style: revert;
+}
+.settings-group > summary:hover { color: #1e293b; }
+.settings-group .form-row:first-of-type { margin-top: 0.75rem; }
+
+/* Info tooltip icon */
+.info-tip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    font-size: 0.7rem;
+    font-style: normal;
+    font-weight: 700;
+    color: #94a3b8;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 50%;
+    cursor: help;
+    position: relative;
+    vertical-align: middle;
+    margin-left: 0.3rem;
+    flex-shrink: 0;
+}
+.info-tip:hover {
+    color: #475569;
+    border-color: #475569;
+}
+.info-tip:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    color: #f8fafc;
+    font-size: 0.78rem;
+    font-weight: 400;
+    line-height: 1.4;
+    padding: 0.45rem 0.65rem;
+    border-radius: 6px;
+    white-space: normal;
+    width: max-content;
+    max-width: 260px;
+    z-index: 100;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
 /* Effects editor */
 .effects-editor {
     background: #fff;

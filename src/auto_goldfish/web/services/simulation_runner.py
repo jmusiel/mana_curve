@@ -113,6 +113,10 @@ class SimulationRunner:
                 mulligan_strategy=mulligan_strategy,
                 registry=registry,
                 mana_mode=job.config.get("mana_mode", "value"),
+                spell_priority=job.config.get("spell_priority", "priority_then_cmc"),
+                mana_efficiency=job.config.get("mana_efficiency", "greedy"),
+                ramp_cutoff_turn=job.config.get("ramp_cutoff_turn", 0),
+                min_cost_floor=job.config.get("min_cost_floor", 1),
             )
 
             if job.config.get("optimization_enabled"):
