@@ -38,6 +38,17 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mulligan", type=str, default="default",
                         choices=["default", "curve_aware"],
                         help="Mulligan strategy (default or curve_aware)")
+    parser.add_argument("--spell_priority", type=str, default="priority_then_cmc",
+                        choices=["priority_then_cmc", "ramp_first", "value_first",
+                                 "highest_cmc_first", "draw_first"],
+                        help="Spell play priority mode")
+    parser.add_argument("--mana_efficiency", type=str, default="greedy",
+                        choices=["greedy", "mana_efficient", "spell_count"],
+                        help="Mana efficiency mode for card selection")
+    parser.add_argument("--ramp_cutoff_turn", type=int, default=0,
+                        help="Deprioritize ramp after this turn (0 = always play ramp)")
+    parser.add_argument("--min_cost_floor", type=int, default=1, choices=[0, 1],
+                        help="Minimum spell cost after reductions (0 or 1)")
     return parser
 
 

@@ -133,43 +133,20 @@
 
     <input type="hidden" id="effect-overrides-input" value="{}">
 
-    <!-- Shared Parameters -->
+    <!-- Core Parameters (always visible) -->
     <div class="form-row">
         <div class="form-group">
-            <label for="turns">Turns (max {{ max_turns }})</label>
+            <label for="turns">Turns (max {{ max_turns }}) <span class="info-tip" data-tip="Number of turns to simulate each game. More turns means longer games but slower simulations.">i</span></label>
             <input type="number" id="turns" name="turns" value="10" min="1" max="{{ max_turns }}">
         </div>
         <div class="form-group">
-            <label for="sims" id="sims-label">Simulations per evaluation (max {{ max_sims }})</label>
+            <label for="sims" id="sims-label">Simulations per evaluation (max {{ max_sims }}) <span class="info-tip" data-tip="Number of games simulated per land count. More sims give more accurate results but take longer.">i</span></label>
             <input type="number" id="sims" name="sims" value="1000" min="100" max="{{ max_sims }}" step="100">
         </div>
     </div>
     <div class="form-row">
         <div class="form-group">
-            <label for="seed">Seed (optional)</label>
-            <input type="number" id="seed" name="seed" placeholder="Random">
-        </div>
-        <div class="form-group">
-            <label for="mulligan">Mulligan Strategy</label>
-            <select id="mulligan" name="mulligan">
-                <option value="default" selected>Default (3-4 lands)</option>
-                <option value="curve_aware">Curve Aware</option>
-            </select>
-        </div>
-    </div>
-    <div class="form-row">
-        <div class="form-group">
-            <label for="record_results">Record Detail Level</label>
-            <select id="record_results" name="record_results">
-                <option value="quartile" selected>Quartile</option>
-                <option value="decile">Decile</option>
-                <option value="centile">Centile</option>
-            </select>
-        </div>
-    </div>
-    <div class="form-row">
-        <div class="form-group">
-            <label for="mana-mode">Consider mana spent on</label>
+            <label for="mana-mode">Consider mana spent on <span class="info-tip" data-tip="Which spell types count toward the 'mana spent' metric. Value-only ignores ramp/draw costs; Total counts everything.">i</span></label>
             <select id="mana-mode" name="mana_mode">
                 <option value="value" selected>Value spells only</option>
                 <option value="value_draw">Value + Draw spells</option>
@@ -177,7 +154,7 @@
             </select>
         </div>
         <div class="form-group">
-            <label for="optimize-target">Optimize for</label>
+            <label for="optimize-target">Optimize for <span class="info-tip" data-tip="The metric used to rank land counts and card candidates. Mana maximizes total mana spent; Consistency minimizes bad turns.">i</span></label>
             <select id="optimize-target" name="optimize_target">
                 <option value="mana" selected>Mana</option>
                 <option value="consistency">Consistency</option>
@@ -220,22 +197,10 @@
         </div>
     </div>
 
-    <div id="card-optimization-settings" style="margin-top: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px;">
+    <div id="card-optimization-settings" style="margin-top: 0.5rem;">
         <div class="form-row">
             <div class="form-group">
-                <label for="sims-per-enum">Max sims per candidate</label>
-                <input type="number" id="sims-per-enum" value="200" min="50" max="{{ max_sims }}" step="50">
-            </div>
-        </div>
-        <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
-            <input type="checkbox" id="swap-mode" style="width:auto;">
-            Swap mode (replace no-effect cards instead of adding)
-        </label>
-
-        <fieldset style="margin: 0.5rem 0; padding: 0.5rem;">
-            <legend>Draw Candidates to Enumerate</legend>
-            <div class="form-group" style="margin-bottom:0.5rem;">
-                <label for="max-draw-additions">Max draw cards to add</label>
+                <label for="max-draw-additions">Max draw cards to add <span class="info-tip" data-tip="Maximum number of draw-effect cards the optimizer will try adding to the deck.">i</span></label>
                 <select id="max-draw-additions">
                     <option value="0">0</option>
                     <option value="1">1</option>
@@ -243,6 +208,19 @@
                     <option value="3">3</option>
                 </select>
             </div>
+            <div class="form-group">
+                <label for="max-ramp-additions">Max ramp cards to add <span class="info-tip" data-tip="Maximum number of ramp-effect cards the optimizer will try adding to the deck.">i</span></label>
+                <select id="max-ramp-additions">
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                    <option value="2" selected>2</option>
+                    <option value="3">3</option>
+                </select>
+            </div>
+        </div>
+
+        <details class="settings-group">
+            <summary>Draw Candidates</summary>
             <label style="display:block;"><input type="checkbox" checked data-candidate="draw_1cmc_1"> 1 Mana Draw 1</label>
             <label style="display:block;"><input type="checkbox" data-candidate="draw_2cmc_1"> 2 Mana Draw 1</label>
             <label style="display:block;"><input type="checkbox" checked data-candidate="draw_2cmc_2"> 2 Mana Draw 2</label>
@@ -254,19 +232,10 @@
                 mana, draw
                 <input type="number" id="custom-draw-amount" placeholder="N" min="1" max="5" style="width:50px" disabled>
             </label>
-        </fieldset>
+        </details>
 
-        <fieldset style="margin: 0.5rem 0; padding: 0.5rem;">
-            <legend>Ramp Candidates to Enumerate</legend>
-            <div class="form-group" style="margin-bottom:0.5rem;">
-                <label for="max-ramp-additions">Max ramp cards to add</label>
-                <select id="max-ramp-additions">
-                    <option value="0">0</option>
-                    <option value="1">1</option>
-                    <option value="2" selected>2</option>
-                    <option value="3">3</option>
-                </select>
-            </div>
+        <details class="settings-group">
+            <summary>Ramp Candidates</summary>
             <label style="display:block;"><input type="checkbox" checked data-candidate="ramp_2cmc_1"> 2 Mana Ramp +1</label>
             <label style="display:block;"><input type="checkbox" data-candidate="ramp_3cmc_1"> 3 Mana Ramp +1</label>
             <label style="display:block;"><input type="checkbox" checked data-candidate="ramp_4cmc_2"> 4 Mana Ramp +2</label>
@@ -276,8 +245,92 @@
                 mana, ramp +
                 <input type="number" id="custom-ramp-amount" placeholder="N" min="1" max="5" style="width:50px" disabled>
             </label>
-        </fieldset>
+        </details>
     </div>
+
+    <!-- Play Strategy (collapsible) -->
+    <details class="settings-group">
+        <summary>Play Strategy</summary>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="mulligan">Mulligan Strategy <span class="info-tip" data-tip="How the simulator decides whether to mulligan an opening hand. Default keeps 3-4 land hands; Curve Aware also considers spell costs.">i</span></label>
+                <select id="mulligan" name="mulligan">
+                    <option value="default" selected>Default (3-4 lands)</option>
+                    <option value="curve_aware">Curve Aware</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="spell-priority">Spell Priority <span class="info-tip" data-tip="The order in which spells are considered for casting each turn. Ramp/Draw First prioritizes those categories; Highest CMC plays expensive spells first.">i</span></label>
+                <select id="spell-priority" name="spell_priority">
+                    <option value="priority_then_cmc" selected>Default (Priority + CMC)</option>
+                    <option value="ramp_first">Ramp First</option>
+                    <option value="draw_first">Draw First</option>
+                    <option value="value_first">Value First</option>
+                    <option value="highest_cmc_first">Highest CMC First</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="mana-efficiency">Mana Efficiency <span class="info-tip" data-tip="How the simulator selects which combination of spells to cast. Greedy plays them in priority order; Maximize Mana Spent uses a knapsack solver to waste the least mana; Maximize Spell Count casts as many spells as possible.">i</span></label>
+                <select id="mana-efficiency" name="mana_efficiency">
+                    <option value="greedy" selected>Greedy (default)</option>
+                    <option value="mana_efficient">Maximize Mana Spent</option>
+                    <option value="spell_count">Maximize Spell Count</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="ramp-cutoff-turn">Ramp Cutoff Turn <span class="info-tip" data-tip="After this turn, ramp spells are deprioritized so value spells are cast first. Set to 'Always play ramp' to never deprioritize.">i</span></label>
+                <select id="ramp-cutoff-turn" name="ramp_cutoff_turn">
+                    <option value="0" selected>Always play ramp</option>
+                    <option value="3">After turn 3</option>
+                    <option value="4">After turn 4</option>
+                    <option value="5">After turn 5</option>
+                    <option value="6">After turn 6</option>
+                    <option value="7">After turn 7</option>
+                    <option value="8">After turn 8</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="min-cost-floor">Min Spell Cost <span class="info-tip" data-tip="The minimum mana cost a spell can be reduced to by cost-reduction effects. Set to 0 to allow spells to become free.">i</span></label>
+                <select id="min-cost-floor" name="min_cost_floor">
+                    <option value="1" selected>1 (default)</option>
+                    <option value="0">0 (allow free spells)</option>
+                </select>
+            </div>
+        </div>
+    </details>
+
+    <!-- Advanced (collapsible) -->
+    <details class="settings-group">
+        <summary>Advanced</summary>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="seed">Seed (optional) <span class="info-tip" data-tip="Fixed random seed for reproducible results. Leave empty for a random seed each run.">i</span></label>
+                <input type="number" id="seed" name="seed" placeholder="Random">
+            </div>
+            <div class="form-group">
+                <label for="record_results">Record Detail Level <span class="info-tip" data-tip="Granularity of recorded mana distribution percentiles. Quartile is fastest; Centile gives the most detail.">i</span></label>
+                <select id="record_results" name="record_results">
+                    <option value="quartile" selected>Quartile</option>
+                    <option value="decile">Decile</option>
+                    <option value="centile">Centile</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="sims-per-enum">Max sims per candidate <span class="info-tip" data-tip="Number of simulations run for each draw/ramp candidate combination during optimization. Higher values give more accurate comparisons but take longer.">i</span></label>
+                <input type="number" id="sims-per-enum" value="200" min="50" max="{{ max_sims }}" step="50">
+            </div>
+        </div>
+        <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+            <input type="checkbox" id="swap-mode" style="width:auto;">
+            Swap mode <span class="info-tip" data-tip="Instead of adding draw/ramp candidates to the deck, replace existing cards that have no registered effects.">i</span>
+        </label>
+    </details>
 
     <small class="hint" id="local-sim-hint">
         Simulation runs in your browser via WebAssembly.
@@ -1563,6 +1616,10 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
                 max_lands: parseInt(document.getElementById('max_lands').value),
                 record_results: document.getElementById('record_results').value || 'quartile',
                 mulligan: document.getElementById('mulligan').value || 'default',
+                spell_priority: document.getElementById('spell-priority').value || 'priority_then_cmc',
+                mana_efficiency: document.getElementById('mana-efficiency').value || 'greedy',
+                ramp_cutoff_turn: parseInt(document.getElementById('ramp-cutoff-turn').value) || 0,
+                min_cost_floor: parseInt(document.getElementById('min-cost-floor').value),
                 mana_mode: document.getElementById('mana-mode').value || 'value',
                 effect_overrides: mergedOverrides,
             };

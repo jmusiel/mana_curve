@@ -129,7 +129,8 @@ class Card:
             cost -= game_state.creature_cost_reduction
         if self.enchantment:
             cost -= game_state.enchantment_cost_reduction
-        return max(1, cost)
+        floor = getattr(game_state, "min_cost_floor", 1)
+        return max(floor, cost)
 
     # -- ordering --------------------------------------------------------------
 

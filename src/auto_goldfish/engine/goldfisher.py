@@ -31,7 +31,9 @@ from auto_goldfish.effects.card_database import DEFAULT_REGISTRY
 from auto_goldfish.effects.registry import CardEffects, EffectRegistry
 from auto_goldfish.effects.types import CastTriggerEffect, ManaFunctionEffect, OnPlayEffect, PerTurnEffect
 from auto_goldfish.engine.mana import land_mana, mana_rocks
+from auto_goldfish.engine.mana_efficiency import VALID_MANA_EFFICIENCY_MODES, select_cards_to_play
 from auto_goldfish.engine.mulligan import DefaultMulligan, MulliganStrategy
+from auto_goldfish.engine.spell_priority import VALID_SPELL_PRIORITIES, get_spell_sort_key
 from auto_goldfish.models.card import Card
 from auto_goldfish.models.game_state import GameState
 
@@ -180,6 +182,7 @@ def _worker_run_batch(
     base_seed: int | None,
     game_offset: int,
     capture_replays: bool = False,
+    extra_config: dict | None = None,
 ) -> dict:
     """Top-level function for ProcessPoolExecutor workers.
 
@@ -192,9 +195,11 @@ def _worker_run_batch(
     happens later in ``_run_parallel`` once the full mana distribution
     is available.
     """
+    extra_config = extra_config or {}
     gf = Goldfisher(
         deck_dicts, turns=turns, sims=n_games,
         record_results=None, seed=base_seed,
+        **extra_config,
     )
     # Adjust seed offset so each batch uses the correct per-game seeds
     mana_spent = []
@@ -383,11 +388,34 @@ class Goldfisher:
         seed: int | None = None,
         workers: int = 1,
         mana_mode: str = "value",
+        spell_priority: str = "priority_then_cmc",
+        mana_efficiency: str = "greedy",
+        ramp_cutoff_turn: int = 0,
+        min_cost_floor: int = 1,
         **kwargs,
     ):
         if mana_mode not in ("value", "value_draw", "total"):
             raise ValueError(f"Invalid mana_mode: {mana_mode!r}. Must be 'value', 'value_draw', or 'total'.")
         self.mana_mode = mana_mode
+        if spell_priority not in VALID_SPELL_PRIORITIES:
+            raise ValueError(
+                f"Invalid spell_priority: {spell_priority!r}. "
+                f"Must be one of {VALID_SPELL_PRIORITIES}"
+            )
+        self.spell_priority = spell_priority
+        self._spell_sort_key = get_spell_sort_key(spell_priority)
+        if mana_efficiency not in VALID_MANA_EFFICIENCY_MODES:
+            raise ValueError(
+                f"Invalid mana_efficiency: {mana_efficiency!r}. "
+                f"Must be one of {VALID_MANA_EFFICIENCY_MODES}"
+            )
+        self.mana_efficiency = mana_efficiency
+        if ramp_cutoff_turn < 0:
+            raise ValueError(f"ramp_cutoff_turn must be >= 0, got {ramp_cutoff_turn}")
+        self.ramp_cutoff_turn = ramp_cutoff_turn
+        if min_cost_floor not in (0, 1):
+            raise ValueError(f"min_cost_floor must be 0 or 1, got {min_cost_floor}")
+        self.min_cost_floor = min_cost_floor
         self.registry = registry or DEFAULT_REGISTRY
         self.mulligan_strategy = mulligan_strategy or DefaultMulligan()
         self.turns = turns
@@ -495,6 +523,7 @@ class Goldfisher:
         state.card_cast_turn = [None] * len(self.decklist)
         state.decklist = self.decklist
         state.deckdict = self.deckdict
+        state.min_cost_floor = self.min_cost_floor
 
         # Place commanders in command zone
         for card in self.commanders:
@@ -604,7 +633,16 @@ class Goldfisher:
             if card.get_current_cost(state) <= available_mana and card.spell:
                 playables.append(card)
 
-        playables = sorted(playables)
+        if self._spell_sort_key is not None:
+            playables = sorted(playables, key=self._spell_sort_key)
+        else:
+            playables = sorted(playables)
+
+        # Ramp cutoff: after the cutoff turn, move ramp cards to lowest priority
+        if self.ramp_cutoff_turn and state.turn >= self.ramp_cutoff_turn:
+            non_ramp = [c for c in playables if not c.ramp]
+            ramp = [c for c in playables if c.ramp]
+            playables = ramp + non_ramp  # ramp at front = played last (reversed iteration)
 
         if state.should_log:
             playables_str = []
@@ -620,9 +658,11 @@ class Goldfisher:
     def _play_land(self, state: GameState) -> list[Card]:
         """Play lands from hand."""
         played = []
-        playable_lands = sorted(
-            [self.decklist[i] for i in state.hand if self.decklist[i].land]
-        )
+        land_cards = [self.decklist[i] for i in state.hand if self.decklist[i].land]
+        if self._spell_sort_key is not None:
+            playable_lands = sorted(land_cards, key=self._spell_sort_key)
+        else:
+            playable_lands = sorted(land_cards)
         for land in reversed(playable_lands):
             if state.played_land_this_turn < state.lands_per_turn:
                 land.change_zone(state.lands)
@@ -646,8 +686,46 @@ class Goldfisher:
                 break
         return played
 
+    def _play_card(self, card: Card, state: GameState) -> None:
+        """Play a single spell card, applying all effects."""
+        if card.spell and card.nonpermanent:
+            card.change_zone(state.yard)
+        elif card.spell and card.permanent:
+            card.change_zone(state.battlefield)
+
+        # Apply cast triggers from cards already in play
+        for trigger_data in state.cast_triggers:
+            trigger_card, trigger_eff = trigger_data
+            trigger_eff.cast_trigger(trigger_card, card, state)
+
+        # Register this card's effects
+        effects = card._cached_effects
+        if effects:
+            for eff in effects.cast_trigger:
+                state.cast_triggers.append((card, eff))
+            for eff in effects.per_turn:
+                state.per_turn_effects.append((card, eff))
+            for eff in effects.mana_function:
+                state.mana_functions.append(eff)
+
+        # Execute on_play effects
+        if state.should_log:
+            state.log.append(f"Played {card.printable}")
+        card.mana_spent_when_played = card.cmc
+        if card.creature:
+            state.creatures_played += 1
+        if card.enchantment:
+            state.enchantments_played += 1
+        if card.artifact:
+            state.artifacts_played += 1
+
+        if effects:
+            for eff in effects.on_play:
+                if isinstance(eff, OnPlayEffect):
+                    eff.on_play(card, state)
+
     def _play_spells(self, state: GameState) -> list[Card]:
-        """Play spells from hand using greedy approach."""
+        """Play spells from hand."""
         mana_available = self._get_mana(state) + state.treasure
         played_effects: list[Card] = []
 
@@ -657,47 +735,16 @@ class Goldfisher:
 
         playables = self._get_playables(state, mana_available)
         while playables:
-            for card in reversed(playables):
+            selected = select_cards_to_play(
+                self.mana_efficiency, playables, mana_available, state,
+            )
+            if not selected:
+                break
+            for card in selected:
                 cost = card.get_current_cost(state)
-                if cost <= mana_available:
-                    mana_available -= cost
-                    if card.spell and card.nonpermanent:
-                        card.change_zone(state.yard)
-                    elif card.spell and card.permanent:
-                        card.change_zone(state.battlefield)
-
-                    # Apply cast triggers from cards already in play
-                    for trigger_data in state.cast_triggers:
-                        trigger_card, trigger_eff = trigger_data
-                        trigger_eff.cast_trigger(trigger_card, card, state)
-
-                    # Register this card's effects
-                    effects = card._cached_effects
-                    if effects:
-                        for eff in effects.cast_trigger:
-                            state.cast_triggers.append((card, eff))
-                        for eff in effects.per_turn:
-                            state.per_turn_effects.append((card, eff))
-                        for eff in effects.mana_function:
-                            state.mana_functions.append(eff)
-
-                    # Execute on_play effects
-                    if state.should_log:
-                        state.log.append(f"Played {card.printable}")
-                    card.mana_spent_when_played = card.cmc
-                    if card.creature:
-                        state.creatures_played += 1
-                    if card.enchantment:
-                        state.enchantments_played += 1
-                    if card.artifact:
-                        state.artifacts_played += 1
-
-                    if effects:
-                        for eff in effects.on_play:
-                            if isinstance(eff, OnPlayEffect):
-                                eff.on_play(card, state)
-
-                    played_effects.append(card)
+                mana_available -= cost
+                self._play_card(card, state)
+                played_effects.append(card)
 
             played_effects.extend(self._play_land(state))
             mana_available += state.untapped_land_this_turn
@@ -939,9 +986,19 @@ class Goldfisher:
         dicts.extend(_card_to_dict(c) for c in self.decklist)
         return dicts
 
+    def _get_worker_config(self) -> dict:
+        """Collect algorithm settings that workers need to replicate."""
+        return {
+            "spell_priority": self.spell_priority,
+            "mana_efficiency": self.mana_efficiency,
+            "ramp_cutoff_turn": self.ramp_cutoff_turn,
+            "min_cost_floor": self.min_cost_floor,
+        }
+
     def _run_parallel(self) -> dict:
         """Run simulations across multiple worker processes."""
         deck_dicts = self._get_deck_dicts()
+        extra_config = self._get_worker_config()
         num_workers = min(self.workers, self.sims)
         batch_size = self.sims // num_workers
         remainder = self.sims % num_workers
@@ -956,6 +1013,7 @@ class Goldfisher:
                         _worker_run_batch,
                         deck_dicts, self.turns, n, self.seed, offset,
                         capture_replays=True,
+                        extra_config=extra_config,
                     )
                 )
                 offset += n
