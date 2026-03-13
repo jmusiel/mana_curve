@@ -161,8 +161,8 @@ def _make_results(land_counts=(37, 38)):
             "percentile_75": 9.0,
             "card_performance": {
                 "low_performing": [
-                    {"name": "Bad Card", "effects": "draws 1", "top_rate": 0.1, "low_rate": 0.4, "score": -0.3},
-                    {"name": "Effectless Card", "effects": "", "top_rate": 0.2, "low_rate": 0.3, "score": -0.1},
+                    {"name": "Bad Card", "effects": "draws 1", "mean_with": 8.0, "mean_without": 8.3, "score": -0.3},
+                    {"name": "Effectless Card", "effects": "", "mean_with": 8.1, "mean_without": 8.2, "score": -0.1},
                 ],
                 "high_performing": [],
             },

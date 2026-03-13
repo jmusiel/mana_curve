@@ -42,10 +42,17 @@ class DeckOptimizer:
         optimize_for: Target metric - "mean_mana", "consistency", or "mean_spells_cast".
         sims_per_eval: Max simulations per config during enumeration.
             Higher values give more accurate rankings but take longer.
+        eta: Halving rate for successive halving. Lower values (e.g. 2)
+            keep more candidates per round (less aggressive pruning).
+            Higher values (e.g. 4-5) prune harder. Default: 3.
+        min_sims: Minimum simulations per evaluation in any Hyperband round.
+            Higher values give more reliable early-round filtering at the
+            cost of fewer brackets. Default: 20.
+        hyperband_top_k: Number of survivors from Hyperband filtering before
+            final evaluation. If None, uses final_top_k from run().
+            Over-selecting (e.g. 10-15) and re-ranking with final_sims
+            can improve quality at modest extra cost.
     """
-
-    ETA = 3  # halving rate (standard Hyperband default)
-    MIN_SIMS = 20  # minimum useful simulation count per evaluation
 
     def __init__(
         self,
@@ -57,6 +64,9 @@ class DeckOptimizer:
         land_range: int = 2,
         optimize_for: str = "mean_mana",
         sims_per_eval: int = 500,
+        eta: int = 3,
+        min_sims: int = 20,
+        hyperband_top_k: Optional[int] = None,
     ) -> None:
         self.goldfisher = goldfisher
         self.candidates = candidates
@@ -66,6 +76,13 @@ class DeckOptimizer:
         self.land_range = land_range
         self.optimize_for = optimize_for
         self.sims_per_eval = sims_per_eval
+        self.ETA = eta
+        self.MIN_SIMS = min_sims
+        self.hyperband_top_k = hyperband_top_k
+
+        # Populated during run(): every (config, score, n_sims) from all
+        # Hyperband rounds across all brackets.
+        self.all_round_scores: List[Tuple[DeckConfig, float, int]] = []
 
     def run(
         self,
@@ -76,11 +93,17 @@ class DeckOptimizer:
     ) -> List[Tuple[DeckConfig, Any]]:
         """Run optimization and return ranked (config, result_dict) pairs.
 
-        Phase 1 (Hyperband): Efficiently narrow the full config space down
-        to the most promising candidates using multi-bracket successive halving.
+        Phase 1 (Hyperband): Explore the config space using multi-bracket
+        successive halving, collecting scores across all rounds.
 
-        Phase 2 (Final evaluation): Re-evaluate top candidates with full
-        simulation count for accurate final ranking.
+        Phase 2 (Regression selection): Fit a WLS regression model on
+        Hyperband data and predict the best configs from the full space.
+
+        Phase 3 (Final evaluation): Run full simulations on the
+        regression-predicted top configs for accurate final ranking.
+
+        The first result dict includes a ``feature_analysis`` key with
+        recommendations, marginal impact, and regression details.
 
         Args:
             final_sims: Simulations for final evaluation of top configs.
@@ -101,10 +124,28 @@ class DeckOptimizer:
 
         original_sims = self.goldfisher.sims
 
-        # Phase 1: Hyperband selection
-        top_configs = self._hyperband_select(configs, final_top_k, enum_progress)
+        # Phase 1: Hyperband exploration (collects all_round_scores)
+        self.all_round_scores = []
+        hb_top_k = self.hyperband_top_k if self.hyperband_top_k is not None else final_top_k
+        self._hyperband_select(configs, hb_top_k, enum_progress)
 
-        # Phase 2: Full evaluation of top configs
+        # Phase 2: Use regression to pick the best configs from the
+        # full config space, based on Hyperband round data
+        from auto_goldfish.optimization.feature_analysis import (
+            analyze_optimization,
+            predict_top_configs,
+        )
+
+        top_configs, _ = predict_top_configs(
+            self.all_round_scores, configs, top_k=final_top_k,
+        )
+
+        # Run feature analysis for UI display
+        self.feature_analysis = analyze_optimization(
+            self.all_round_scores, self.optimize_for,
+        )
+
+        # Phase 3: Full evaluation of regression-selected configs
         self.goldfisher.sims = final_sims
         from auto_goldfish.metrics.reporter import result_to_dict
 
@@ -112,7 +153,8 @@ class DeckOptimizer:
         for j, config in enumerate(top_configs):
             apply_config(self.goldfisher, config, self.candidates, self.swap_mode)
             result = self.goldfisher.simulate()
-            results.append((config, result_to_dict(result)))
+            result_dict = result_to_dict(result)
+            results.append((config, result_dict))
 
             if eval_progress is not None:
                 eval_progress(j + 1, len(top_configs))
@@ -121,6 +163,11 @@ class DeckOptimizer:
 
         # Sort final results by target metric
         results.sort(key=lambda r: self._extract_score_from_dict(r[1]), reverse=True)
+
+        # Attach feature analysis to the top-ranked result (after sorting)
+        if self.feature_analysis and results:
+            results[0][1]["feature_analysis"] = self.feature_analysis
+
         return results
 
     # -- Hyperband internals --
@@ -265,6 +312,7 @@ class DeckOptimizer:
             for config in current:
                 score = self._evaluate(config)
                 scored.append((config, score))
+                self.all_round_scores.append((config, score, r_i))
                 report(r_i)
 
             scored.sort(key=lambda x: x[1], reverse=True)

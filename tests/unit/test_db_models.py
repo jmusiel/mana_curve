@@ -195,13 +195,13 @@ class TestCardPerformanceRow:
 
         db_session.add(CardPerformanceRow(
             run_id=run.id, card_id=card.id,
-            top_rate=0.3, low_rate=0.1, score=0.2, rank=1,
+            mean_with=10.3, mean_without=10.1, score=0.2, rank=1,
         ))
         db_session.commit()
 
         db_session.add(CardPerformanceRow(
             run_id=run.id, card_id=card.id,
-            top_rate=0.3, low_rate=0.1, score=0.2, rank=1,
+            mean_with=10.3, mean_without=10.1, score=0.2, rank=1,
         ))
         with pytest.raises(IntegrityError):
             db_session.commit()

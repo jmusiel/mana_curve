@@ -151,20 +151,25 @@ class TestCoreMetrics:
 
 
 class TestConsistency:
-    """Tests for the consistency metric and its threshold."""
+    """Tests for the left-tail ratio consistency metric."""
 
     def test_consistency_range(self, sequential_result):
-        """Consistency should be between 0 and ~1.33 (theoretical max)."""
-        assert 0 < sequential_result.consistency <= 1.4
+        """Left-tail ratio should be between 0 and 1.0."""
+        assert 0 < sequential_result.consistency <= 1.0
 
     def test_con_threshold(self, sequential_result):
         assert sequential_result.con_threshold == 0.25
 
-    def test_threshold_percent_range(self, sequential_result):
-        assert 0 <= sequential_result.threshold_percent <= 1
+    def test_threshold_percent_equals_con_threshold(self, sequential_result):
+        assert sequential_result.threshold_percent == sequential_result.con_threshold
 
     def test_threshold_mana_positive(self, sequential_result):
+        """threshold_mana is the left-tail mean (mean of bottom quartile)."""
         assert sequential_result.threshold_mana >= 0
+
+    def test_threshold_mana_at_most_mean(self, sequential_result):
+        """Left-tail mean should be <= overall mean mana."""
+        assert sequential_result.threshold_mana <= sequential_result.mean_mana
 
 
 class TestConfidenceIntervals:
@@ -535,8 +540,7 @@ class TestCardPerformance:
         cp = sequential_result.card_performance
         assert "high_performing" in cp
         assert "low_performing" in cp
-        assert "total_top_games" in cp
-        assert "total_low_games" in cp
+        assert "total_games" in cp
 
     def test_high_performing_has_required_fields(self, sequential_result):
         for entry in sequential_result.card_performance["high_performing"]:
@@ -544,8 +548,8 @@ class TestCardPerformance:
             assert "cost" in entry
             assert "cmc" in entry
             assert "effects" in entry
-            assert "top_rate" in entry
-            assert "low_rate" in entry
+            assert "mean_with" in entry
+            assert "mean_without" in entry
             assert "score" in entry
 
     def test_high_performing_scores_nonnegative(self, sequential_result):
@@ -568,14 +572,14 @@ class TestCardPerformance:
         assert len(sequential_result.card_performance["high_performing"]) <= 10
         assert len(sequential_result.card_performance["low_performing"]) <= 10
 
-    def test_rates_between_0_and_1(self, sequential_result):
+    def test_mean_values_reasonable(self, sequential_result):
         for entries in (
             sequential_result.card_performance["high_performing"],
             sequential_result.card_performance["low_performing"],
         ):
             for entry in entries:
-                assert 0 <= entry["top_rate"] <= 1
-                assert 0 <= entry["low_rate"] <= 1
+                assert entry["mean_with"] >= 0
+                assert entry["mean_without"] >= 0
 
     def test_no_land_cards(self, sequential_result):
         """Card performance should not include land cards."""

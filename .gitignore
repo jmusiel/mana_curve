@@ -15,3 +15,4 @@ src/auto_goldfish/autocard/data/*.json
 !src/auto_goldfish/autocard/data/labeled_cards.json
 decks/**/*.json
 .env
+scripts/**/*.png

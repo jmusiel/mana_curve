@@ -54,13 +54,33 @@ def mean_mid_turns(records: List[GameRecord]) -> float:
 
 
 def consistency(records: List[GameRecord], threshold: float = 0.25) -> float:
-    """Consistency metric: how uniformly is mana distributed across games."""
-    import bisect
+    """Left-tail ratio consistency metric.
 
+    Computes the ratio of the mean mana spent in the worst-performing
+    fraction of games (defined by *threshold*) to the overall mean.
+    Higher values (closer to 1.0) indicate that bad games are not
+    significantly worse than the average game.
+
+    Parameters
+    ----------
+    records : list[GameRecord]
+        Per-game simulation records.
+    threshold : float
+        Fraction of games (sorted ascending) to treat as the "bad tail".
+        Default 0.25 (bottom quartile).
+
+    Returns
+    -------
+    float
+        ``mean(bottom threshold games) / mean(all games)``.
+        Range is 0.0 – 1.0 where 1.0 means perfect consistency.
+    """
     mana_list = [r.total_mana_spent for r in records]
-    total = float(np.sum(mana_list))
+    n = len(mana_list)
     sorted_mana = sorted(mana_list)
-    cumulative = np.cumsum(sorted_mana)
-    idx = bisect.bisect_left(cumulative, total * threshold)
-    frac = idx / len(mana_list)
-    return (1 - frac) / (1 - threshold)
+    cutoff = max(1, int(n * threshold))
+    tail_mean = float(np.mean(sorted_mana[:cutoff]))
+    overall_mean = float(np.mean(mana_list))
+    if overall_mean == 0:
+        return 1.0
+    return tail_mean / overall_mean

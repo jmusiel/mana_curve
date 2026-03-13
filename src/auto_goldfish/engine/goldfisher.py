@@ -215,6 +215,7 @@ def _worker_run_batch(
     mid_turns = []
     card_cast_turns: list[list] = [[] for _ in gf.decklist]
     played_cards_per_game: list[set] = []
+    drawn_cards_per_game: list[set] = []
 
     # Unclassified replay snapshots: list of (total_mana, replay_dict)
     raw_replays: list[tuple[int, dict]] = []
@@ -324,6 +325,12 @@ def _worker_run_batch(
                     game_played.add(k)
         played_cards_per_game.append(game_played)
 
+        # Cards drawn = all cards not still in deck or command zone
+        deck_set = set(state.deck) | set(state.command_zone)
+        game_drawn = {k for k in range(len(gf.decklist))
+                      if k not in deck_set and gf.decklist[k].spell and not gf.decklist[k].land}
+        drawn_cards_per_game.append(game_drawn)
+
         if _capture_this:
             raw_replays.append((game_mana_value, game_mana_draw, game_mana_ramp, total_mana_spent, {
                 "total_mana": total_mana_spent,
@@ -346,6 +353,7 @@ def _worker_run_batch(
         "mid_turns": mid_turns,
         "card_cast_turns": card_cast_turns,
         "played_cards_per_game": played_cards_per_game,
+        "drawn_cards_per_game": drawn_cards_per_game,
     }
     if capture_replays:
         result["raw_replays"] = raw_replays
@@ -625,8 +633,6 @@ class Goldfisher:
             card = self.decklist[i]
             if card.get_current_cost(state) <= available_mana and card.spell:
                 playables.append(card)
-                if state.card_cast_turn[i] is None:
-                    state.card_cast_turn[i] = state.turn + 1
 
         for i in state.command_zone:
             card = self.commanders[i]
@@ -708,10 +714,14 @@ class Goldfisher:
             for eff in effects.mana_function:
                 state.mana_functions.append(eff)
 
+        # Track when this card was actually cast
+        if not card.commander and state.card_cast_turn[card.index] is None:
+            state.card_cast_turn[card.index] = state.turn + 1
+
         # Execute on_play effects
         if state.should_log:
             state.log.append(f"Played {card.printable}")
-        card.mana_spent_when_played = card.cmc
+        card.mana_spent_when_played = card.get_current_cost(state)
         if card.creature:
             state.creatures_played += 1
         if card.enchantment:
@@ -901,59 +911,39 @@ class Goldfisher:
         self,
         mana_spent_list: list,
         played_cards_per_game: list[set],
+        drawn_cards_per_game: list[set] | None = None,
     ) -> Dict[str, Any]:
-        """Compute which cards are overrepresented in high/low performance games.
+        """Measure each card's causal impact on game quality.
 
-        Uses calibration sample (first 10%, min 100) to set quartile thresholds,
-        then classifies remaining games.
+        For each card, compares the average mana spent in games where the
+        card was drawn vs games where it was not. Since drawing is random
+        (shuffled deck), this is a natural experiment that isolates the
+        card's contribution from confounds like mana availability.
         """
-        if len(mana_spent_list) < 100:
+        if not drawn_cards_per_game or len(mana_spent_list) < 100:
             return {}
 
-        sample_size = int(max(len(mana_spent_list) / 10, 100))
-        if sample_size >= len(mana_spent_list):
-            return {}
-
-        calibration = mana_spent_list[:sample_size]
-        top_threshold = float(np.percentile(calibration, 75))
-        low_threshold = float(np.percentile(calibration, 25))
-
-        # Classify evaluation games
-        top_games = []
-        low_games = []
-        for i in range(sample_size, len(mana_spent_list)):
-            mana = mana_spent_list[i]
-            if mana >= top_threshold:
-                top_games.append(i)
-            if mana <= low_threshold:
-                low_games.append(i)
-
-        if not top_games or not low_games:
-            return {}
-
-        # Count card appearances in each bucket
-        card_top_count: Dict[int, int] = defaultdict(int)
-        card_low_count: Dict[int, int] = defaultdict(int)
-
-        for gi in top_games:
-            for card_idx in played_cards_per_game[gi]:
-                card_top_count[card_idx] += 1
-
-        for gi in low_games:
-            for card_idx in played_cards_per_game[gi]:
-                card_low_count[card_idx] += 1
-
-        n_top = len(top_games)
-        n_low = len(low_games)
+        n_games = len(mana_spent_list)
+        mana_arr = np.array(mana_spent_list, dtype=float)
+        overall_mean = float(np.mean(mana_arr))
 
         # Score each non-land spell card
         scores = []
         for k, card in enumerate(self.decklist):
             if card.land or not card.spell:
                 continue
-            top_rate = card_top_count.get(k, 0) / n_top
-            low_rate = card_low_count.get(k, 0) / n_low
-            score = top_rate - low_rate
+
+            # Split games into drawn vs not-drawn
+            drawn_mask = np.array([k in drawn_cards_per_game[i] for i in range(n_games)])
+            n_drawn = int(drawn_mask.sum())
+            n_not_drawn = n_games - n_drawn
+
+            if n_drawn < 20 or n_not_drawn < 20:
+                continue  # Need enough games in both groups
+
+            mean_with = float(np.mean(mana_arr[drawn_mask]))
+            mean_without = float(np.mean(mana_arr[~drawn_mask]))
+            impact = mean_with - mean_without
 
             effects_desc = ""
             if card._cached_effects:
@@ -964,9 +954,10 @@ class Goldfisher:
                 "cost": card.cost,
                 "cmc": card.cmc,
                 "effects": effects_desc,
-                "top_rate": round(top_rate, 4),
-                "low_rate": round(low_rate, 4),
-                "score": round(score, 4),
+                "mean_with": round(mean_with, 2),
+                "mean_without": round(mean_without, 2),
+                "score": round(impact, 4),
+                "drawn_pct": round(n_drawn / n_games, 4),
             })
 
         # Sort and pick top/bottom 10
@@ -976,8 +967,7 @@ class Goldfisher:
         return {
             "high_performing": high_performing,
             "low_performing": low_performing,
-            "total_top_games": n_top,
-            "total_low_games": n_low,
+            "total_games": n_games,
         }
 
     def _get_deck_dicts(self) -> list[dict]:
@@ -1024,6 +1014,7 @@ class Goldfisher:
             "hand_sum": [], "mulls": [], "lands_played": [],
             "cards_drawn": [], "spells_cast": [], "bad_turns": [], "mid_turns": [],
             "played_cards_per_game": [],
+            "drawn_cards_per_game": [],
         }
         card_cast_turns: list[list] = [[] for _ in self.decklist]
         all_raw_replays: list[tuple[int, dict]] = []
@@ -1037,6 +1028,7 @@ class Goldfisher:
             for k, turns_list in enumerate(batch["card_cast_turns"]):
                 card_cast_turns[k].extend(turns_list)
             merged["played_cards_per_game"].extend(batch["played_cards_per_game"])
+            merged["drawn_cards_per_game"].extend(batch["drawn_cards_per_game"])
             all_raw_replays.extend(batch.get("raw_replays", []))
 
         merged["card_cast_turns"] = card_cast_turns
@@ -1079,7 +1071,6 @@ class Goldfisher:
 
     def _simulate_from_raw(self, raw: dict) -> SimulationResult:
         """Compute summary stats from raw per-game data (used by parallel path)."""
-        import bisect
 
         mana_spent_list = raw["mana_spent"]
         mana_value_list = raw["mana_value"]
@@ -1111,17 +1102,20 @@ class Goldfisher:
         percentile_50 = float(np.percentile(primary_list, 50))
         percentile_75 = float(np.percentile(primary_list, 75))
 
-        total_mana = float(np.sum(primary_list))
-        sorted_mana = sorted(primary_list)
-        cumulative_mana = np.cumsum(sorted_mana)
-
+        # Left-tail ratio consistency: mean(bottom 25%) / mean(all)
         con_threshold = 0.25
-        threshold_index = bisect.bisect_left(cumulative_mana, total_mana * con_threshold)
-        threshold_percent = threshold_index / len(primary_list)
-        threshold_mana = float(sorted_mana[threshold_index])
-        consistency = (1 - threshold_percent) / (1 - con_threshold)
+        sorted_primary = sorted(primary_list)
+        n = len(primary_list)
+        cutoff = max(1, int(n * con_threshold))
+        tail_mean = float(np.mean(sorted_primary[:cutoff]))
+        overall_primary_mean = float(np.mean(primary_list))
+        if overall_primary_mean == 0:
+            consistency = 1.0
+        else:
+            consistency = tail_mean / overall_primary_mean
+        threshold_percent = con_threshold
+        threshold_mana = tail_mean
 
-        n = len(mana_spent_list)
         z = 1.96
 
         sqrt_n = np.sqrt(n)
@@ -1137,17 +1131,20 @@ class Goldfisher:
         bad_se = float(np.std(bad_turns_list, ddof=1) / sqrt_n)
         ci_mean_bad_turns = (mean_bad_turns - z * bad_se, mean_bad_turns + z * bad_se)
 
+        # Bootstrap CI for consistency (left-tail ratio)
         n_boot = min(1000, n)
         boot_consistencies = []
         mana_arr = np.array(primary_list)
+        boot_rng = np.random.RandomState(self.seed if self.seed is not None else 42)
         for _ in range(n_boot):
-            boot_sample = np.random.choice(mana_arr, size=n, replace=True)
-            boot_total = float(np.sum(boot_sample))
+            boot_sample = boot_rng.choice(mana_arr, size=n, replace=True)
             boot_sorted = np.sort(boot_sample)
-            boot_cum = np.cumsum(boot_sorted)
-            boot_idx = int(np.searchsorted(boot_cum, boot_total * con_threshold))
-            boot_pct = boot_idx / n
-            boot_consistencies.append((1 - boot_pct) / (1 - con_threshold))
+            boot_tail = float(np.mean(boot_sorted[:cutoff]))
+            boot_overall = float(np.mean(boot_sample))
+            if boot_overall == 0:
+                boot_consistencies.append(1.0)
+            else:
+                boot_consistencies.append(boot_tail / boot_overall)
         ci_consistency = (
             float(np.percentile(boot_consistencies, 2.5)),
             float(np.percentile(boot_consistencies, 97.5)),
@@ -1158,7 +1155,10 @@ class Goldfisher:
 
         # Compute card performance
         played_cards_per_game = raw.get("played_cards_per_game", [])
-        card_performance = self._compute_card_performance(primary_list, played_cards_per_game)
+        drawn_cards_per_game = raw.get("drawn_cards_per_game", [])
+        card_performance = self._compute_card_performance(
+            primary_list, played_cards_per_game, drawn_cards_per_game,
+        )
 
         replay_data = raw.get("replay_data", {})
 
@@ -1231,6 +1231,7 @@ class Goldfisher:
         mid_turns_list = []
         card_cast_turn_list: list[list] = [[] for _ in self.decklist]
         played_cards_per_game: list[set] = []
+        drawn_cards_per_game: list[set] = []
         replay_buckets: dict[str, list] = {"top": [], "mid": [], "low": []}
 
         game_iter = range(self.sims)
@@ -1351,6 +1352,12 @@ class Goldfisher:
                         game_played.add(k)
             played_cards_per_game.append(game_played)
 
+            # Cards drawn = all spell cards not still in deck or command zone
+            deck_set = set(state.deck) | set(state.command_zone)
+            game_drawn = {k for k in range(len(self.decklist))
+                          if k not in deck_set and self.decklist[k].spell and not self.decklist[k].land}
+            drawn_cards_per_game.append(game_drawn)
+
             # Record games in buckets (based on primary mana mode)
             if j > sample_games:
                 if top_centile_threshold is None:
@@ -1445,8 +1452,6 @@ class Goldfisher:
                 print(f"\n### Game {j + 1} finished")
 
         # Compute summary stats
-        import bisect
-
         mean_mana = float(np.mean(mana_spent_list))
         mean_mana_value = float(np.mean(mana_value_list))
         mean_mana_draw = float(np.mean(mana_draw_list))
@@ -1463,18 +1468,21 @@ class Goldfisher:
         percentile_50 = float(np.percentile(primary_list, 50))
         percentile_75 = float(np.percentile(primary_list, 75))
 
-        total_mana = float(np.sum(primary_list))
-        sorted_mana = sorted(primary_list)
-        cumulative_mana = np.cumsum(sorted_mana)
-
+        # Left-tail ratio consistency: mean(bottom 25%) / mean(all)
         con_threshold = 0.25
-        threshold_index = bisect.bisect_left(cumulative_mana, total_mana * con_threshold)
-        threshold_percent = threshold_index / len(primary_list)
-        threshold_mana = float(sorted_mana[threshold_index])
-        consistency = (1 - threshold_percent) / (1 - con_threshold)
+        sorted_primary = sorted(primary_list)
+        n = len(mana_spent_list)
+        cutoff = max(1, int(n * con_threshold))
+        tail_mean = float(np.mean(sorted_primary[:cutoff]))
+        overall_primary_mean = float(np.mean(primary_list))
+        if overall_primary_mean == 0:
+            consistency = 1.0
+        else:
+            consistency = tail_mean / overall_primary_mean
+        threshold_percent = con_threshold
+        threshold_mana = tail_mean
 
         # Compute 95% confidence intervals
-        n = len(mana_spent_list)
         z = 1.96
         sqrt_n = np.sqrt(n)
 
@@ -1490,25 +1498,29 @@ class Goldfisher:
         bad_se = float(np.std(bad_turns_list, ddof=1) / sqrt_n)
         ci_mean_bad_turns = (mean_bad_turns - z * bad_se, mean_bad_turns + z * bad_se)
 
-        # Bootstrap CI for consistency (not directly a sample mean)
+        # Bootstrap CI for consistency (left-tail ratio)
         n_boot = min(1000, n)
         boot_consistencies = []
         mana_arr = np.array(primary_list)
+        boot_rng = np.random.RandomState(self.seed if self.seed is not None else 42)
         for _ in range(n_boot):
-            boot_sample = np.random.choice(mana_arr, size=n, replace=True)
-            boot_total = float(np.sum(boot_sample))
+            boot_sample = boot_rng.choice(mana_arr, size=n, replace=True)
             boot_sorted = np.sort(boot_sample)
-            boot_cum = np.cumsum(boot_sorted)
-            boot_idx = int(np.searchsorted(boot_cum, boot_total * con_threshold))
-            boot_pct = boot_idx / n
-            boot_consistencies.append((1 - boot_pct) / (1 - con_threshold))
+            boot_tail = float(np.mean(boot_sorted[:cutoff]))
+            boot_overall = float(np.mean(boot_sample))
+            if boot_overall == 0:
+                boot_consistencies.append(1.0)
+            else:
+                boot_consistencies.append(boot_tail / boot_overall)
         ci_consistency = (
             float(np.percentile(boot_consistencies, 2.5)),
             float(np.percentile(boot_consistencies, 97.5)),
         )
 
         distribution_stats = self._compute_distribution_stats(primary_list)
-        card_performance = self._compute_card_performance(primary_list, played_cards_per_game)
+        card_performance = self._compute_card_performance(
+            primary_list, played_cards_per_game, drawn_cards_per_game,
+        )
 
         return SimulationResult(
             land_count=self.land_count,

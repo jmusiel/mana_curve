@@ -183,8 +183,8 @@ def save_simulation_run(
                 session.add(CardPerformanceRow(
                     run_id=run.id,
                     card_id=card.id,
-                    top_rate=card_data.get("top_rate", 0.0),
-                    low_rate=card_data.get("low_rate", 0.0),
+                    mean_with=card_data.get("mean_with", 0.0),
+                    mean_without=card_data.get("mean_without", 0.0),
                     score=card_data.get("score", 0.0),
                     rank=rank,
                 ))

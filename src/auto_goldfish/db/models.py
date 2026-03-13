@@ -127,8 +127,8 @@ class CardPerformanceRow(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     run_id: Mapped[int] = mapped_column(ForeignKey("simulation_runs.id"), nullable=False)
     card_id: Mapped[int] = mapped_column(ForeignKey("cards.id"), nullable=False)
-    top_rate: Mapped[float] = mapped_column(Float, nullable=False)
-    low_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    mean_with: Mapped[float] = mapped_column(Float, nullable=False)
+    mean_without: Mapped[float] = mapped_column(Float, nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False)
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
 

@@ -56,10 +56,25 @@ def test_mean_hand_sum():
 
 
 def test_consistency_uniform():
-    # All same values -> consistency should be ~1.0
+    # All same values -> left-tail ratio should be exactly 1.0
     records = _make_records([10] * 100)
     c = consistency(records)
-    assert abs(c - 1.0) < 0.1
+    assert c == 1.0
+
+
+def test_consistency_nonuniform():
+    # Bottom 25% averages 2, overall mean = (2*25 + 10*75)/100 = 8.0
+    # Expected: 2 / 8.0 = 0.25
+    records = _make_records([2] * 25 + [10] * 75)
+    c = consistency(records)
+    assert abs(c - 0.25) < 0.01
+
+
+def test_consistency_range():
+    # Left-tail ratio should always be in (0, 1] for positive values
+    records = _make_records([1, 2, 3, 4, 5, 6, 7, 8, 9, 100])
+    c = consistency(records)
+    assert 0 < c <= 1.0
 
 
 def test_collector_custom_metric():
