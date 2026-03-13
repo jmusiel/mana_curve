@@ -140,28 +140,34 @@
             <input type="number" id="turns" name="turns" value="10" min="1" max="{{ max_turns }}">
         </div>
         <div class="form-group">
-            <label for="sims" id="sims-label">Simulations per evaluation (max {{ max_sims }}) <span class="info-tip" data-tip="Number of games simulated per land count. More sims give more accurate results but take longer.">i</span></label>
-            <input type="number" id="sims" name="sims" value="1000" min="100" max="{{ max_sims }}" step="100">
-        </div>
-    </div>
-    <div class="form-row">
-        <div class="form-group">
-            <label for="mana-mode">Consider mana spent on <span class="info-tip" data-tip="Which spell types count toward the 'mana spent' metric. Value-only ignores ramp/draw costs; Total counts everything.">i</span></label>
-            <select id="mana-mode" name="mana_mode">
-                <option value="value" selected>Value spells only</option>
-                <option value="value_draw">Value + Draw spells</option>
-                <option value="total">All spells (incl. Ramp)</option>
-            </select>
-        </div>
-        <div class="form-group">
             <label for="optimize-target">Optimize for <span class="info-tip" data-tip="The metric used to rank land counts and card candidates. Mana maximizes total mana spent; Consistency minimizes bad turns.">i</span></label>
             <select id="optimize-target" name="optimize_target">
-                <option value="mana" selected>Mana</option>
-                <option value="consistency">Consistency</option>
-                <option value="spells_cast">Num spells cast</option>
+                <option value="mana" selected>Total mana spent</option>
+                <option value="consistency">Consistency (fewer bad turns)</option>
+                <option value="spells_cast">Number of spells cast</option>
             </select>
         </div>
     </div>
+
+    <!-- Simulation Fidelity -->
+    <fieldset class="fidelity-selector">
+        <legend>Simulation Fidelity <span class="info-tip" data-tip="Controls how many games are simulated. Higher fidelity gives more reliable results but takes longer. 'Fast' is great for quick exploration; 'High Accuracy' is best for final tuning.">i</span></legend>
+        <label class="fidelity-option">
+            <input type="radio" name="fidelity" value="fast">
+            <span class="fidelity-label">Fast</span>
+            <span class="fidelity-desc">Quick estimate, noisier results (~15s)</span>
+        </label>
+        <label class="fidelity-option">
+            <input type="radio" name="fidelity" value="balanced" checked>
+            <span class="fidelity-label">Balanced</span>
+            <span class="fidelity-desc">Good accuracy, reasonable time (~1 min)</span>
+        </label>
+        <label class="fidelity-option">
+            <input type="radio" name="fidelity" value="high">
+            <span class="fidelity-label">High Accuracy</span>
+            <span class="fidelity-desc">Most reliable, slower (~2-3 min)</span>
+        </label>
+    </fieldset>
 
     <!-- Land Sweep Settings (shown by default) -->
     <div id="sweep-settings">
@@ -253,12 +259,22 @@
         <summary>Play Strategy</summary>
         <div class="form-row">
             <div class="form-group">
+                <label for="mana-mode">Consider mana spent on <span class="info-tip" data-tip="Which spell types count toward the 'mana spent' metric. Value-only ignores ramp/draw costs; Total counts everything.">i</span></label>
+                <select id="mana-mode" name="mana_mode">
+                    <option value="value" selected>Value spells only</option>
+                    <option value="value_draw">Value + Draw spells</option>
+                    <option value="total">All spells (incl. Ramp)</option>
+                </select>
+            </div>
+            <div class="form-group">
                 <label for="mulligan">Mulligan Strategy <span class="info-tip" data-tip="How the simulator decides whether to mulligan an opening hand. Default keeps 3-4 land hands; Curve Aware also considers spell costs.">i</span></label>
                 <select id="mulligan" name="mulligan">
                     <option value="default" selected>Default (3-4 lands)</option>
                     <option value="curve_aware">Curve Aware</option>
                 </select>
             </div>
+        </div>
+        <div class="form-row">
             <div class="form-group">
                 <label for="spell-priority">Spell Priority <span class="info-tip" data-tip="The order in which spells are considered for casting each turn. Ramp/Draw First prioritizes those categories; Highest CMC plays expensive spells first.">i</span></label>
                 <select id="spell-priority" name="spell_priority">
@@ -269,8 +285,6 @@
                     <option value="highest_cmc_first">Highest CMC First</option>
                 </select>
             </div>
-        </div>
-        <div class="form-row">
             <div class="form-group">
                 <label for="mana-efficiency">Mana Efficiency <span class="info-tip" data-tip="How the simulator selects which combination of spells to cast. Greedy plays them in priority order; Maximize Mana Spent uses a knapsack solver to waste the least mana; Maximize Spell Count casts as many spells as possible.">i</span></label>
                 <select id="mana-efficiency" name="mana_efficiency">
@@ -279,6 +293,8 @@
                     <option value="spell_count">Maximize Spell Count</option>
                 </select>
             </div>
+        </div>
+        <div class="form-row">
             <div class="form-group">
                 <label for="ramp-cutoff-turn">Ramp Cutoff Turn <span class="info-tip" data-tip="After this turn, ramp spells are deprioritized so value spells are cast first. Set to 'Always play ramp' to never deprioritize.">i</span></label>
                 <select id="ramp-cutoff-turn" name="ramp_cutoff_turn">
@@ -291,8 +307,6 @@
                     <option value="8">After turn 8</option>
                 </select>
             </div>
-        </div>
-        <div class="form-row">
             <div class="form-group">
                 <label for="min-cost-floor">Min Spell Cost <span class="info-tip" data-tip="The minimum mana cost a spell can be reduced to by cost-reduction effects. Set to 0 to allow spells to become free.">i</span></label>
                 <select id="min-cost-floor" name="min_cost_floor">
@@ -320,16 +334,26 @@
                 </select>
             </div>
         </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="sims-per-enum">Max sims per candidate <span class="info-tip" data-tip="Number of simulations run for each draw/ramp candidate combination during optimization. Higher values give more accurate comparisons but take longer.">i</span></label>
-                <input type="number" id="sims-per-enum" value="200" min="50" max="{{ max_sims }}" step="50">
-            </div>
-        </div>
         <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
             <input type="checkbox" id="swap-mode" style="width:auto;">
             Swap mode <span class="info-tip" data-tip="Instead of adding draw/ramp candidates to the deck, replace existing cards that have no registered effects.">i</span>
         </label>
+        <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+            <input type="checkbox" id="override-fidelity" style="width:auto;">
+            Override fidelity preset <span class="info-tip" data-tip="Manually set simulation counts instead of using the preset. For advanced users who want fine-grained control.">i</span>
+        </label>
+        <div id="fidelity-overrides" style="display:none;">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="sims">Final evaluation sims <span class="info-tip" data-tip="Number of games simulated for each top configuration in the final evaluation pass.">i</span></label>
+                    <input type="number" id="sims" name="sims" value="500" min="100" max="{{ max_sims }}" step="100">
+                </div>
+                <div class="form-group">
+                    <label for="sims-per-enum">Sims per candidate (Hyperband R) <span class="info-tip" data-tip="Maximum simulations per candidate during Hyperband selection. Higher values give more accurate comparisons but take longer.">i</span></label>
+                    <input type="number" id="sims-per-enum" value="500" min="50" max="{{ max_sims }}" step="50">
+                </div>
+            </div>
+        </div>
     </details>
 
     <small class="hint" id="local-sim-hint">
@@ -1408,14 +1432,45 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
     const jobStatus = document.getElementById('job-status');
     const localResults = document.getElementById('local-results');
 
+    // Fidelity presets: derived from hyperband sensitivity analysis
+    var FIDELITY_PRESETS = {
+        fast:     { sims: 200, sims_per_eval: 100, eta: 3, min_sims: 10, hyperband_top_k: 5 },
+        balanced: { sims: 500, sims_per_eval: 500, eta: 3, min_sims: 20, hyperband_top_k: 10 },
+        high:     { sims: 1000, sims_per_eval: 500, eta: 2, min_sims: 20, hyperband_top_k: 5 },
+    };
+
+    function getFidelityParams() {
+        if (document.getElementById('override-fidelity').checked) {
+            return {
+                sims: parseInt(document.getElementById('sims').value) || 500,
+                sims_per_eval: parseInt(document.getElementById('sims-per-enum').value) || 500,
+                eta: 3,
+                min_sims: 20,
+                hyperband_top_k: 5,
+            };
+        }
+        var selected = document.querySelector('input[name="fidelity"]:checked');
+        return FIDELITY_PRESETS[selected ? selected.value : 'balanced'];
+    }
+
+    // Toggle fidelity override inputs
+    document.getElementById('override-fidelity').addEventListener('change', function() {
+        document.getElementById('fidelity-overrides').style.display = this.checked ? 'block' : 'none';
+        updateEstimate();
+    });
+
+    // Update estimate when fidelity changes
+    document.querySelectorAll('input[name="fidelity"]').forEach(function(radio) {
+        radio.addEventListener('change', updateEstimate);
+    });
+
     function updateEstimate() {
-        const sims = parseInt(document.getElementById('sims').value) || 1000;
+        var fp = getFidelityParams();
         const minLands = parseInt(document.getElementById('min_lands').value) || 36;
         const maxLands = parseInt(document.getElementById('max_lands').value) || 39;
         const landCounts = maxLands - minLands + 1;
         const msPerSim = 3; // ~3ms per sim on modern hardware
 
-        const simsPerEnum = parseInt(document.getElementById('sims-per-enum').value) || 200;
         // Count enabled candidates
         var drawCount = 0, rampCount = 0;
         document.querySelectorAll('#card-optimization-settings [data-candidate]').forEach(function(cb) {
@@ -1440,12 +1495,12 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
         var totalConfigs = landCounts * drawCombos * rampCombos;
         var finalTopK = 5;
 
-        var enumSeconds = Math.ceil((simsPerEnum * totalConfigs * msPerSim) / 1000);
-        var evalSeconds = Math.ceil((sims * finalTopK * msPerSim) / 1000);
+        var enumSeconds = Math.ceil((fp.sims_per_eval * totalConfigs * msPerSim) / 1000);
+        var evalSeconds = Math.ceil((fp.sims * finalTopK * msPerSim) / 1000);
         document.getElementById('local-sim-estimate').textContent =
             'Estimated time: ~' + (enumSeconds + evalSeconds) + 's ('
-            + totalConfigs + ' configs x ' + simsPerEnum + ' sims + '
-            + finalTopK + ' top x ' + sims + ' sims).';
+            + totalConfigs + ' configs x ' + fp.sims_per_eval + ' sims + '
+            + finalTopK + ' top x ' + fp.sims + ' sims).';
     }
 
     async function initWorker() {
@@ -1609,9 +1664,10 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
             // Merge server effects with user overrides
             const mergedOverrides = Object.assign({}, effectsData, effectOverrides);
 
+            const fp = getFidelityParams();
             const config = {
                 turns: parseInt(document.getElementById('turns').value) || 10,
-                sims: parseInt(document.getElementById('sims').value) || 1000,
+                sims: fp.sims,
                 min_lands: parseInt(document.getElementById('min_lands').value),
                 max_lands: parseInt(document.getElementById('max_lands').value),
                 record_results: document.getElementById('record_results').value || 'quartile',
@@ -1645,12 +1701,12 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
     }
 
     // Update estimate when params change
-    document.getElementById('sims').addEventListener('input', updateEstimate);
     document.getElementById('min-slider').addEventListener('input', updateEstimate);
     document.getElementById('max-slider').addEventListener('input', updateEstimate);
     document.getElementById('max-draw-additions').addEventListener('change', updateEstimate);
     document.getElementById('max-ramp-additions').addEventListener('change', updateEstimate);
 
+    document.getElementById('sims').addEventListener('input', updateEstimate);
     document.getElementById('sims-per-enum').addEventListener('input', updateEstimate);
     document.querySelectorAll('#card-optimization-settings [data-candidate]').forEach(function(cb) {
         cb.addEventListener('change', updateEstimate);
@@ -1687,11 +1743,15 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
                          : 'mean_mana_total';
         }
 
+        const fp = getFidelityParams();
         const optConfig = {
             optimization_enabled: true,
             optimize_for: optimize_for,
             swap_mode: document.getElementById('swap-mode').checked,
-            sims_per_enum: parseInt(document.getElementById('sims-per-enum').value) || 200,
+            sims_per_enum: fp.sims_per_eval,
+            eta: fp.eta,
+            min_sims: fp.min_sims,
+            hyperband_top_k: fp.hyperband_top_k,
             enabled_candidates: enabledCandidates,
             max_draw_additions: parseInt(document.getElementById('max-draw-additions').value) || 0,
             max_ramp_additions: parseInt(document.getElementById('max-ramp-additions').value) || 0,

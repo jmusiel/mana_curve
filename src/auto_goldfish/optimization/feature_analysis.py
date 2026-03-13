@@ -1,0 +1,464 @@
+"""Feature analysis for optimization results.
+
+Analyzes which individual card/land changes have the most impact on
+simulation scores, using data collected during Hyperband optimization.
+
+Produces:
+  1. Marginal impact rankings per feature
+  2. OLS/WLS regression with standardized beta coefficients
+  3. Synthesized plain-English recommendations
+"""
+
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+from typing import Any, List, Tuple
+
+import numpy as np
+
+from auto_goldfish.optimization.candidate_cards import ALL_CANDIDATES
+from auto_goldfish.optimization.deck_config import DeckConfig
+
+
+# ── Feature extraction ─────────────────────────────────────────────────
+
+
+def extract_features(config: DeckConfig) -> dict[str, int]:
+    """Decompose a DeckConfig into a feature dict.
+
+    Features are integer-valued:
+      - land_delta: raw value (-2..+2)
+      - count_<card_compact_label>: how many copies of that candidate (0-2)
+    """
+    features: dict[str, int] = {}
+    features["land_delta"] = config.land_delta
+
+    card_counts: Counter = Counter(config.added_cards)
+    enabled = {
+        cid: c for cid, c in ALL_CANDIDATES.items() if c.default_enabled
+    }
+    for cid, candidate in enabled.items():
+        features[f"count_{candidate.compact_label}"] = card_counts.get(cid, 0)
+
+    return features
+
+
+def configs_to_feature_matrix(
+    configs: list[DeckConfig],
+) -> tuple[np.ndarray, list[str], list[dict[str, int]]]:
+    """Convert configs to a feature matrix.
+
+    Returns (X, feature_names, raw_feature_dicts).
+    """
+    feature_dicts = [extract_features(c) for c in configs]
+    feature_names = sorted(feature_dicts[0].keys())
+    X = np.array(
+        [[fd[name] for name in feature_names] for fd in feature_dicts],
+        dtype=float,
+    )
+    return X, feature_names, feature_dicts
+
+
+# ── Aggregate Hyperband scores ─────────────────────────────────────────
+
+
+def aggregate_hyperband_scores(
+    round_scores: list[tuple[DeckConfig, float, int]],
+) -> tuple[list[DeckConfig], np.ndarray, np.ndarray]:
+    """Aggregate multi-round Hyperband scores per config.
+
+    For each config, computes a sim-weighted average score and a
+    confidence weight based on total sims.
+
+    Returns (configs, scores, weights).
+    """
+    per_config: dict[DeckConfig, list[tuple[float, int]]] = defaultdict(list)
+    for config, score, n_sims in round_scores:
+        per_config[config].append((score, n_sims))
+
+    configs = []
+    scores = []
+    weights = []
+
+    for config, observations in per_config.items():
+        total_sims = sum(n for _, n in observations)
+        weighted_score = sum(s * n for s, n in observations) / total_sims
+
+        configs.append(config)
+        scores.append(weighted_score)
+        weights.append(np.sqrt(total_sims))
+
+    order = np.argsort(scores)[::-1]
+    configs = [configs[i] for i in order]
+    scores_arr = np.array([scores[i] for i in order])
+    weights_arr = np.array([weights[i] for i in order])
+
+    return configs, scores_arr, weights_arr
+
+
+# ── Marginal feature impact ───────────────────────────────────────────
+
+
+def _feature_label(fname: str, value: int) -> str:
+    """Human-readable label for a feature=value pair."""
+    if fname == "land_delta":
+        if value > 0:
+            return f"+{value} land"
+        elif value < 0:
+            return f"{value} land"
+        else:
+            return "0 land change"
+    elif fname.startswith("count_"):
+        card = fname.removeprefix("count_")
+        if value == 0:
+            return f"no {card}"
+        return f"{value}x {card}"
+    return f"{fname}={value}"
+
+
+def compute_marginal_impact(
+    feature_dicts: list[dict[str, int]],
+    scores: np.ndarray,
+    feature_names: list[str],
+    weights: np.ndarray | None = None,
+    score_std: float | None = None,
+) -> list[dict[str, Any]]:
+    """For each feature value, compute (weighted) mean score when present vs absent.
+
+    Returns list of {feature, value, label, mean_with, mean_without, delta, count}
+    sorted by delta descending.
+    """
+    if weights is None:
+        weights = np.ones(len(scores))
+
+    results = []
+    global_mean = float(np.average(scores, weights=weights))
+
+    for fname in feature_names:
+        values = sorted(set(fd[fname] for fd in feature_dicts))
+        if len(values) <= 1:
+            continue
+
+        for val in values:
+            mask = np.array([fd[fname] == val for fd in feature_dicts])
+            if mask.sum() == 0 or (~mask).sum() == 0:
+                continue
+            mean_with = float(np.average(scores[mask], weights=weights[mask]))
+            mean_without = float(np.average(scores[~mask], weights=weights[~mask]))
+            raw_delta = mean_with - mean_without
+            entry = {
+                "feature": fname,
+                "value": val,
+                "label": _feature_label(fname, val),
+                "mean_with": round(mean_with, 4),
+                "mean_without": round(mean_without, 4),
+                "delta": round(raw_delta, 4),
+                "delta_vs_global": round(mean_with - global_mean, 4),
+                "count": int(mask.sum()),
+            }
+            if score_std is not None and score_std > 0:
+                entry["delta_std"] = round(raw_delta / score_std, 4)
+            results.append(entry)
+
+    results.sort(key=lambda x: x["delta"], reverse=True)
+    return results
+
+
+# ── OLS / WLS regression ─────────────────────────────────────────────
+
+
+def fit_ols(
+    X: np.ndarray,
+    y: np.ndarray,
+    weights: np.ndarray | None = None,
+) -> tuple[np.ndarray, float, float]:
+    """Fit (weighted) least squares regression: y = X @ beta + intercept.
+
+    Returns (coefficients, intercept, r_squared).
+    """
+    n = X.shape[0]
+    X_with_intercept = np.column_stack([np.ones(n), X])
+
+    if weights is not None:
+        sqrt_w = np.sqrt(weights)
+        Xw = X_with_intercept * sqrt_w[:, np.newaxis]
+        yw = y * sqrt_w
+    else:
+        Xw = X_with_intercept
+        yw = y
+
+    result = np.linalg.lstsq(Xw, yw, rcond=None)
+    beta = result[0]
+
+    intercept = beta[0]
+    coefficients = beta[1:]
+
+    y_pred = X_with_intercept @ beta
+    if weights is not None:
+        ss_res = np.sum(weights * (y - y_pred) ** 2)
+        y_wmean = np.average(y, weights=weights)
+        ss_tot = np.sum(weights * (y - y_wmean) ** 2)
+    else:
+        ss_res = np.sum((y - y_pred) ** 2)
+        ss_tot = np.sum((y - np.mean(y)) ** 2)
+    r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+
+    return coefficients, intercept, r_squared
+
+
+def regression_analysis(
+    X: np.ndarray,
+    scores: np.ndarray,
+    feature_names: list[str],
+    weights: np.ndarray | None = None,
+) -> tuple[dict[str, Any], np.ndarray]:
+    """Run OLS/WLS and return ranked coefficients + predicted scores.
+
+    Returns (regression_dict, y_pred).
+    """
+    coeffs, intercept, r_sq = fit_ols(X, scores, weights)
+    y_pred = X @ coeffs + intercept
+
+    if weights is not None:
+        x_mean = np.average(X, axis=0, weights=weights)
+        x_std = np.sqrt(np.average((X - x_mean) ** 2, axis=0, weights=weights))
+        y_std = np.sqrt(np.average(
+            (scores - np.average(scores, weights=weights)) ** 2,
+            weights=weights,
+        ))
+    else:
+        x_std = np.std(X, axis=0)
+        y_std = np.std(scores)
+
+    safe_y_std = y_std if y_std > 0 else 1.0
+    std_coeffs = coeffs * x_std / safe_y_std
+
+    ranked = sorted(
+        zip(feature_names, coeffs, std_coeffs),
+        key=lambda x: abs(x[2]),
+        reverse=True,
+    )
+
+    reg_dict = {
+        "r_squared": round(r_sq, 4),
+        "intercept": round(intercept, 4),
+        "score_std": round(float(safe_y_std), 6),
+        "weighted": weights is not None,
+        "coefficients": [
+            {
+                "feature": name,
+                "label": _feature_label(name, 1),
+                "coefficient": round(float(c), 4),
+                "std_beta": round(float(sc), 4),
+            }
+            for name, c, sc in ranked
+        ],
+    }
+    return reg_dict, y_pred
+
+
+# ── Synthesize recommendations ────────────────────────────────────────
+
+
+def synthesize_recommendations(
+    marginal: list[dict[str, Any]],
+    regression: dict[str, Any],
+    optimize_for: str,
+) -> list[dict[str, Any]]:
+    """Synthesize analysis into concrete, user-friendly recommendations.
+
+    Uses regression coefficients as the primary signal (consistent with
+    predict_top_configs which selects the ranking table configs) and
+    supplements with marginal impact data for detail text.
+
+    Returns list of {recommendation, impact, confidence, detail, label}.
+    """
+    metric_labels = {
+        "mean_mana": "mana spent",
+        "mean_mana_value": "mana spent on value",
+        "mean_mana_total": "total mana spent",
+        "consistency": "consistency",
+        "mean_spells_cast": "spells cast",
+    }
+    metric_label = metric_labels.get(optimize_for, optimize_for)
+
+    recommendations: list[dict[str, Any]] = []
+
+    # Index marginal impact by feature name for detail text
+    marginal_by_feature: dict[str, list[dict[str, Any]]] = {}
+    for m in marginal:
+        marginal_by_feature.setdefault(m["feature"], []).append(m)
+
+    # Build recommendations from regression coefficients
+    for c in regression["coefficients"]:
+        coeff = c["coefficient"]
+        std_beta = c["std_beta"]
+        fname = c["feature"]
+
+        if abs(std_beta) < 0.01:
+            continue
+
+        impact_direction = "increase" if coeff > 0 else "decrease"
+
+        # Build label: for land_delta use direction, for cards use the card name
+        if fname == "land_delta":
+            if coeff > 0:
+                label = "more lands"
+            else:
+                label = "fewer lands"
+            rec_text = f"Adding {label} tends to {impact_direction} {metric_label}"
+        elif fname.startswith("count_"):
+            card = fname.removeprefix("count_")
+            label = card
+            if coeff > 0:
+                rec_text = f"Adding {card} tends to {impact_direction} {metric_label}"
+            else:
+                rec_text = f"Adding {card} tends to {impact_direction} {metric_label}"
+        else:
+            label = fname
+            rec_text = f"{fname} tends to {impact_direction} {metric_label}"
+
+        # Confidence based on R² and agreement with marginal impact
+        marginal_entries = marginal_by_feature.get(fname, [])
+        marginal_agrees = True
+        if marginal_entries:
+            # Check if marginal impact direction agrees with regression
+            positive_entries = [m for m in marginal_entries if m["value"] > 0]
+            if positive_entries:
+                avg_delta = sum(m["delta"] for m in positive_entries) / len(positive_entries)
+                marginal_agrees = (avg_delta > 0) == (coeff > 0)
+
+        if not marginal_agrees:
+            confidence = "low"
+        elif regression["r_squared"] > 0.7:
+            confidence = "high"
+        elif regression["r_squared"] > 0.4:
+            confidence = "medium"
+        else:
+            confidence = "low"
+
+        # Build detail text from marginal impact if available
+        detail_parts = [f"Regression coefficient: {coeff:+.4f} (std beta: {std_beta:+.4f})"]
+        for m in marginal_entries:
+            if m["value"] != 0:
+                detail_parts.append(
+                    f"{m['label']}: avg {m['mean_with']:.3f} vs "
+                    f"without: {m['mean_without']:.3f} "
+                    f"(delta: {m['delta']:+.4f})"
+                )
+
+        recommendations.append({
+            "recommendation": rec_text,
+            "impact": round(coeff, 4),
+            "confidence": confidence,
+            "label": label,
+            "detail": "; ".join(detail_parts),
+        })
+
+    # Sort by absolute impact descending (positive first, then negative)
+    recommendations.sort(key=lambda x: -x["impact"])
+
+    return recommendations
+
+
+# ── Predict top configs ───────────────────────────────────────────────
+
+
+def predict_top_configs(
+    all_round_scores: List[Tuple[DeckConfig, float, int]],
+    all_configs: List[DeckConfig],
+    top_k: int = 5,
+) -> tuple[List[DeckConfig], dict[str, Any]]:
+    """Use regression on Hyperband data to predict the best configs.
+
+    Fits a WLS regression model on the aggregated Hyperband round scores,
+    then predicts scores for ALL enumerated configs and returns the top-k
+    by predicted score.
+
+    Args:
+        all_round_scores: List of (config, score, n_sims) from Hyperband.
+        all_configs: Full list of enumerated configs to predict over.
+        top_k: Number of top configs to return.
+
+    Returns:
+        (top_configs, regression_info) where regression_info contains
+        the fitted coefficients and intercept needed for prediction.
+    """
+    if len(all_round_scores) < 3:
+        return all_configs[:top_k], {}
+
+    configs, scores, weights = aggregate_hyperband_scores(all_round_scores)
+    X_train, feature_names, _ = configs_to_feature_matrix(configs)
+
+    # Fit WLS on Hyperband data
+    coeffs, intercept, r_sq = fit_ols(X_train, scores, weights)
+
+    # Predict scores for ALL configs
+    all_feature_dicts = [extract_features(c) for c in all_configs]
+    X_all = np.array(
+        [[fd[name] for name in feature_names] for fd in all_feature_dicts],
+        dtype=float,
+    )
+    predicted = X_all @ coeffs + intercept
+
+    # Select top-k by predicted score
+    top_indices = np.argsort(predicted)[::-1][:top_k]
+    top_configs = [all_configs[i] for i in top_indices]
+
+    reg_info = {
+        "coefficients": coeffs,
+        "intercept": intercept,
+        "feature_names": feature_names,
+        "r_squared": r_sq,
+    }
+
+    return top_configs, reg_info
+
+
+# ── Main entry point ──────────────────────────────────────────────────
+
+
+def analyze_optimization(
+    all_round_scores: List[Tuple[DeckConfig, float, int]],
+    optimize_for: str,
+) -> dict[str, Any]:
+    """Run feature analysis on Hyperband round scores.
+
+    Args:
+        all_round_scores: List of (config, score, n_sims) from optimizer.
+        optimize_for: The optimization target metric name.
+
+    Returns dict with keys:
+        - recommendations: list of synthesized recommendations
+        - marginal_impact: raw marginal impact data
+        - regression: regression analysis results
+        - n_configs: number of unique configs analyzed
+    """
+    if not all_round_scores:
+        return {}
+
+    configs, scores, weights = aggregate_hyperband_scores(all_round_scores)
+
+    if len(configs) < 3:
+        return {}
+
+    X, feature_names, feature_dicts = configs_to_feature_matrix(configs)
+
+    # Regression analysis
+    reg_dict, y_pred = regression_analysis(X, scores, feature_names, weights)
+
+    # Marginal impact
+    marginal = compute_marginal_impact(
+        feature_dicts, scores, feature_names,
+        weights=weights, score_std=reg_dict.get("score_std"),
+    )
+
+    # Synthesize recommendations
+    recommendations = synthesize_recommendations(marginal, reg_dict, optimize_for)
+
+    return {
+        "recommendations": recommendations,
+        "marginal_impact": marginal,
+        "regression": reg_dict,
+        "n_configs": len(configs),
+    }

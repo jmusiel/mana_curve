@@ -173,6 +173,9 @@ class SimulationRunner:
             candidates[cc.id] = cc
 
         sims_per_eval = config.get("sims_per_enum", max(goldfisher.sims // 2, 100))
+        eta = config.get("eta", 3)
+        min_sims_hb = config.get("min_sims", 20)
+        hyperband_top_k = config.get("hyperband_top_k")
         final_sims = goldfisher.sims
 
         def enum_cb(current: int, total: int) -> None:
@@ -193,6 +196,9 @@ class SimulationRunner:
             max_ramp=config.get("max_ramp_additions", 2),
             optimize_for=config.get("optimize_for", "mean_mana"),
             sims_per_eval=sims_per_eval,
+            eta=eta,
+            min_sims=min_sims_hb,
+            hyperband_top_k=hyperband_top_k,
         )
 
         ranked = optimizer.run(

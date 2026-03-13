@@ -157,21 +157,21 @@ const ClientResults = (function() {
         if (!cp || !cp.high_performing) return '';
 
         let html = '<h2>Card Performance</h2>';
-        html += '<p class="card-perf-summary">Based on ' + cp.total_top_games
-            + ' top-quartile and ' + cp.total_low_games + ' low-quartile games.</p>';
+        html += '<p class="card-perf-summary">Impact of drawing each card on average mana spent across '
+            + cp.total_games + ' games.</p>';
         html += '<div class="card-perf-grid">';
 
         // High performers
         html += '<div><h3>Top Performers</h3><div class="table-wrap"><table class="stats-table">';
         html += '<thead><tr><th>#</th><th>Card</th><th>Cost</th><th>Effects</th>';
-        html += '<th>Top Rate</th><th>Low Rate</th><th>Score</th></tr></thead><tbody>';
+        html += '<th>Avg With</th><th>Avg Without</th><th>Impact</th></tr></thead><tbody>';
         cp.high_performing.forEach((card, i) => {
             html += '<tr><td>' + (i + 1) + '</td>';
             html += '<td style="text-align:left">' + cardLink(card.name) + '</td>';
             html += '<td>' + escapeHtml(card.cost) + '</td>';
             html += '<td style="text-align:left">' + escapeHtml(card.effects) + '</td>';
-            html += '<td>' + fmt(card.top_rate * 100, 1) + '%</td>';
-            html += '<td>' + fmt(card.low_rate * 100, 1) + '%</td>';
+            html += '<td>' + fmt(card.mean_with, 2) + '</td>';
+            html += '<td>' + fmt(card.mean_without, 2) + '</td>';
             html += '<td class="score-positive">' + (card.score >= 0 ? '+' : '') + fmt(card.score, 2) + '</td></tr>';
         });
         html += '</tbody></table></div></div>';
@@ -179,14 +179,14 @@ const ClientResults = (function() {
         // Low performers
         html += '<div><h3>Low Performers</h3><div class="table-wrap"><table class="stats-table">';
         html += '<thead><tr><th>#</th><th>Card</th><th>Cost</th><th>Effects</th>';
-        html += '<th>Top Rate</th><th>Low Rate</th><th>Score</th></tr></thead><tbody>';
+        html += '<th>Avg With</th><th>Avg Without</th><th>Impact</th></tr></thead><tbody>';
         cp.low_performing.forEach((card, i) => {
             html += '<tr><td>' + (i + 1) + '</td>';
             html += '<td style="text-align:left">' + cardLink(card.name) + '</td>';
             html += '<td>' + escapeHtml(card.cost) + '</td>';
             html += '<td style="text-align:left">' + escapeHtml(card.effects) + '</td>';
-            html += '<td>' + fmt(card.top_rate * 100, 1) + '%</td>';
-            html += '<td>' + fmt(card.low_rate * 100, 1) + '%</td>';
+            html += '<td>' + fmt(card.mean_with, 2) + '</td>';
+            html += '<td>' + fmt(card.mean_without, 2) + '</td>';
             html += '<td class="score-negative">' + (card.score >= 0 ? '+' : '') + fmt(card.score, 2) + '</td></tr>';
         });
         html += '</tbody></table></div></div></div>';
@@ -413,6 +413,120 @@ const ClientResults = (function() {
         renderReplay();
     }
 
+    // -- Feature Analysis --
+
+    function renderFeatureAnalysis(results) {
+        const analysis = results[0] && results[0].feature_analysis;
+        if (!analysis || !analysis.recommendations || analysis.recommendations.length === 0) {
+            return '';
+        }
+
+        let html = '<div class="feature-analysis-section">';
+        html += '<h2>Recommended Changes</h2>';
+        html += '<p class="hint">Based on analysis of ' + analysis.n_configs
+            + ' configurations evaluated during optimization.</p>';
+
+        // Synthesized recommendations
+        const recs = analysis.recommendations;
+        const positiveRecs = recs.filter(function(r) { return r.impact > 0; });
+        const negativeRecs = recs.filter(function(r) { return r.impact < 0; });
+
+        if (positiveRecs.length > 0) {
+            html += '<div class="recommendations-list">';
+            html += '<h3>Changes that improve results</h3>';
+            html += '<ul class="rec-list">';
+            for (let i = 0; i < Math.min(positiveRecs.length, 8); i++) {
+                const r = positiveRecs[i];
+                const badge = r.confidence === 'high' ? 'rec-badge-high'
+                    : r.confidence === 'medium' ? 'rec-badge-med' : 'rec-badge-low';
+                html += '<li class="rec-item rec-positive">';
+                html += '<span class="rec-badge ' + badge + '">' + r.confidence + '</span> ';
+                html += '<strong>' + escapeHtml(r.label) + '</strong>: ';
+                html += escapeHtml(r.recommendation);
+                html += ' <span class="rec-delta">(';
+                html += r.impact > 0 ? '+' : '';
+                html += fmt(r.impact, 4) + ')</span>';
+                html += '</li>';
+            }
+            html += '</ul></div>';
+        }
+
+        if (negativeRecs.length > 0) {
+            html += '<div class="recommendations-list">';
+            html += '<h3>Changes that hurt results</h3>';
+            html += '<ul class="rec-list">';
+            for (let i = 0; i < Math.min(negativeRecs.length, 5); i++) {
+                const r = negativeRecs[i];
+                const badge = r.confidence === 'high' ? 'rec-badge-high'
+                    : r.confidence === 'medium' ? 'rec-badge-med' : 'rec-badge-low';
+                html += '<li class="rec-item rec-negative">';
+                html += '<span class="rec-badge ' + badge + '">' + r.confidence + '</span> ';
+                html += '<strong>' + escapeHtml(r.label) + '</strong>: ';
+                html += escapeHtml(r.recommendation);
+                html += ' <span class="rec-delta">(';
+                html += r.impact > 0 ? '+' : '';
+                html += fmt(r.impact, 4) + ')</span>';
+                html += '</li>';
+            }
+            html += '</ul></div>';
+        }
+
+        // Advanced statistics dropdown
+        html += '<details class="advanced-stats">';
+        html += '<summary>Advanced Statistics</summary>';
+
+        // Regression summary
+        const reg = analysis.regression;
+        if (reg) {
+            html += '<div class="stats-subsection">';
+            html += '<h4>Regression Analysis '
+                + (reg.weighted ? '(Weighted Least Squares)' : '(OLS)')
+                + '</h4>';
+            html += '<p>R&sup2; = ' + fmt(reg.r_squared, 4)
+                + ' &mdash; model explains ' + fmt(reg.r_squared * 100, 1)
+                + '% of score variance.</p>';
+            html += '<div class="table-wrap"><table class="stats-table"><thead><tr>';
+            html += '<th>Feature</th><th>Coefficient</th><th>Std Beta</th>';
+            html += '</tr></thead><tbody>';
+            for (let i = 0; i < reg.coefficients.length; i++) {
+                const c = reg.coefficients[i];
+                const cls = c.coefficient > 0 ? 'score-positive' : c.coefficient < 0 ? 'score-negative' : '';
+                html += '<tr>';
+                html += '<td style="text-align:left">' + escapeHtml(c.label || c.feature) + '</td>';
+                html += '<td class="' + cls + '">' + (c.coefficient >= 0 ? '+' : '') + fmt(c.coefficient, 4) + '</td>';
+                html += '<td>' + fmt(c.std_beta, 4) + '</td>';
+                html += '</tr>';
+            }
+            html += '</tbody></table></div></div>';
+        }
+
+        // Marginal impact table
+        const marginal = analysis.marginal_impact;
+        if (marginal && marginal.length > 0) {
+            html += '<div class="stats-subsection">';
+            html += '<h4>Marginal Feature Impact</h4>';
+            html += '<div class="table-wrap"><table class="stats-table"><thead><tr>';
+            html += '<th>Feature</th><th>Delta</th><th>Mean With</th><th>Mean Without</th><th>Count</th>';
+            html += '</tr></thead><tbody>';
+            for (let i = 0; i < marginal.length; i++) {
+                const m = marginal[i];
+                const cls = m.delta > 0 ? 'score-positive' : m.delta < 0 ? 'score-negative' : '';
+                html += '<tr>';
+                html += '<td style="text-align:left">' + escapeHtml(m.label) + '</td>';
+                html += '<td class="' + cls + '">' + (m.delta >= 0 ? '+' : '') + fmt(m.delta, 4) + '</td>';
+                html += '<td>' + fmt(m.mean_with, 4) + '</td>';
+                html += '<td>' + fmt(m.mean_without, 4) + '</td>';
+                html += '<td>' + m.count + '</td>';
+                html += '</tr>';
+            }
+            html += '</tbody></table></div></div>';
+        }
+
+        html += '</details>';
+        html += '</div>';
+        return html;
+    }
+
     // -- Public API --
 
     /**
@@ -428,6 +542,9 @@ const ClientResults = (function() {
         let html = '<div class="results-content">';
         html += '<h1>Results: ' + escapeHtml(deckName) + '</h1>';
 
+        if (isOptimization) {
+            html += renderFeatureAnalysis(results);
+        }
         html += renderSummaryTable(results, isOptimization);
         html += renderCardPerformance(results);
         if (!isOptimization) {

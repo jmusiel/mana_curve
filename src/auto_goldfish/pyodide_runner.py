@@ -183,6 +183,9 @@ def run_optimization(
     ramp_cutoff_turn = config.get("ramp_cutoff_turn", 0)
     min_cost_floor = config.get("min_cost_floor", 1)
     sims_per_eval = config.get("sims_per_enum", max(sims // 2, 100))
+    eta = config.get("eta", 3)
+    min_sims_hb = config.get("min_sims", 20)
+    hyperband_top_k = config.get("hyperband_top_k")
 
     goldfisher = Goldfisher(
         deck_list,
@@ -222,6 +225,9 @@ def run_optimization(
         max_ramp=max_ramp,
         optimize_for=optimize_for,
         sims_per_eval=sims_per_eval,
+        eta=eta,
+        min_sims=min_sims_hb,
+        hyperband_top_k=hyperband_top_k,
     )
 
     ranked = optimizer.run(
