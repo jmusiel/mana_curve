@@ -1,25 +1,17 @@
 {
   "version": 2,
-  "buildCommand": "bash scripts/vercel_build.sh",
-  "outputDirectory": "public",
   "builds": [
     {
       "src": "api/index.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": "src/**"
+      }
     }
   ],
-  "rewrites": [
-    {
-      "source": "/static/(.*)",
-      "destination": "/static/$1"
-    },
-    {
-      "source": "/dist/(.*)",
-      "destination": "/dist/$1"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/api/index.py"
-    }
+  "routes": [
+    { "src": "/static/(.*)", "dest": "/api/index.py" },
+    { "src": "/dist/(.*)", "dest": "/api/index.py" },
+    { "src": "/(.*)", "dest": "/api/index.py" }
   ]
 }
