@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "buildCommand": "bash scripts/vercel_build.sh",
+  "outputDirectory": "public",
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/static/(.*)",
+      "destination": "/static/$1"
+    },
+    {
+      "source": "/dist/(.*)",
+      "destination": "/dist/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/api/index.py"
+    }
+  ]
+}
