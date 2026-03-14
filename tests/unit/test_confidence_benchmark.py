@@ -88,8 +88,8 @@ class TestConfidenceBenchmark:
             noise_std=0.5,
         )
         confidences = {r["label"]: r["confidence"] for r in recs}
-        assert confidences["more lands"] == "high"
-        assert confidences["CardA"] == "high"
+        assert confidences["Add more lands"] == "high"
+        assert confidences["Add more CardA"] == "high"
 
     def test_strong_signal_moderate_noise(self):
         """Strong effects, moderate noise."""
@@ -116,9 +116,9 @@ class TestConfidenceBenchmark:
             noise_std=8.0,
         )
         confidences = {r["label"]: r["confidence"] for r in recs}
-        assert confidences["more lands"] == "medium"
+        assert confidences["Add more lands"] == "medium"
         # CardA drowned out by noise
-        assert confidences["CardA"] == "low"
+        assert confidences["Add more CardA"] == "low"
 
     def test_weak_signal_low_noise(self):
         """Weak effects, low noise."""
@@ -176,10 +176,10 @@ class TestConfidenceBenchmark:
             noise_std=2.0,
         )
         confidences = {r["label"]: r["confidence"] for r in recs}
-        assert confidences["more lands"] == "high"
+        assert confidences["Add more lands"] == "high"
         # Weak features should not be high confidence
         for label, conf in confidences.items():
-            if label != "more lands":
+            if label != "Add more lands":
                 assert conf != "high", f"{label} should not be high, got {conf}"
 
     def test_few_configs(self):
