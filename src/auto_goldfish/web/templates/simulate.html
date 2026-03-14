@@ -334,6 +334,15 @@
                 </select>
             </div>
         </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="algorithm">Optimizer Algorithm <span class="info-tip" data-tip="Racing uses CRN-paired sequential elimination for faster results with similar accuracy. Hyperband uses successive halving (slower but more exhaustive).">i</span></label>
+                <select id="algorithm" name="algorithm">
+                    <option value="racing" selected>Racing (fast)</option>
+                    <option value="hyperband">Hyperband (classic)</option>
+                </select>
+            </div>
+        </div>
         <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
             <input type="checkbox" id="swap-mode" style="width:auto;">
             Swap mode <span class="info-tip" data-tip="Instead of adding draw/ramp candidates to the deck, replace existing cards that have no registered effects.">i</span>
@@ -1760,6 +1769,7 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
             enabled_candidates: enabledCandidates,
             max_draw_additions: parseInt(document.getElementById('max-draw-additions').value) || 0,
             max_ramp_additions: parseInt(document.getElementById('max-ramp-additions').value) || 0,
+            algorithm: document.getElementById('algorithm').value,
         };
 
         // Custom draw

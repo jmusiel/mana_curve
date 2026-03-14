@@ -147,6 +147,7 @@ def run_optimization(
         ALL_CANDIDATES,
         make_custom_candidate,
     )
+    from auto_goldfish.optimization.fast_optimizer import FastDeckOptimizer
     from auto_goldfish.optimization.optimizer import DeckOptimizer
 
     deck_list: List[Dict[str, Any]] = json.loads(deck_json)
@@ -228,20 +229,35 @@ def run_optimization(
     if max_lands is not None:
         land_delta_max = max_lands - goldfisher.land_count
 
-    optimizer = DeckOptimizer(
-        goldfisher=goldfisher,
-        candidates=candidates,
-        swap_mode=swap_mode,
-        max_draw=max_draw,
-        max_ramp=max_ramp,
-        land_delta_min=land_delta_min,
-        land_delta_max=land_delta_max,
-        optimize_for=optimize_for,
-        hyperband_max_sims=hyperband_max_sims,
-        eta=eta,
-        hyperband_min_sims=hyperband_min_sims,
-        hyperband_top_k=hyperband_top_k,
-    )
+    algorithm = config.get("algorithm", "racing")
+
+    if algorithm == "racing":
+        optimizer = FastDeckOptimizer(
+            goldfisher=goldfisher,
+            candidates=candidates,
+            swap_mode=swap_mode,
+            max_draw=max_draw,
+            max_ramp=max_ramp,
+            land_delta_min=land_delta_min,
+            land_delta_max=land_delta_max,
+            optimize_for=optimize_for,
+            hyperband_max_sims=hyperband_max_sims,
+        )
+    else:
+        optimizer = DeckOptimizer(
+            goldfisher=goldfisher,
+            candidates=candidates,
+            swap_mode=swap_mode,
+            max_draw=max_draw,
+            max_ramp=max_ramp,
+            land_delta_min=land_delta_min,
+            land_delta_max=land_delta_max,
+            optimize_for=optimize_for,
+            hyperband_max_sims=hyperband_max_sims,
+            eta=eta,
+            hyperband_min_sims=hyperband_min_sims,
+            hyperband_top_k=hyperband_top_k,
+        )
 
     ranked = optimizer.run(
         final_sims=sims,

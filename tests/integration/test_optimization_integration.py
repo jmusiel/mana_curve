@@ -143,7 +143,7 @@ def test_optimizer_runs():
 
 
 def test_optimizer_results_have_source_tags():
-    """Each result includes an opt_source tag (regression, hyperband, or baseline)."""
+    """With include_hyperband, each result includes an opt_source tag."""
     deck = _simple_deck()
     gf = Goldfisher(deck, turns=5, sims=50, seed=42, record_results="quartile")
     enabled = {
@@ -162,7 +162,6 @@ def test_optimizer_results_have_source_tags():
         hyperband_max_sims=50,
     )
 
-    # With include_hyperband=True, results have source tags
     results = optimizer.run(final_sims=50, final_top_k=5, include_hyperband=True)
     valid_sources = {"regression", "hyperband", "baseline"}
     for config, result_dict in results:
@@ -174,10 +173,30 @@ def test_optimizer_results_have_source_tags():
     # At minimum regression configs should be present
     assert "regression" in sources
 
-    # With include_hyperband=False (default), no source tags are set
-    results_no_hb = optimizer.run(final_sims=50, final_top_k=5)
-    for config, result_dict in results_no_hb:
-        assert "opt_source" not in result_dict, f"Unexpected opt_source for {config}"
+
+def test_optimizer_results_no_source_tags_by_default():
+    """Without include_hyperband, results have no opt_source tags."""
+    deck = _simple_deck()
+    gf = Goldfisher(deck, turns=5, sims=50, seed=42, record_results="quartile")
+    enabled = {
+        cid: c for cid, c in ALL_CANDIDATES.items()
+        if cid in ("draw_2cmc_2", "ramp_2cmc_1")
+    }
+
+    optimizer = DeckOptimizer(
+        goldfisher=gf,
+        candidates=enabled,
+        swap_mode=False,
+        max_draw=1,
+        max_ramp=1,
+        land_range=1,
+        optimize_for="mean_mana",
+        hyperband_max_sims=50,
+    )
+
+    results = optimizer.run(final_sims=50, final_top_k=5)
+    for config, result_dict in results:
+        assert "opt_source" not in result_dict
 
 
 def test_optimizer_finds_multi_card_configs():
@@ -280,7 +299,7 @@ def test_pyodide_runner_optimization():
     assert len(results) > 0
     assert "opt_config" in results[0]
     assert "mean_mana" in results[0]
-    # Default (include_hyperband=False) should not have source tags
+    # Racing optimizer does not set opt_source tags
     assert "opt_source" not in results[0]
 
 
