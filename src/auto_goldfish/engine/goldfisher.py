@@ -1556,3 +1556,43 @@ class Goldfisher:
             ci_consistency=ci_consistency,
             ci_mean_bad_turns=ci_mean_bad_turns,
         )
+
+    def simulate_single_game(self, seed: int) -> float:
+        """Run one game with a specific seed, return the primary mana value.
+
+        Lightweight path for optimization — skips recording, logging,
+        replays, and all bookkeeping beyond what's needed for the primary
+        mana metric. Uses the same game logic as ``simulate()``.
+
+        Args:
+            seed: Random seed for this game.
+
+        Returns:
+            The primary mana value (depends on ``self.mana_mode``).
+        """
+        random.seed(seed)
+        state = self._reset()
+        self._mulligan(state)
+
+        game_mana_value = 0
+        game_mana_draw = 0
+        game_mana_ramp = 0
+
+        for _turn in range(self.turns):
+            played = self._take_turn(state)
+            for card in played:
+                if card.spell:
+                    cost = card.mana_spent_when_played
+                    if card.draw:
+                        game_mana_draw += cost
+                    elif card.ramp:
+                        game_mana_ramp += cost
+                    else:
+                        game_mana_value += cost
+
+        if self.mana_mode == "value":
+            return float(game_mana_value)
+        elif self.mana_mode == "value_draw":
+            return float(game_mana_value + game_mana_draw)
+        else:
+            return float(game_mana_value + game_mana_draw + game_mana_ramp)

@@ -378,18 +378,21 @@ def synthesize_recommendations(
         # Positive impact → "Add more X:", negative → "Don't add X:"
         is_positive = coeff > 0
         if fname == "land_delta":
+            # Always frame land recommendations as a positive action
             if is_positive:
                 label = "Add more lands"
                 rec_text = (
                     f"Adding at least one more land tends to"
-                    f" {impact_direction} {metric_label}"
+                    f" increase {metric_label}"
                 )
             else:
                 label = "Cut lands"
                 rec_text = (
                     f"Cutting at least one land tends to"
-                    f" {impact_direction} {metric_label}"
+                    f" increase {metric_label}"
                 )
+            # Flip impact to positive so it always appears under "improvements"
+            coeff = abs(coeff)
         elif fname.startswith("count_"):
             card = fname.removeprefix("count_")
             card_info = _EXAMPLE_CARDS.get(card)

@@ -155,6 +155,7 @@ class SimulationRunner:
             ALL_CANDIDATES,
             make_custom_candidate,
         )
+        from auto_goldfish.optimization.fast_optimizer import FastDeckOptimizer
         from auto_goldfish.optimization.optimizer import DeckOptimizer
 
         config = job.config
@@ -198,20 +199,39 @@ class SimulationRunner:
         if max_lands is not None:
             land_delta_max = max_lands - goldfisher.land_count
 
-        optimizer = DeckOptimizer(
-            goldfisher=goldfisher,
-            candidates=candidates,
-            swap_mode=config.get("swap_mode", False),
-            max_draw=config.get("max_draw_additions", 2),
-            max_ramp=config.get("max_ramp_additions", 2),
-            land_delta_min=land_delta_min,
-            land_delta_max=land_delta_max,
-            optimize_for=config.get("optimize_for", "mean_mana"),
-            hyperband_max_sims=hyperband_max_sims,
-            eta=eta,
-            hyperband_min_sims=hyperband_min_sims,
-            hyperband_top_k=hyperband_top_k,
-        )
+        algorithm = config.get("algorithm", "racing")
+        optimize_for = config.get("optimize_for", "mean_mana")
+        swap_mode = config.get("swap_mode", False)
+        max_draw = config.get("max_draw_additions", 2)
+        max_ramp = config.get("max_ramp_additions", 2)
+
+        if algorithm == "racing":
+            optimizer = FastDeckOptimizer(
+                goldfisher=goldfisher,
+                candidates=candidates,
+                swap_mode=swap_mode,
+                max_draw=max_draw,
+                max_ramp=max_ramp,
+                land_delta_min=land_delta_min,
+                land_delta_max=land_delta_max,
+                optimize_for=optimize_for,
+                hyperband_max_sims=hyperband_max_sims,
+            )
+        else:
+            optimizer = DeckOptimizer(
+                goldfisher=goldfisher,
+                candidates=candidates,
+                swap_mode=swap_mode,
+                max_draw=max_draw,
+                max_ramp=max_ramp,
+                land_delta_min=land_delta_min,
+                land_delta_max=land_delta_max,
+                optimize_for=optimize_for,
+                hyperband_max_sims=hyperband_max_sims,
+                eta=eta,
+                hyperband_min_sims=hyperband_min_sims,
+                hyperband_top_k=hyperband_top_k,
+            )
 
         ranked = optimizer.run(
             final_sims=final_sims,
