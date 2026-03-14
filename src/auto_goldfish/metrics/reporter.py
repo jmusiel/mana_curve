@@ -126,6 +126,8 @@ def result_to_dict(result: SimulationResult) -> Dict[str, Any]:
         "percentile_75": result.percentile_75,
         "threshold_percent": result.threshold_percent,
         "threshold_mana": result.threshold_mana,
+        "ceiling_mana": result.ceiling_mana,
+        "quartile_mana": result.quartile_mana,
         "distribution_stats": result.distribution_stats,
         "card_performance": result.card_performance,
         "replay_data": result.replay_data,

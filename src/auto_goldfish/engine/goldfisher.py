@@ -68,6 +68,8 @@ class SimulationResult:
     percentile_75: float = 0.0
     threshold_percent: float = 0.0
     threshold_mana: float = 0.0
+    ceiling_mana: float = 0.0
+    quartile_mana: Dict[str, Dict[str, float]] = field(default_factory=dict)
     con_threshold: float = 0.25
     distribution_stats: Dict[str, float] = field(default_factory=dict)
     card_performance: Dict[str, Any] = field(default_factory=dict)
@@ -1116,6 +1118,45 @@ class Goldfisher:
         threshold_percent = con_threshold
         threshold_mana = tail_mean
 
+        # Top-25% mean (ceiling) and per-quartile mana breakdowns
+        top_cutoff = max(1, int(n * (1 - con_threshold)))
+        ceiling_mana = float(np.mean(sorted_primary[top_cutoff:]))
+
+        primary_arr = np.array(primary_list)
+        val_arr = np.array(mana_value_list)
+        draw_arr = np.array(mana_draw_list)
+        ramp_arr = np.array(mana_ramp_list)
+        vd_arr = val_arr + draw_arr
+        all_arr = val_arr + draw_arr + ramp_arr
+
+        sort_idx = np.argsort(primary_arr)
+        bot_idx = sort_idx[:cutoff]
+        top_idx = sort_idx[top_cutoff:]
+
+        quartile_mana = {
+            "bottom_25": {
+                "value": float(np.mean(val_arr[bot_idx])),
+                "draw": float(np.mean(draw_arr[bot_idx])),
+                "ramp": float(np.mean(ramp_arr[bot_idx])),
+                "vd": float(np.mean(vd_arr[bot_idx])),
+                "all": float(np.mean(all_arr[bot_idx])),
+            },
+            "mean": {
+                "value": float(np.mean(val_arr)),
+                "draw": float(np.mean(draw_arr)),
+                "ramp": float(np.mean(ramp_arr)),
+                "vd": float(np.mean(vd_arr)),
+                "all": float(np.mean(all_arr)),
+            },
+            "top_25": {
+                "value": float(np.mean(val_arr[top_idx])),
+                "draw": float(np.mean(draw_arr[top_idx])),
+                "ramp": float(np.mean(ramp_arr[top_idx])),
+                "vd": float(np.mean(vd_arr[top_idx])),
+                "all": float(np.mean(all_arr[top_idx])),
+            },
+        }
+
         z = 1.96
 
         sqrt_n = np.sqrt(n)
@@ -1182,6 +1223,8 @@ class Goldfisher:
             percentile_75=percentile_75,
             threshold_percent=threshold_percent,
             threshold_mana=threshold_mana,
+            ceiling_mana=ceiling_mana,
+            quartile_mana=quartile_mana,
             con_threshold=con_threshold,
             ci_mana_value=ci_mana_value,
             ci_mana_draw=ci_mana_draw,
@@ -1482,6 +1525,45 @@ class Goldfisher:
         threshold_percent = con_threshold
         threshold_mana = tail_mean
 
+        # Top-25% mean (ceiling) and per-quartile mana breakdowns
+        top_cutoff = max(1, int(n * (1 - con_threshold)))
+        ceiling_mana = float(np.mean(sorted_primary[top_cutoff:]))
+
+        primary_arr = np.array(primary_list)
+        val_arr = np.array(mana_value_list)
+        draw_arr = np.array(mana_draw_list)
+        ramp_arr = np.array(mana_ramp_list)
+        vd_arr = val_arr + draw_arr
+        all_arr = val_arr + draw_arr + ramp_arr
+
+        sort_idx = np.argsort(primary_arr)
+        bot_idx = sort_idx[:cutoff]
+        top_idx = sort_idx[top_cutoff:]
+
+        quartile_mana = {
+            "bottom_25": {
+                "value": float(np.mean(val_arr[bot_idx])),
+                "draw": float(np.mean(draw_arr[bot_idx])),
+                "ramp": float(np.mean(ramp_arr[bot_idx])),
+                "vd": float(np.mean(vd_arr[bot_idx])),
+                "all": float(np.mean(all_arr[bot_idx])),
+            },
+            "mean": {
+                "value": float(np.mean(val_arr)),
+                "draw": float(np.mean(draw_arr)),
+                "ramp": float(np.mean(ramp_arr)),
+                "vd": float(np.mean(vd_arr)),
+                "all": float(np.mean(all_arr)),
+            },
+            "top_25": {
+                "value": float(np.mean(val_arr[top_idx])),
+                "draw": float(np.mean(draw_arr[top_idx])),
+                "ramp": float(np.mean(ramp_arr[top_idx])),
+                "vd": float(np.mean(vd_arr[top_idx])),
+                "all": float(np.mean(all_arr[top_idx])),
+            },
+        }
+
         # Compute 95% confidence intervals
         z = 1.96
         sqrt_n = np.sqrt(n)
@@ -1542,6 +1624,8 @@ class Goldfisher:
             percentile_75=percentile_75,
             threshold_percent=threshold_percent,
             threshold_mana=threshold_mana,
+            ceiling_mana=ceiling_mana,
+            quartile_mana=quartile_mana,
             con_threshold=con_threshold,
             ci_mana_value=ci_mana_value,
             ci_mana_draw=ci_mana_draw,

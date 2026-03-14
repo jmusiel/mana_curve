@@ -80,7 +80,7 @@ class FastDeckOptimizer:
         land_range: int = 2,
         land_delta_min: Optional[int] = None,
         land_delta_max: Optional[int] = None,
-        optimize_for: str = "mean_mana",
+        optimize_for: str = "floor_performance",
         hyperband_max_sims: Optional[int] = None,
         batch_size: int = 50,
         confidence: float = 0.95,
@@ -458,6 +458,8 @@ class FastDeckOptimizer:
 
     def _extract_score_from_dict(self, result_dict: dict) -> float:
         """Extract score from a result_to_dict output."""
+        if self.optimize_for == "floor_performance":
+            return result_dict.get("threshold_mana", 0.0)
         if self.optimize_for == "consistency":
             return result_dict.get("consistency", 0.0)
         if self.optimize_for == "mean_mana_value":

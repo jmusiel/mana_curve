@@ -171,6 +171,22 @@ class TestConsistency:
         """Left-tail mean should be <= overall mean mana."""
         assert sequential_result.threshold_mana <= sequential_result.mean_mana
 
+    def test_ceiling_mana_at_least_mean(self, sequential_result):
+        """Top-quartile mean should be >= overall mean mana."""
+        assert sequential_result.ceiling_mana >= sequential_result.mean_mana
+
+    def test_quartile_mana_has_all_keys(self, sequential_result):
+        """quartile_mana should have bottom_25, mean, and top_25 sections."""
+        qm = sequential_result.quartile_mana
+        assert set(qm.keys()) == {"bottom_25", "mean", "top_25"}
+        for section in qm.values():
+            assert set(section.keys()) == {"value", "draw", "ramp", "vd", "all"}
+
+    def test_quartile_mana_ordering(self, sequential_result):
+        """Bottom-25% vd should be <= mean vd <= top-25% vd."""
+        qm = sequential_result.quartile_mana
+        assert qm["bottom_25"]["vd"] <= qm["mean"]["vd"] <= qm["top_25"]["vd"]
+
 
 class TestConfidenceIntervals:
     """Tests for 95% confidence intervals."""

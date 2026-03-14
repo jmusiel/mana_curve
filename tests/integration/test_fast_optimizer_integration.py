@@ -224,3 +224,32 @@ class TestFastDeckOptimizerIntegration:
         for config, result_dict in results:
             assert isinstance(config, DeckConfig)
             assert "mean_mana" in result_dict
+
+    def test_floor_performance_target(self):
+        """FastDeckOptimizer can optimize for floor_performance."""
+        deck = _simple_deck()
+        gf = Goldfisher(deck, turns=5, sims=50, seed=42, record_results="quartile")
+        enabled = {
+            cid: c for cid, c in ALL_CANDIDATES.items()
+            if cid in ("draw_2cmc_2", "ramp_2cmc_1")
+        }
+
+        optimizer = FastDeckOptimizer(
+            goldfisher=gf,
+            candidates=enabled,
+            swap_mode=False,
+            max_draw=1,
+            max_ramp=1,
+            land_range=1,
+            optimize_for="floor_performance",
+            batch_size=10,
+            min_games=20,
+            max_sims_per_config=60,
+        )
+
+        results = optimizer.run(final_sims=50, final_top_k=3)
+        assert len(results) > 0
+        for config, result_dict in results:
+            assert isinstance(config, DeckConfig)
+            assert "threshold_mana" in result_dict
+            assert result_dict["threshold_mana"] >= 0

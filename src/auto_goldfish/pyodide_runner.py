@@ -161,7 +161,7 @@ def run_optimization(
     mulligan_type = config.get("mulligan", "default")
 
     # Optimization config
-    optimize_for = config.get("optimize_for", "mean_mana")
+    optimize_for = config.get("optimize_for", "floor_performance")
     swap_mode = config.get("swap_mode", False)
     enabled_ids = set(config.get("enabled_candidates", []))
     custom_draw = config.get("custom_draw")
