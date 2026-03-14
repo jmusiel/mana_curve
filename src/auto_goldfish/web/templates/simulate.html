@@ -140,10 +140,10 @@
             <input type="number" id="turns" name="turns" value="10" min="1" max="{{ max_turns }}">
         </div>
         <div class="form-group">
-            <label for="optimize-target">Optimize for <span class="info-tip" data-tip="The metric used to rank land counts and card candidates. Mana maximizes total mana spent; Consistency minimizes bad turns.">i</span></label>
+            <label for="optimize-target">Optimize for <span class="info-tip" data-tip="The metric used to rank land counts and card candidates. Mana maximizes total mana spent; Consistency maximizes worst-case reliability (left-tail ratio); Spells Cast maximizes spells played per game.">i</span></label>
             <select id="optimize-target" name="optimize_target">
-                <option value="mana" selected>Total mana spent</option>
-                <option value="consistency">Consistency (fewer bad turns)</option>
+                <option value="mana">Total mana spent</option>
+                <option value="consistency" selected>Consistency (fewer bad turns)</option>
                 <option value="spells_cast">Number of spells cast</option>
             </select>
         </div>
@@ -209,8 +209,8 @@
                 <label for="max-draw-additions">Max draw cards to add <span class="info-tip" data-tip="Maximum number of draw-effect cards the optimizer will try adding to the deck.">i</span></label>
                 <select id="max-draw-additions">
                     <option value="0">0</option>
-                    <option value="1">1</option>
-                    <option value="2" selected>2</option>
+                    <option value="1" selected>1</option>
+                    <option value="2">2</option>
                     <option value="3">3</option>
                 </select>
             </div>
@@ -218,8 +218,8 @@
                 <label for="max-ramp-additions">Max ramp cards to add <span class="info-tip" data-tip="Maximum number of ramp-effect cards the optimizer will try adding to the deck.">i</span></label>
                 <select id="max-ramp-additions">
                     <option value="0">0</option>
-                    <option value="1">1</option>
-                    <option value="2" selected>2</option>
+                    <option value="1" selected>1</option>
+                    <option value="2">2</option>
                     <option value="3">3</option>
                 </select>
             </div>
@@ -259,7 +259,7 @@
         <summary>Play Strategy</summary>
         <div class="form-row">
             <div class="form-group">
-                <label for="mana-mode">Consider mana spent on <span class="info-tip" data-tip="Which spell types count toward the 'mana spent' metric. Value-only ignores ramp/draw costs; Total counts everything.">i</span></label>
+                <label for="mana-mode">Consider mana spent on <span class="info-tip" data-tip="Which spell types count toward the 'mana spent' metric and percentiles. Value-only counts spells with no effects; Value + Draw includes draw spells; Total counts everything including ramp.">i</span></label>
                 <select id="mana-mode" name="mana_mode">
                     <option value="value" selected>Value spells only</option>
                     <option value="value_draw">Value + Draw spells</option>
@@ -276,7 +276,7 @@
         </div>
         <div class="form-row">
             <div class="form-group">
-                <label for="spell-priority">Spell Priority <span class="info-tip" data-tip="The order in which spells are considered for casting each turn. Ramp/Draw First prioritizes those categories; Highest CMC plays expensive spells first.">i</span></label>
+                <label for="spell-priority">Spell Priority <span class="info-tip" data-tip="The order in which spells are considered for casting each turn. Default sorts by card priority then CMC. Category options (Ramp/Draw/Value First) prioritize that type. Highest CMC plays expensive spells first.">i</span></label>
                 <select id="spell-priority" name="spell_priority">
                     <option value="priority_then_cmc" selected>Default (Priority + CMC)</option>
                     <option value="ramp_first">Ramp First</option>
@@ -339,6 +339,10 @@
             Swap mode <span class="info-tip" data-tip="Instead of adding draw/ramp candidates to the deck, replace existing cards that have no registered effects.">i</span>
         </label>
         <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+            <input type="checkbox" id="include-hyperband" style="width:auto;">
+            Include hyperband candidates <span class="info-tip" data-tip="Also evaluate top Hyperband survivors alongside regression-predicted configs. Shows source tags (regression/hyperband/baseline) on results. Uses more compute.">i</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
             <input type="checkbox" id="override-fidelity" style="width:auto;">
             Override fidelity preset <span class="info-tip" data-tip="Manually set simulation counts instead of using the preset. For advanced users who want fine-grained control.">i</span>
         </label>
@@ -349,8 +353,8 @@
                     <input type="number" id="sims" name="sims" value="500" min="100" max="{{ max_sims }}" step="100">
                 </div>
                 <div class="form-group">
-                    <label for="sims-per-enum">Sims per candidate (Hyperband R) <span class="info-tip" data-tip="Maximum simulations per candidate during Hyperband selection. Higher values give more accurate comparisons but take longer.">i</span></label>
-                    <input type="number" id="sims-per-enum" value="500" min="50" max="{{ max_sims }}" step="50">
+                    <label for="hyperband-max-sims">Sims per candidate (Hyperband R) <span class="info-tip" data-tip="Maximum simulations per candidate during Hyperband selection. Higher values give more accurate comparisons but take longer.">i</span></label>
+                    <input type="number" id="hyperband-max-sims" value="500" min="50" max="{{ max_sims }}" step="50">
                 </div>
             </div>
         </div>
@@ -1434,18 +1438,18 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
 
     // Fidelity presets: derived from hyperband sensitivity analysis
     var FIDELITY_PRESETS = {
-        fast:     { sims: 200, sims_per_eval: 100, eta: 3, min_sims: 10, hyperband_top_k: 5 },
-        balanced: { sims: 500, sims_per_eval: 500, eta: 3, min_sims: 20, hyperband_top_k: 10 },
-        high:     { sims: 1000, sims_per_eval: 500, eta: 2, min_sims: 20, hyperband_top_k: 5 },
+        fast:     { sims: 500, hyperband_max_sims: 100, eta: 3, hyperband_min_sims: 10, hyperband_top_k: 5 },
+        balanced: { sims: 1000, hyperband_max_sims: 500, eta: 3, hyperband_min_sims: 20, hyperband_top_k: 10 },
+        high:     { sims: 1000, hyperband_max_sims: 500, eta: 2, hyperband_min_sims: 20, hyperband_top_k: 5 },
     };
 
     function getFidelityParams() {
         if (document.getElementById('override-fidelity').checked) {
             return {
                 sims: parseInt(document.getElementById('sims').value) || 500,
-                sims_per_eval: parseInt(document.getElementById('sims-per-enum').value) || 500,
+                hyperband_max_sims: parseInt(document.getElementById('hyperband-max-sims').value) || 500,
                 eta: 3,
-                min_sims: 20,
+                hyperband_min_sims: 20,
                 hyperband_top_k: 5,
             };
         }
@@ -1495,11 +1499,11 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
         var totalConfigs = landCounts * drawCombos * rampCombos;
         var finalTopK = 5;
 
-        var enumSeconds = Math.ceil((fp.sims_per_eval * totalConfigs * msPerSim) / 1000);
+        var enumSeconds = Math.ceil((fp.hyperband_max_sims * totalConfigs * msPerSim) / 1000);
         var evalSeconds = Math.ceil((fp.sims * finalTopK * msPerSim) / 1000);
         document.getElementById('local-sim-estimate').textContent =
             'Estimated time: ~' + (enumSeconds + evalSeconds) + 's ('
-            + totalConfigs + ' configs x ' + fp.sims_per_eval + ' sims + '
+            + totalConfigs + ' configs x ' + fp.hyperband_max_sims + ' sims + '
             + finalTopK + ' top x ' + fp.sims + ' sims).';
     }
 
@@ -1707,7 +1711,7 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
     document.getElementById('max-ramp-additions').addEventListener('change', updateEstimate);
 
     document.getElementById('sims').addEventListener('input', updateEstimate);
-    document.getElementById('sims-per-enum').addEventListener('input', updateEstimate);
+    document.getElementById('hyperband-max-sims').addEventListener('input', updateEstimate);
     document.querySelectorAll('#card-optimization-settings [data-candidate]').forEach(function(cb) {
         cb.addEventListener('change', updateEstimate);
     });
@@ -1748,9 +1752,10 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
             optimization_enabled: true,
             optimize_for: optimize_for,
             swap_mode: document.getElementById('swap-mode').checked,
-            sims_per_enum: fp.sims_per_eval,
+            include_hyperband: document.getElementById('include-hyperband').checked,
+            hyperband_max_sims: fp.hyperband_max_sims,
             eta: fp.eta,
-            min_sims: fp.min_sims,
+            hyperband_min_sims: fp.hyperband_min_sims,
             hyperband_top_k: fp.hyperband_top_k,
             enabled_candidates: enabledCandidates,
             max_draw_additions: parseInt(document.getElementById('max-draw-additions').value) || 0,

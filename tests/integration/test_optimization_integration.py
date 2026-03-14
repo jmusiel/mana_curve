@@ -127,18 +127,57 @@ def test_optimizer_runs():
         max_ramp=1,
         land_range=1,
         optimize_for="mean_mana",
-        sims_per_eval=50,
+        hyperband_max_sims=50,
     )
 
     results = optimizer.run(final_sims=50, final_top_k=3)
-    assert len(results) > 0
-    assert len(results) <= 3
+    top_results = [r for r in results if r[1].get("opt_baseline_rank") is None]
+    assert len(top_results) > 0
+    assert len(top_results) <= 3
 
     # Each result is (DeckConfig, result_dict)
     for config, result_dict in results:
         assert isinstance(config, DeckConfig)
         assert "mean_mana" in result_dict
         assert "consistency" in result_dict
+
+
+def test_optimizer_results_have_source_tags():
+    """Each result includes an opt_source tag (regression, hyperband, or baseline)."""
+    deck = _simple_deck()
+    gf = Goldfisher(deck, turns=5, sims=50, seed=42, record_results="quartile")
+    enabled = {
+        cid: c for cid, c in ALL_CANDIDATES.items()
+        if cid in ("draw_2cmc_2", "ramp_2cmc_1")
+    }
+
+    optimizer = DeckOptimizer(
+        goldfisher=gf,
+        candidates=enabled,
+        swap_mode=False,
+        max_draw=1,
+        max_ramp=1,
+        land_range=1,
+        optimize_for="mean_mana",
+        hyperband_max_sims=50,
+    )
+
+    # With include_hyperband=True, results have source tags
+    results = optimizer.run(final_sims=50, final_top_k=5, include_hyperband=True)
+    valid_sources = {"regression", "hyperband", "baseline"}
+    for config, result_dict in results:
+        assert "opt_source" in result_dict, f"Missing opt_source for {config}"
+        assert result_dict["opt_source"] in valid_sources
+
+    # Baseline should be among the evaluated configs (may or may not survive top-5 cut)
+    sources = {r[1]["opt_source"] for r in results}
+    # At minimum regression configs should be present
+    assert "regression" in sources
+
+    # With include_hyperband=False (default), no source tags are set
+    results_no_hb = optimizer.run(final_sims=50, final_top_k=5)
+    for config, result_dict in results_no_hb:
+        assert "opt_source" not in result_dict, f"Unexpected opt_source for {config}"
 
 
 def test_optimizer_finds_multi_card_configs():
@@ -158,7 +197,7 @@ def test_optimizer_finds_multi_card_configs():
         max_ramp=2,
         land_range=0,
         optimize_for="mean_mana",
-        sims_per_eval=20,
+        hyperband_max_sims=20,
     )
 
     results = optimizer.run(final_sims=20, final_top_k=10)
@@ -167,7 +206,7 @@ def test_optimizer_finds_multi_card_configs():
 
 
 def test_optimizer_hyperband_multiple_brackets():
-    """DeckOptimizer uses Hyperband with multiple brackets when sims_per_eval is high enough."""
+    """DeckOptimizer uses Hyperband with multiple brackets when hyperband_max_sims is high enough."""
     deck = _simple_deck()
     gf = Goldfisher(deck, turns=5, sims=50, seed=42, record_results="quartile")
     enabled = {
@@ -175,7 +214,7 @@ def test_optimizer_hyperband_multiple_brackets():
         if cid in ("draw_2cmc_2", "ramp_2cmc_1")
     }
 
-    # sims_per_eval=200 gives s_max=2 (3 brackets)
+    # hyperband_max_sims=200 gives s_max=2 (3 brackets)
     optimizer = DeckOptimizer(
         goldfisher=gf,
         candidates=enabled,
@@ -184,7 +223,7 @@ def test_optimizer_hyperband_multiple_brackets():
         max_ramp=1,
         land_range=1,
         optimize_for="mean_mana",
-        sims_per_eval=200,
+        hyperband_max_sims=200,
     )
 
     # Track progress calls
@@ -198,8 +237,9 @@ def test_optimizer_hyperband_multiple_brackets():
         eval_progress=lambda c, t: eval_calls.append((c, t)),
     )
 
-    assert len(results) > 0
-    assert len(results) <= 3
+    top_results = [r for r in results if r[1].get("opt_baseline_rank") is None]
+    assert len(top_results) > 0
+    assert len(top_results) <= 3
 
     # Progress should have been reported
     assert len(enum_calls) > 0
@@ -240,6 +280,8 @@ def test_pyodide_runner_optimization():
     assert len(results) > 0
     assert "opt_config" in results[0]
     assert "mean_mana" in results[0]
+    # Default (include_hyperband=False) should not have source tags
+    assert "opt_source" not in results[0]
 
 
 def test_optimizer_mean_spells_cast_target():
@@ -259,18 +301,20 @@ def test_optimizer_mean_spells_cast_target():
         max_ramp=1,
         land_range=1,
         optimize_for="mean_spells_cast",
-        sims_per_eval=50,
+        hyperband_max_sims=50,
     )
 
     results = optimizer.run(final_sims=50, final_top_k=3)
-    assert len(results) > 0
-    assert len(results) <= 3
+    # May have +1 baseline reference row appended
+    top_results = [r for r in results if r[1].get("opt_baseline_rank") is None]
+    assert len(top_results) > 0
+    assert len(top_results) <= 3
 
     for config, result_dict in results:
         assert isinstance(config, DeckConfig)
         assert "mean_spells_cast" in result_dict
         assert result_dict["mean_spells_cast"] >= 0
 
-    # Results should be sorted by mean_spells_cast descending
-    scores = [r[1]["mean_spells_cast"] for r in results]
+    # Top results should be sorted by mean_spells_cast descending
+    scores = [r[1]["mean_spells_cast"] for r in top_results]
     assert scores == sorted(scores, reverse=True)

@@ -62,11 +62,14 @@ def enumerate_configs(
     max_draw: int = 2,
     max_ramp: int = 2,
     land_range: int = 2,
+    land_delta_min: Optional[int] = None,
+    land_delta_max: Optional[int] = None,
 ) -> List[DeckConfig]:
     """Enumerate all valid deck configurations.
 
     Generates the full cross-product of:
-    - Land deltas from -land_range to +land_range
+    - Land deltas from land_delta_min to land_delta_max
+      (defaults to -land_range..+land_range if not specified)
     - 0..max_draw draw candidates (combinations with replacement)
     - 0..max_ramp ramp candidates (combinations with replacement)
 
@@ -91,8 +94,11 @@ def enumerate_configs(
     for k in range(1, max_ramp + 1):
         ramp_combos.extend(combinations_with_replacement(ramp_ids, k))
 
+    lo = land_delta_min if land_delta_min is not None else -land_range
+    hi = land_delta_max if land_delta_max is not None else land_range
+
     configs: list[DeckConfig] = []
-    for land_delta in range(-land_range, land_range + 1):
+    for land_delta in range(lo, hi + 1):
         for draw_cards in draw_combos:
             for ramp_cards in ramp_combos:
                 added = tuple(sorted(draw_cards + ramp_cards))

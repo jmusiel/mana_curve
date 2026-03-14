@@ -89,6 +89,10 @@ const ClientResults = (function() {
         html += `<details class="metric-descriptions">
             <summary>Metric Definitions</summary>
             <dl class="metric-list">
+                <dt>Consistency</dt>
+                <dd>Left-tail ratio: mean mana in the worst 25% of games divided by the overall mean (0&ndash;1 scale). 1.0 = perfectly consistent; lower values mean bad games are much worse than average. Based on the selected mana mode.</dd>
+                <dt>Avg Spells</dt>
+                <dd>Average number of spells cast per game.</dd>
                 <dt>Mana Spent: V+D</dt>
                 <dd>Total mana spent on value (no-effect) and draw spells. Ramp excluded because it pays for itself. Higher = more resources deployed.</dd>
                 <dt>Mana Spent: Value / Draw / Ramp</dt>
@@ -97,52 +101,64 @@ const ClientResults = (function() {
                 <dd>Total mana spent on all spells (value + draw + ramp).</dd>
                 <dt>Hand Sum</dt>
                 <dd>Sum of min(hand_size, 7) per turn. Measures card availability across the game.</dd>
-                <dt>Consistency</dt>
-                <dd>How reliably the deck avoids low-mana games (0&ndash;1.2 scale). 1.0 = perfectly consistent. Computed from cumulative mana distribution based on selected mana mode.</dd>
                 <dt>Bad Turns</dt>
                 <dd>Average turns where no spells were cast and the deck wasn&rsquo;t empty. Lower = better.</dd>
                 <dt>Mid Turns</dt>
-                <dd>Average turns with fewer than 2 spells and mana spent below the turn number. Lower = better.</dd>
+                <dd>Average turns where fewer than 2 spells were cast, mana spent was below the turn number, and the deck wasn&rsquo;t empty. Lower = better.</dd>
                 <dt>Avg Lands / Avg Mulls</dt>
                 <dd>Average lands played and mulligans taken per game.</dd>
-                <dt>Avg Draws / Avg Spells</dt>
-                <dd>Average cards drawn and spells cast per game.</dd>
+                <dt>Avg Draws</dt>
+                <dd>Average cards drawn per game.</dd>
                 <dt>Mana Percentiles (25th / 50th / 75th)</dt>
                 <dd>Percentiles of mana spent (based on selected mana mode) showing distribution spread.</dd>
             </dl>
         </details>`;
         html += '<div class="table-wrap"><table class="stats-table"><thead><tr>';
         if (isOptimization) html += '<th rowspan="2">Rank</th><th rowspan="2">Configuration</th>';
-        html += '<th rowspan="2">Lands</th><th colspan="5">Mana Spent</th>';
-        html += '<th rowspan="2">Hand Sum</th><th rowspan="2">Consistency</th><th rowspan="2">Bad Turns</th>';
+        html += '<th rowspan="2">Lands</th><th rowspan="2">Consistency</th><th rowspan="2">Avg Spells</th>';
+        html += '<th colspan="5">Mana Spent</th>';
+        html += '<th rowspan="2">Hand Sum</th><th rowspan="2">Bad Turns</th>';
         html += '<th rowspan="2">Mid Turns</th><th rowspan="2">Avg Lands</th><th rowspan="2">Avg Mulls</th>';
-        html += '<th rowspan="2">Avg Draws</th><th rowspan="2">Avg Spells</th>';
+        html += '<th rowspan="2">Avg Draws</th>';
         html += '<th colspan="3">Mana Percentiles</th></tr><tr>';
         html += '<th>Value</th><th>Draw</th><th>Ramp</th><th>V+D</th><th>All</th>';
         html += '<th>25th</th><th>50th</th><th>75th</th></tr></thead><tbody>';
 
+        const colCount = isOptimization ? 19 : 17;
         for (let i = 0; i < results.length; i++) {
             const r = results[i];
+            const isBaselineRef = isOptimization && r.opt_baseline_rank != null;
+
+            // Insert separator before the baseline reference row
+            if (isBaselineRef) {
+                html += '<tr class="baseline-separator"><td colspan="' + colCount + '"></td></tr>';
+            }
+
             const conMargin = r.ci_consistency ? (r.ci_consistency[1] - r.ci_consistency[0]) / 2 : 0;
-            html += '<tr' + (isOptimization && i === 0 ? ' style="font-weight:bold; background:#e8f5e9;"' : '') + '>';
+            let rowStyle = '';
+            if (isOptimization && i === 0) rowStyle = ' style="font-weight:bold; background:#e8f5e9;"';
+            if (isBaselineRef) rowStyle = ' style="opacity:0.75; border-top:2px dashed #94a3b8;"';
+            html += '<tr' + rowStyle + '>';
             if (isOptimization) {
-                html += '<td>' + (i + 1) + '</td>';
-                html += '<td style="text-align:left">' + formatConfig(r.opt_config || 'Base deck') + '</td>';
+                const rank = isBaselineRef ? r.opt_baseline_rank : (i + 1);
+                html += '<td>' + rank + '</td>';
+                const sourceBadge = r.opt_source ? ' <span class="source-badge source-' + r.opt_source + '">' + r.opt_source + '</span>' : '';
+                html += '<td style="text-align:left">' + formatConfig(r.opt_config || 'Base deck') + sourceBadge + '</td>';
             }
             html += '<td>' + r.land_count + '</td>';
+            html += '<td>' + fmt(r.consistency, 3) + ' <small>&plusmn;' + fmt(conMargin, 4) + '</small></td>';
+            html += '<td>' + fmt(r.mean_spells_cast ?? 0, 2) + '</td>';
             html += '<td>' + fmt(r.mean_mana_value ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_value ?? 0, 2) + '</small></td>';
             html += '<td>' + fmt(r.mean_mana_draw ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_draw ?? 0, 2) + '</small></td>';
             html += '<td>' + fmt(r.mean_mana_ramp ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_ramp ?? 0, 2) + '</small></td>';
             html += '<td>' + fmt(r.mean_mana, 2) + ' <small>&plusmn;' + fmt(r.ci_mana ?? 0, 2) + '</small></td>';
             html += '<td>' + fmt(r.mean_mana_total ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_total ?? 0, 2) + '</small></td>';
             html += '<td>' + fmt(r.mean_hand_sum ?? 0, 1) + '</td>';
-            html += '<td>' + fmt(r.consistency, 3) + ' <small>&plusmn;' + fmt(conMargin, 4) + '</small></td>';
             html += '<td>' + fmt(r.mean_bad_turns, 2) + '</td>';
             html += '<td>' + fmt(r.mean_mid_turns, 2) + '</td>';
             html += '<td>' + fmt(r.mean_lands, 2) + '</td>';
             html += '<td>' + fmt(r.mean_mulls, 2) + '</td>';
             html += '<td>' + fmt(r.mean_draws ?? 0, 2) + '</td>';
-            html += '<td>' + fmt(r.mean_spells_cast ?? 0, 2) + '</td>';
             html += '<td>' + fmt(r.percentile_25, 1) + '</td>';
             html += '<td>' + fmt(r.percentile_50, 1) + '</td>';
             html += '<td>' + fmt(r.percentile_75, 1) + '</td>';
@@ -158,7 +174,9 @@ const ClientResults = (function() {
 
         let html = '<h2>Card Performance</h2>';
         html += '<p class="card-perf-summary">Impact of drawing each card on average mana spent across '
-            + cp.total_games + ' games.</p>';
+            + cp.total_games + ' games. '
+            + 'Impact = average mana spent in games where the card was drawn minus games where it was not. '
+            + 'Positive values mean drawing the card increased total mana output.</p>';
         html += '<div class="card-perf-grid">';
 
         // High performers
@@ -415,6 +433,25 @@ const ClientResults = (function() {
 
     // -- Feature Analysis --
 
+    /**
+     * Render recommendation text, inserting a Scryfall hover link for the
+     * example card when present (reuses the existing card-link tooltip system).
+     */
+    function renderRecText(r) {
+        if (!r.example_card) {
+            return escapeHtml(r.recommendation);
+        }
+        var name = r.example_card.name;
+        var text = r.recommendation;
+        var idx = text.indexOf(name);
+        if (idx === -1) {
+            return escapeHtml(text);
+        }
+        var before = text.substring(0, idx);
+        var after = text.substring(idx + name.length);
+        return escapeHtml(before) + cardLink(name) + escapeHtml(after);
+    }
+
     function renderFeatureAnalysis(results) {
         const analysis = results[0] && results[0].feature_analysis;
         if (!analysis || !analysis.recommendations || analysis.recommendations.length === 0) {
@@ -442,7 +479,7 @@ const ClientResults = (function() {
                 html += '<li class="rec-item rec-positive">';
                 html += '<span class="rec-badge ' + badge + '">' + r.confidence + '</span> ';
                 html += '<strong>' + escapeHtml(r.label) + '</strong>: ';
-                html += escapeHtml(r.recommendation);
+                html += renderRecText(r);
                 html += ' <span class="rec-delta">(';
                 html += r.impact > 0 ? '+' : '';
                 html += fmt(r.impact, 4) + ')</span>';
@@ -462,7 +499,7 @@ const ClientResults = (function() {
                 html += '<li class="rec-item rec-negative">';
                 html += '<span class="rec-badge ' + badge + '">' + r.confidence + '</span> ';
                 html += '<strong>' + escapeHtml(r.label) + '</strong>: ';
-                html += escapeHtml(r.recommendation);
+                html += renderRecText(r);
                 html += ' <span class="rec-delta">(';
                 html += r.impact > 0 ? '+' : '';
                 html += fmt(r.impact, 4) + ')</span>';
