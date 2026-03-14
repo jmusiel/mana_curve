@@ -1,18 +1,12 @@
 {
   "version": 2,
   "installCommand": "pip install -r requirements.txt",
-  "builds": [
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "includeFiles": "src/**"
-      }
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "src/**"
     }
-  ],
-  "routes": [
-    { "src": "/static/(.*)", "dest": "/api/index.py" },
-    { "src": "/dist/(.*)", "dest": "/api/index.py" },
-    { "src": "/(.*)", "dest": "/api/index.py" }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api/index.py" }
   ]
 }
