@@ -116,7 +116,11 @@ const ClientResults = (function() {
         html += '<div class="table-wrap"><table class="stats-table"><thead><tr>';
         if (isOptimization) html += '<th rowspan="2">Rank</th><th rowspan="2">Configuration</th>';
         html += '<th rowspan="2">Lands</th><th rowspan="2">Consistency</th><th rowspan="2">Avg Spells</th>';
-        html += '<th colspan="5">Mana Spent</th>';
+        html += '<th colspan="5">Mana Spent <span class="mana-view-toggle" data-current="bottom_25">';
+        html += '<button class="mana-view-btn active" data-view="bottom_25" title="Average mana in worst 25% of games">Floor</button>';
+        html += '<button class="mana-view-btn" data-view="mean" title="Average mana across all games">Mean</button>';
+        html += '<button class="mana-view-btn" data-view="top_25" title="Average mana in best 25% of games">Ceiling</button>';
+        html += '</span></th>';
         html += '<th rowspan="2">Hand Sum</th><th rowspan="2">Bad Turns</th>';
         html += '<th rowspan="2">Mid Turns</th><th rowspan="2">Avg Lands</th><th rowspan="2">Avg Mulls</th>';
         html += '<th rowspan="2">Avg Draws</th>';
@@ -148,11 +152,17 @@ const ClientResults = (function() {
             html += '<td>' + r.land_count + '</td>';
             html += '<td>' + fmt(r.consistency, 3) + ' <small>&plusmn;' + fmt(conMargin, 4) + '</small></td>';
             html += '<td>' + fmt(r.mean_spells_cast ?? 0, 2) + '</td>';
-            html += '<td>' + fmt(r.mean_mana_value ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_value ?? 0, 2) + '</small></td>';
-            html += '<td>' + fmt(r.mean_mana_draw ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_draw ?? 0, 2) + '</small></td>';
-            html += '<td>' + fmt(r.mean_mana_ramp ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_ramp ?? 0, 2) + '</small></td>';
-            html += '<td>' + fmt(r.mean_mana, 2) + ' <small>&plusmn;' + fmt(r.ci_mana ?? 0, 2) + '</small></td>';
-            html += '<td>' + fmt(r.mean_mana_total ?? 0, 2) + ' <small>&plusmn;' + fmt(r.ci_mana_total ?? 0, 2) + '</small></td>';
+            var qm = r.quartile_mana || {};
+            var bot = qm.bottom_25 || {}; var mn = qm.mean || {}; var top = qm.top_25 || {};
+            var manaFields = ['value', 'draw', 'ramp', 'vd', 'all'];
+            var ciFields = [r.ci_mana_value ?? 0, r.ci_mana_draw ?? 0, r.ci_mana_ramp ?? 0, r.ci_mana ?? 0, r.ci_mana_total ?? 0];
+            for (var mi = 0; mi < manaFields.length; mi++) {
+                var fld = manaFields[mi];
+                var bv = bot[fld] ?? 0, mv = mn[fld] ?? 0, tv = top[fld] ?? 0;
+                html += '<td class="mana-cell" data-bot="' + fmt(bv, 2) + '" data-mean="' + fmt(mv, 2) + '" data-top="' + fmt(tv, 2)
+                    + '" data-ci="' + fmt(ciFields[mi], 2) + '">'
+                    + fmt(bv, 2) + ' <small>&plusmn;' + fmt(ciFields[mi], 2) + '</small></td>';
+            }
             html += '<td>' + fmt(r.mean_hand_sum ?? 0, 1) + '</td>';
             html += '<td>' + fmt(r.mean_bad_turns, 2) + '</td>';
             html += '<td>' + fmt(r.mean_mid_turns, 2) + '</td>';
@@ -564,6 +574,29 @@ const ClientResults = (function() {
         return html;
     }
 
+    // -- Mana view toggle --
+
+    function initManaViewToggle(container) {
+        container.querySelectorAll('.mana-view-toggle').forEach(function(toggle) {
+            toggle.querySelectorAll('.mana-view-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var view = this.dataset.view;
+                    toggle.dataset.current = view;
+                    toggle.querySelectorAll('.mana-view-btn').forEach(function(b) {
+                        b.classList.toggle('active', b.dataset.view === view);
+                    });
+                    var table = toggle.closest('table');
+                    var dataKey = view === 'bottom_25' ? 'bot' : view === 'top_25' ? 'top' : 'mean';
+                    table.querySelectorAll('.mana-cell').forEach(function(cell) {
+                        var val = cell.dataset[dataKey];
+                        var ci = cell.dataset.ci;
+                        cell.innerHTML = val + ' <small>&plusmn;' + ci + '</small>';
+                    });
+                });
+            });
+        });
+    }
+
     // -- Public API --
 
     /**
@@ -596,6 +629,7 @@ const ClientResults = (function() {
         if (!isOptimization) {
             renderCharts(results);
         }
+        initManaViewToggle(container);
         initReplayViewer(results);
         rebindTooltips();
     }

@@ -350,6 +350,7 @@ def synthesize_recommendations(
         "mean_mana": "mana spent",
         "mean_mana_value": "mana spent on value",
         "mean_mana_total": "total mana spent",
+        "floor_performance": "floor performance",
         "consistency": "consistency",
         "mean_spells_cast": "spells cast",
     }

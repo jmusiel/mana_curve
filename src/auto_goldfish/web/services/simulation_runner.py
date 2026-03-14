@@ -200,7 +200,7 @@ class SimulationRunner:
             land_delta_max = max_lands - goldfisher.land_count
 
         algorithm = config.get("algorithm", "racing")
-        optimize_for = config.get("optimize_for", "mean_mana")
+        optimize_for = config.get("optimize_for", "floor_performance")
         swap_mode = config.get("swap_mode", False)
         max_draw = config.get("max_draw_additions", 2)
         max_ramp = config.get("max_ramp_additions", 2)

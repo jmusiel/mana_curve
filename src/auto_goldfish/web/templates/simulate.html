@@ -140,10 +140,11 @@
             <input type="number" id="turns" name="turns" value="10" min="1" max="{{ max_turns }}">
         </div>
         <div class="form-group">
-            <label for="optimize-target">Optimize for <span class="info-tip" data-tip="The metric used to rank land counts and card candidates. Mana maximizes total mana spent; Consistency maximizes worst-case reliability (left-tail ratio); Spells Cast maximizes spells played per game.">i</span></label>
+            <label for="optimize-target">Optimize for <span class="info-tip" data-tip="The metric used to rank land counts and card candidates. Floor Performance maximizes average mana spent in the worst 25% of games; Mana maximizes total mana spent; Consistency maximizes worst-case reliability (left-tail ratio); Spells Cast maximizes spells played per game.">i</span></label>
             <select id="optimize-target" name="optimize_target">
+                <option value="floor_performance" selected>Floor performance (worst 25% of games)</option>
                 <option value="mana">Total mana spent</option>
-                <option value="consistency" selected>Consistency (fewer bad turns)</option>
+                <option value="consistency">Consistency (left-tail ratio)</option>
                 <option value="spells_cast">Number of spells cast</option>
             </select>
         </div>
@@ -1746,7 +1747,9 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
         const optimizeTarget = document.getElementById('optimize-target').value;
         const manaMode = document.getElementById('mana-mode').value;
         let optimize_for;
-        if (optimizeTarget === 'consistency') {
+        if (optimizeTarget === 'floor_performance') {
+            optimize_for = 'floor_performance';
+        } else if (optimizeTarget === 'consistency') {
             optimize_for = 'consistency';
         } else if (optimizeTarget === 'spells_cast') {
             optimize_for = 'mean_spells_cast';

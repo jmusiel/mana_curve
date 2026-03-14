@@ -182,6 +182,31 @@ a:hover { text-decoration: underline; }
 .source-baseline  { background: #e5e7eb; color: #374151; }
 .baseline-separator td { height: 4px; padding: 0; border: none; }
 
+/* Mana view toggle */
+.mana-view-toggle {
+    display: inline-flex;
+    gap: 2px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+.mana-view-btn {
+    font-size: 0.7em;
+    padding: 1px 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 3px;
+    background: #fff;
+    color: #64748b;
+    cursor: pointer;
+    font-weight: 500;
+    line-height: 1.4;
+}
+.mana-view-btn:hover { background: #f1f5f9; }
+.mana-view-btn.active {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+}
+
 /* Charts */
 .charts-grid {
     display: grid;

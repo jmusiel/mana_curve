@@ -36,7 +36,11 @@
             <th rowspan="2">Lands</th>
             <th rowspan="2">Consistency</th>
             <th rowspan="2">Avg Spells</th>
-            <th colspan="5">Mana Spent</th>
+            <th colspan="5">Mana Spent <span class="mana-view-toggle" data-current="bottom_25">
+                <button class="mana-view-btn active" data-view="bottom_25" title="Average mana in worst 25% of games">Floor</button>
+                <button class="mana-view-btn" data-view="mean" title="Average mana across all games">Mean</button>
+                <button class="mana-view-btn" data-view="top_25" title="Average mana in best 25% of games">Ceiling</button>
+            </span></th>
             <th rowspan="2">Hand Sum</th>
             <th rowspan="2">Bad Turns</th>
             <th rowspan="2">Mid Turns</th>
@@ -63,11 +67,20 @@
             <td>{{ r.land_count }}</td>
             <td>{{ "%.3f"|format(r.consistency) }} <small>&plusmn;{{ "%.4f"|format(con_margin) }}</small></td>
             <td>{{ "%.2f"|format(r.mean_spells_cast|default(0)) }}</td>
-            <td>{{ "%.2f"|format(r.mean_mana_value|default(0)) }} <small>&plusmn;{{ "%.2f"|format(r.ci_mana_value|default(0)) }}</small></td>
-            <td>{{ "%.2f"|format(r.mean_mana_draw|default(0)) }} <small>&plusmn;{{ "%.2f"|format(r.ci_mana_draw|default(0)) }}</small></td>
-            <td>{{ "%.2f"|format(r.mean_mana_ramp|default(0)) }} <small>&plusmn;{{ "%.2f"|format(r.ci_mana_ramp|default(0)) }}</small></td>
-            <td>{{ "%.2f"|format(r.mean_mana) }} <small>&plusmn;{{ "%.2f"|format(r.ci_mana|default(0)) }}</small></td>
-            <td>{{ "%.2f"|format(r.mean_mana_total|default(0)) }} <small>&plusmn;{{ "%.2f"|format(r.ci_mana_total|default(0)) }}</small></td>
+            {% set qm = r.quartile_mana or {} %}
+            {% set bot = qm.get('bottom_25', {}) %}
+            {% set mn = qm.get('mean', {}) %}
+            {% set top = qm.get('top_25', {}) %}
+            {% set ci_list = [r.ci_mana_value|default(0), r.ci_mana_draw|default(0), r.ci_mana_ramp|default(0), r.ci_mana|default(0), r.ci_mana_total|default(0)] %}
+            {% for fld in ['value', 'draw', 'ramp', 'vd', 'all'] %}
+            <td class="mana-cell"
+                data-bot="{{ "%.2f"|format(bot.get(fld, 0)) }}"
+                data-mean="{{ "%.2f"|format(mn.get(fld, 0)) }}"
+                data-top="{{ "%.2f"|format(top.get(fld, 0)) }}"
+                data-ci="{{ "%.2f"|format(ci_list[loop.index0]) }}">
+                {{ "%.2f"|format(bot.get(fld, 0)) }} <small>&plusmn;{{ "%.2f"|format(ci_list[loop.index0]) }}</small>
+            </td>
+            {% endfor %}
             <td>{{ "%.1f"|format(r.mean_hand_sum|default(0)) }}</td>
             <td>{{ "%.2f"|format(r.mean_bad_turns) }}</td>
             <td>{{ "%.2f"|format(r.mean_mid_turns) }}</td>
@@ -245,6 +258,26 @@
 
     // Bind tooltips for card-performance links rendered server-side
     rebindTooltips();
+
+    // Mana view toggle (Floor / Mean / Ceiling)
+    document.querySelectorAll('.mana-view-toggle').forEach(function(toggle) {
+        toggle.querySelectorAll('.mana-view-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var view = this.dataset.view;
+                toggle.dataset.current = view;
+                toggle.querySelectorAll('.mana-view-btn').forEach(function(b) {
+                    b.classList.toggle('active', b.dataset.view === view);
+                });
+                var table = toggle.closest('table');
+                var dataKey = view === 'bottom_25' ? 'bot' : view === 'top_25' ? 'top' : 'mean';
+                table.querySelectorAll('.mana-cell').forEach(function(cell) {
+                    var val = cell.dataset[dataKey];
+                    var ci = cell.dataset.ci;
+                    cell.innerHTML = val + ' <small>&plusmn;' + ci + '</small>';
+                });
+            });
+        });
+    });
 
     fetch(apiUrl)
         .then(r => r.json())
