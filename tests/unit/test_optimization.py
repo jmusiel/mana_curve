@@ -144,6 +144,21 @@ class TestEnumerateConfigs:
         land_deltas = {c.land_delta for c in configs}
         assert land_deltas == {-3, -2, -1, 0, 1, 2, 3}
 
+    def test_asymmetric_land_deltas(self):
+        configs = enumerate_configs(
+            {}, max_draw=0, max_ramp=0, land_delta_min=-1, land_delta_max=3,
+        )
+        land_deltas = {c.land_delta for c in configs}
+        assert land_deltas == {-1, 0, 1, 2, 3}
+
+    def test_land_delta_min_max_overrides_land_range(self):
+        configs = enumerate_configs(
+            {}, max_draw=0, max_ramp=0, land_range=5,
+            land_delta_min=-2, land_delta_max=1,
+        )
+        land_deltas = {c.land_delta for c in configs}
+        assert land_deltas == {-2, -1, 0, 1}
+
     def test_no_duplicates(self):
         candidates = {
             cid: c for cid, c in ALL_CANDIDATES.items() if c.default_enabled
@@ -155,7 +170,7 @@ class TestEnumerateConfigs:
 class TestHyperbandPlanning:
     """Unit tests for Hyperband bracket planning logic."""
 
-    def _make_optimizer(self, sims_per_eval: int) -> DeckOptimizer:
+    def _make_optimizer(self, hyperband_max_sims: int) -> DeckOptimizer:
         """Create an optimizer with a mock goldfisher for planning tests."""
 
         class FakeGoldfisher:
@@ -165,26 +180,26 @@ class TestHyperbandPlanning:
         return DeckOptimizer(
             goldfisher=FakeGoldfisher(),
             candidates={},
-            sims_per_eval=sims_per_eval,
+            hyperband_max_sims=hyperband_max_sims,
         )
 
     def test_s_max_low_sims(self):
-        """With low sims_per_eval, s_max should be 0 (flat eval)."""
-        opt = self._make_optimizer(sims_per_eval=20)
+        """With low hyperband_max_sims, s_max should be 0 (flat eval)."""
+        opt = self._make_optimizer(hyperband_max_sims=20)
         eta = opt.ETA
-        R = opt.sims_per_eval
-        min_sims = max(opt.MIN_SIMS, R // 10)
+        R = opt.hyperband_max_sims
+        min_sims = max(opt.HYPERBAND_MIN_SIMS, R // 10)
         s_max = max(0, int(math.floor(
             math.log(max(R / min_sims, 1)) / math.log(eta)
         )))
         assert s_max == 0
 
     def test_s_max_high_sims(self):
-        """With sims_per_eval=200, should get multiple brackets."""
-        opt = self._make_optimizer(sims_per_eval=200)
+        """With hyperband_max_sims=200, should get multiple brackets."""
+        opt = self._make_optimizer(hyperband_max_sims=200)
         eta = opt.ETA
-        R = opt.sims_per_eval
-        min_sims = max(opt.MIN_SIMS, R // 10)
+        R = opt.hyperband_max_sims
+        min_sims = max(opt.HYPERBAND_MIN_SIMS, R // 10)
         s_max = max(0, int(math.floor(
             math.log(max(R / min_sims, 1)) / math.log(eta)
         )))
@@ -192,7 +207,7 @@ class TestHyperbandPlanning:
 
     def test_plan_brackets_count(self):
         """Number of brackets equals s_max + 1."""
-        opt = self._make_optimizer(sims_per_eval=200)
+        opt = self._make_optimizer(hyperband_max_sims=200)
         brackets = opt._plan_brackets(
             n_max=450, R=200, eta=3, s_max=2, min_sims=20, top_k=5,
         )
@@ -200,7 +215,7 @@ class TestHyperbandPlanning:
 
     def test_plan_brackets_round_counts(self):
         """Bracket s should have s+1 rounds."""
-        opt = self._make_optimizer(sims_per_eval=200)
+        opt = self._make_optimizer(hyperband_max_sims=200)
         brackets = opt._plan_brackets(
             n_max=450, R=200, eta=3, s_max=2, min_sims=20, top_k=5,
         )
@@ -211,7 +226,7 @@ class TestHyperbandPlanning:
 
     def test_plan_brackets_most_aggressive_uses_all_configs(self):
         """Most aggressive bracket (s=s_max) starts with all configs."""
-        opt = self._make_optimizer(sims_per_eval=200)
+        opt = self._make_optimizer(hyperband_max_sims=200)
         brackets = opt._plan_brackets(
             n_max=450, R=200, eta=3, s_max=2, min_sims=20, top_k=5,
         )
@@ -219,7 +234,7 @@ class TestHyperbandPlanning:
 
     def test_plan_brackets_sims_increase_per_round(self):
         """Within a bracket, sims per config should increase each round."""
-        opt = self._make_optimizer(sims_per_eval=200)
+        opt = self._make_optimizer(hyperband_max_sims=200)
         brackets = opt._plan_brackets(
             n_max=450, R=200, eta=3, s_max=2, min_sims=20, top_k=5,
         )
@@ -229,7 +244,7 @@ class TestHyperbandPlanning:
 
     def test_plan_brackets_configs_decrease_per_round(self):
         """Within a bracket, config count should decrease each round."""
-        opt = self._make_optimizer(sims_per_eval=200)
+        opt = self._make_optimizer(hyperband_max_sims=200)
         brackets = opt._plan_brackets(
             n_max=450, R=200, eta=3, s_max=2, min_sims=20, top_k=5,
         )
@@ -241,7 +256,7 @@ class TestHyperbandPlanning:
 
     def test_plan_brackets_final_sims_capped_at_R(self):
         """Final round of every bracket should have sims <= R."""
-        opt = self._make_optimizer(sims_per_eval=200)
+        opt = self._make_optimizer(hyperband_max_sims=200)
         brackets = opt._plan_brackets(
             n_max=450, R=200, eta=3, s_max=2, min_sims=20, top_k=5,
         )
@@ -250,8 +265,8 @@ class TestHyperbandPlanning:
             assert final_sims <= 200
 
     def test_plan_brackets_single_bracket_for_low_sims(self):
-        """Low sims_per_eval produces a single bracket (flat eval)."""
-        opt = self._make_optimizer(sims_per_eval=50)
+        """Low hyperband_max_sims produces a single bracket (flat eval)."""
+        opt = self._make_optimizer(hyperband_max_sims=50)
         brackets = opt._plan_brackets(
             n_max=100, R=50, eta=3, s_max=0, min_sims=20, top_k=5,
         )
@@ -261,7 +276,7 @@ class TestHyperbandPlanning:
 
     def test_hyperband_budget_less_than_flat(self):
         """Hyperband total budget should be less than flat enumeration."""
-        opt = self._make_optimizer(sims_per_eval=200)
+        opt = self._make_optimizer(hyperband_max_sims=200)
         brackets = opt._plan_brackets(
             n_max=450, R=200, eta=3, s_max=2, min_sims=20, top_k=5,
         )

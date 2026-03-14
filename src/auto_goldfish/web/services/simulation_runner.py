@@ -172,9 +172,9 @@ class SimulationRunner:
             cc = make_custom_candidate("ramp", custom_ramp["cmc"], custom_ramp["amount"])
             candidates[cc.id] = cc
 
-        sims_per_eval = config.get("sims_per_enum", max(goldfisher.sims // 2, 100))
+        hyperband_max_sims = config.get("hyperband_max_sims", max(goldfisher.sims // 2, 100))
         eta = config.get("eta", 3)
-        min_sims_hb = config.get("min_sims", 20)
+        hyperband_min_sims = config.get("hyperband_min_sims", 20)
         hyperband_top_k = config.get("hyperband_top_k")
         final_sims = goldfisher.sims
 
@@ -188,16 +188,28 @@ class SimulationRunner:
                 job.progress = current
                 job.total = total
 
+        # Compute land deltas from absolute min/max lands
+        min_lands = config.get("min_lands")
+        max_lands = config.get("max_lands")
+        land_delta_min = None
+        land_delta_max = None
+        if min_lands is not None:
+            land_delta_min = min_lands - goldfisher.land_count
+        if max_lands is not None:
+            land_delta_max = max_lands - goldfisher.land_count
+
         optimizer = DeckOptimizer(
             goldfisher=goldfisher,
             candidates=candidates,
             swap_mode=config.get("swap_mode", False),
             max_draw=config.get("max_draw_additions", 2),
             max_ramp=config.get("max_ramp_additions", 2),
+            land_delta_min=land_delta_min,
+            land_delta_max=land_delta_max,
             optimize_for=config.get("optimize_for", "mean_mana"),
-            sims_per_eval=sims_per_eval,
+            hyperband_max_sims=hyperband_max_sims,
             eta=eta,
-            min_sims=min_sims_hb,
+            hyperband_min_sims=hyperband_min_sims,
             hyperband_top_k=hyperband_top_k,
         )
 

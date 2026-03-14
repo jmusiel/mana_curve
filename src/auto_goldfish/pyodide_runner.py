@@ -131,7 +131,7 @@ def run_optimization(
               (same as run_simulation; sims controls final evaluation count)
             - optimize_for (str): "mean_mana", "consistency", or "mean_spells_cast"
             - swap_mode (bool): Replace cards or add extra
-            - sims_per_enum (int): Max sims per candidate during Hyperband selection (default sims//2)
+            - hyperband_max_sims (int): Max sims per candidate during Hyperband selection (default sims//2)
             - enabled_candidates (list[str]): Candidate IDs that are enabled
             - custom_draw (dict|null): {cmc, amount} for custom draw candidate
             - custom_ramp (dict|null): {cmc, amount} for custom ramp candidate
@@ -182,10 +182,11 @@ def run_optimization(
     mana_efficiency = config.get("mana_efficiency", "greedy")
     ramp_cutoff_turn = config.get("ramp_cutoff_turn", 0)
     min_cost_floor = config.get("min_cost_floor", 1)
-    sims_per_eval = config.get("sims_per_enum", max(sims // 2, 100))
+    hyperband_max_sims = config.get("hyperband_max_sims", max(sims // 2, 100))
     eta = config.get("eta", 3)
-    min_sims_hb = config.get("min_sims", 20)
+    hyperband_min_sims = config.get("hyperband_min_sims", 20)
     hyperband_top_k = config.get("hyperband_top_k")
+    include_hyperband = config.get("include_hyperband", False)
 
     goldfisher = Goldfisher(
         deck_list,
@@ -217,22 +218,35 @@ def run_optimization(
         cc = make_custom_candidate("ramp", custom_ramp["cmc"], custom_ramp["amount"])
         candidates[cc.id] = cc
 
+    # Compute land deltas from absolute min/max lands
+    min_lands = config.get("min_lands")
+    max_lands = config.get("max_lands")
+    land_delta_min = None
+    land_delta_max = None
+    if min_lands is not None:
+        land_delta_min = min_lands - goldfisher.land_count
+    if max_lands is not None:
+        land_delta_max = max_lands - goldfisher.land_count
+
     optimizer = DeckOptimizer(
         goldfisher=goldfisher,
         candidates=candidates,
         swap_mode=swap_mode,
         max_draw=max_draw,
         max_ramp=max_ramp,
+        land_delta_min=land_delta_min,
+        land_delta_max=land_delta_max,
         optimize_for=optimize_for,
-        sims_per_eval=sims_per_eval,
+        hyperband_max_sims=hyperband_max_sims,
         eta=eta,
-        min_sims=min_sims_hb,
+        hyperband_min_sims=hyperband_min_sims,
         hyperband_top_k=hyperband_top_k,
     )
 
     ranked = optimizer.run(
         final_sims=sims,
         final_top_k=5,
+        include_hyperband=include_hyperband,
         enum_progress=enum_callback,
         eval_progress=eval_callback,
     )

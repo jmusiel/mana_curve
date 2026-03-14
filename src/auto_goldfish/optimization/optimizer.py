@@ -38,16 +38,20 @@ class DeckOptimizer:
         swap_mode: If True, remove no-effect spells to maintain deck size.
         max_draw: Maximum number of draw candidates to add (0-2).
         max_ramp: Maximum number of ramp candidates to add (0-2).
-        land_range: Land delta range (-land_range to +land_range).
+        land_range: Land delta range (-land_range to +land_range). Used as
+            fallback when land_delta_min/land_delta_max are not specified.
+        land_delta_min: Minimum land delta (e.g. -3). Overrides -land_range.
+        land_delta_max: Maximum land delta (e.g. +2). Overrides +land_range.
         optimize_for: Target metric - "mean_mana", "consistency", or "mean_spells_cast".
-        sims_per_eval: Max simulations per config during enumeration.
-            Higher values give more accurate rankings but take longer.
+        hyperband_max_sims: Max simulations per config during Hyperband
+            enumeration (the R parameter). Higher values give more accurate
+            rankings but take longer.
         eta: Halving rate for successive halving. Lower values (e.g. 2)
             keep more candidates per round (less aggressive pruning).
             Higher values (e.g. 4-5) prune harder. Default: 3.
-        min_sims: Minimum simulations per evaluation in any Hyperband round.
-            Higher values give more reliable early-round filtering at the
-            cost of fewer brackets. Default: 20.
+        hyperband_min_sims: Minimum simulations per evaluation in any
+            Hyperband round. Higher values give more reliable early-round
+            filtering at the cost of fewer brackets. Default: 20.
         hyperband_top_k: Number of survivors from Hyperband filtering before
             final evaluation. If None, uses final_top_k from run().
             Over-selecting (e.g. 10-15) and re-ranking with final_sims
@@ -62,10 +66,12 @@ class DeckOptimizer:
         max_draw: int = 2,
         max_ramp: int = 2,
         land_range: int = 2,
+        land_delta_min: Optional[int] = None,
+        land_delta_max: Optional[int] = None,
         optimize_for: str = "mean_mana",
-        sims_per_eval: int = 500,
+        hyperband_max_sims: int = 500,
         eta: int = 3,
-        min_sims: int = 20,
+        hyperband_min_sims: int = 20,
         hyperband_top_k: Optional[int] = None,
     ) -> None:
         self.goldfisher = goldfisher
@@ -74,10 +80,12 @@ class DeckOptimizer:
         self.max_draw = max_draw
         self.max_ramp = max_ramp
         self.land_range = land_range
+        self.land_delta_min = land_delta_min
+        self.land_delta_max = land_delta_max
         self.optimize_for = optimize_for
-        self.sims_per_eval = sims_per_eval
+        self.hyperband_max_sims = hyperband_max_sims
         self.ETA = eta
-        self.MIN_SIMS = min_sims
+        self.HYPERBAND_MIN_SIMS = hyperband_min_sims
         self.hyperband_top_k = hyperband_top_k
 
         # Populated during run(): every (config, score, n_sims) from all
@@ -88,6 +96,7 @@ class DeckOptimizer:
         self,
         final_sims: int = 1000,
         final_top_k: int = 5,
+        include_hyperband: bool = False,
         enum_progress: Optional[Callable[[int, int], None]] = None,
         eval_progress: Optional[Callable[[int, int], None]] = None,
     ) -> List[Tuple[DeckConfig, Any]]:
@@ -99,8 +108,9 @@ class DeckOptimizer:
         Phase 2 (Regression selection): Fit a WLS regression model on
         Hyperband data and predict the best configs from the full space.
 
-        Phase 3 (Final evaluation): Run full simulations on the
-        regression-predicted top configs for accurate final ranking.
+        Phase 3 (Final evaluation): Run full simulations on the combined
+        pool of regression-predicted configs, top hyperband survivors, and
+        the no-changes baseline. Returns the top ``final_top_k`` results.
 
         The first result dict includes a ``feature_analysis`` key with
         recommendations, marginal impact, and regression details.
@@ -120,6 +130,8 @@ class DeckOptimizer:
             max_draw=self.max_draw,
             max_ramp=self.max_ramp,
             land_range=self.land_range,
+            land_delta_min=self.land_delta_min,
+            land_delta_max=self.land_delta_max,
         )
 
         original_sims = self.goldfisher.sims
@@ -127,7 +139,7 @@ class DeckOptimizer:
         # Phase 1: Hyperband exploration (collects all_round_scores)
         self.all_round_scores = []
         hb_top_k = self.hyperband_top_k if self.hyperband_top_k is not None else final_top_k
-        self._hyperband_select(configs, hb_top_k, enum_progress)
+        hyperband_survivors = self._hyperband_select(configs, hb_top_k, enum_progress)
 
         # Phase 2: Use regression to pick the best configs from the
         # full config space, based on Hyperband round data
@@ -136,7 +148,7 @@ class DeckOptimizer:
             predict_top_configs,
         )
 
-        top_configs, _ = predict_top_configs(
+        regression_configs, _ = predict_top_configs(
             self.all_round_scores, configs, top_k=final_top_k,
         )
 
@@ -145,24 +157,72 @@ class DeckOptimizer:
             self.all_round_scores, self.optimize_for,
         )
 
-        # Phase 3: Full evaluation of regression-selected configs
+        # Build combined evaluation pool:
+        # - regression-predicted configs (tagged "regression")
+        # - top 4 hyperband survivors (tagged "hyperband") — only if include_hyperband
+        # - no-changes baseline (tagged "baseline")
+        # Source tags are only set when include_hyperband is True.
+        baseline = DeckConfig()
+        eval_pool: list[tuple[DeckConfig, str | None]] = []
+        seen: set[DeckConfig] = set()
+
+        tag_regression = "regression" if include_hyperband else None
+        tag_hyperband = "hyperband" if include_hyperband else None
+        tag_baseline = "baseline" if include_hyperband else None
+
+        for cfg in regression_configs:
+            if cfg not in seen:
+                eval_pool.append((cfg, tag_regression))
+                seen.add(cfg)
+
+        if include_hyperband:
+            for cfg in hyperband_survivors[:4]:
+                if cfg not in seen:
+                    eval_pool.append((cfg, tag_hyperband))
+                    seen.add(cfg)
+
+        if baseline not in seen:
+            eval_pool.append((baseline, tag_baseline))
+            seen.add(baseline)
+
+        # Phase 3: Full evaluation of combined pool
         self.goldfisher.sims = final_sims
         from auto_goldfish.metrics.reporter import result_to_dict
 
         results: list[tuple[DeckConfig, Any]] = []
-        for j, config in enumerate(top_configs):
+        for j, (config, source) in enumerate(eval_pool):
             apply_config(self.goldfisher, config, self.candidates, self.swap_mode)
             result = self.goldfisher.simulate()
             result_dict = result_to_dict(result)
+            if source is not None:
+                result_dict["opt_source"] = source
             results.append((config, result_dict))
 
             if eval_progress is not None:
-                eval_progress(j + 1, len(top_configs))
+                eval_progress(j + 1, len(eval_pool))
 
         self.goldfisher.sims = original_sims
 
         # Sort final results by target metric
         results.sort(key=lambda r: self._extract_score_from_dict(r[1]), reverse=True)
+
+        # Find baseline rank (1-indexed) before cutting
+        baseline_rank = None
+        baseline_entry = None
+        for rank, (cfg, rd) in enumerate(results, 1):
+            if cfg == baseline:
+                baseline_rank = rank
+                baseline_entry = (cfg, rd)
+                break
+
+        # Keep top final_top_k
+        results = results[:final_top_k]
+
+        # If baseline didn't make the cut, append it as a reference row
+        baseline_in_top = any(cfg == baseline for cfg, _ in results)
+        if not baseline_in_top and baseline_entry is not None:
+            baseline_entry[1]["opt_baseline_rank"] = baseline_rank
+            results.append(baseline_entry)
 
         # Attach feature analysis to the top-ranked result (after sorting)
         if self.feature_analysis and results:
@@ -180,8 +240,8 @@ class DeckOptimizer:
     ) -> List[DeckConfig]:
         """Select top-K configs using Hyperband multi-bracket successive halving."""
         eta = self.ETA
-        R = self.sims_per_eval
-        min_sims = max(self.MIN_SIMS, R // 10)
+        R = self.hyperband_max_sims
+        min_sims = max(self.HYPERBAND_MIN_SIMS, R // 10)
 
         # s_max determines number of brackets; capped so initial sims >= min_sims
         s_max = max(0, int(math.floor(

@@ -203,7 +203,17 @@ def fit_ols(
         ss_tot = np.sum((y - np.mean(y)) ** 2)
     r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
 
-    return coefficients, intercept, r_squared
+    # Standard errors of coefficients via (X'X)^{-1} * MSE
+    p = X_with_intercept.shape[1]
+    dof = max(n - p, 1)
+    mse = ss_res / dof
+    try:
+        cov = np.linalg.inv(Xw.T @ Xw) * mse
+        std_errors = np.sqrt(np.diag(cov)[1:])  # skip intercept
+    except np.linalg.LinAlgError:
+        std_errors = np.full(len(coefficients), np.inf)
+
+    return coefficients, intercept, r_squared, std_errors
 
 
 def regression_analysis(
@@ -216,7 +226,7 @@ def regression_analysis(
 
     Returns (regression_dict, y_pred).
     """
-    coeffs, intercept, r_sq = fit_ols(X, scores, weights)
+    coeffs, intercept, r_sq, std_errors = fit_ols(X, scores, weights)
     y_pred = X @ coeffs + intercept
 
     if weights is not None:
@@ -232,10 +242,11 @@ def regression_analysis(
 
     safe_y_std = y_std if y_std > 0 else 1.0
     std_coeffs = coeffs * x_std / safe_y_std
+    t_stats = np.where(std_errors > 0, coeffs / std_errors, 0.0)
 
     ranked = sorted(
-        zip(feature_names, coeffs, std_coeffs),
-        key=lambda x: abs(x[2]),
+        zip(feature_names, coeffs, std_coeffs, t_stats),
+        key=lambda x: x[1],
         reverse=True,
     )
 
@@ -250,14 +261,75 @@ def regression_analysis(
                 "label": _feature_label(name, 1),
                 "coefficient": round(float(c), 4),
                 "std_beta": round(float(sc), 4),
+                "t_stat": round(float(t), 4),
             }
-            for name, c, sc in ranked
+            for name, c, sc, t in ranked
         ],
     }
     return reg_dict, y_pred
 
 
 # ── Synthesize recommendations ────────────────────────────────────────
+
+
+# Mapping from compact labels to user-friendly descriptions and example cards
+_EXAMPLE_CARDS: dict[str, dict[str, str]] = {
+    "Draw1(mv1)": {
+        "friendly": "1-mana cantrips",
+        "description": "1-mana-draw-1 spell",
+        "example": "Opt",
+    },
+    "Draw1(mv2)": {
+        "friendly": "2-mana card selection",
+        "description": "2-mana-draw-1 spell",
+        "example": "Impulse",
+    },
+    "Draw2(mv2)": {
+        "friendly": "2-mana draw",
+        "description": "2-mana-draw-2 spell",
+        "example": "Night's Whisper",
+    },
+    "Draw3(mv4)": {
+        "friendly": "4-mana draw",
+        "description": "4-mana-draw-3 spell",
+        "example": "Concentrate",
+    },
+    "Draw1/t(mv3)": {
+        "friendly": "repeatable draw",
+        "description": "3-mana-draw-1-per-turn enchantment",
+        "example": "Phyrexian Arena",
+    },
+    "Ramp+1(mv2)": {
+        "friendly": "2-mana ramp",
+        "description": "2-mana ramp spell",
+        "example": "Arcane Signet",
+    },
+    "Ramp+1(mv3)": {
+        "friendly": "3-mana ramp",
+        "description": "3-mana ramp spell",
+        "example": "Chromatic Lantern",
+    },
+    "Ramp+2(mv4)": {
+        "friendly": "4-mana ramp",
+        "description": "4-mana-ramp-2 spell",
+        "example": "Explosive Vegetation",
+    },
+}
+
+
+def _scryfall_url(card_name: str) -> str:
+    """Build a Scryfall search URL for a card name."""
+    from urllib.parse import quote
+    return f"https://scryfall.com/search?q=!%22{quote(card_name)}%22"
+
+
+def _scryfall_image_url(card_name: str) -> str:
+    """Build a Scryfall image URL for hover preview."""
+    from urllib.parse import quote
+    return (
+        f"https://api.scryfall.com/cards/named"
+        f"?exact={quote(card_name)}&format=image&version=normal"
+    )
 
 
 def synthesize_recommendations(
@@ -271,7 +343,8 @@ def synthesize_recommendations(
     predict_top_configs which selects the ranking table configs) and
     supplements with marginal impact data for detail text.
 
-    Returns list of {recommendation, impact, confidence, detail, label}.
+    Returns list of {recommendation, impact, confidence, detail, label,
+    example_card (optional)}.
     """
     metric_labels = {
         "mean_mana": "mana spent",
@@ -299,21 +372,54 @@ def synthesize_recommendations(
             continue
 
         impact_direction = "increase" if coeff > 0 else "decrease"
+        example_card: dict[str, str] | None = None
 
-        # Build label: for land_delta use direction, for cards use the card name
+        # Build label and recommendation text
+        # Positive impact → "Add more X:", negative → "Don't add X:"
+        is_positive = coeff > 0
         if fname == "land_delta":
-            if coeff > 0:
-                label = "more lands"
+            if is_positive:
+                label = "Add more lands"
+                rec_text = (
+                    f"Adding at least one more land tends to"
+                    f" {impact_direction} {metric_label}"
+                )
             else:
-                label = "fewer lands"
-            rec_text = f"Adding {label} tends to {impact_direction} {metric_label}"
+                label = "Cut lands"
+                rec_text = (
+                    f"Cutting at least one land tends to"
+                    f" {impact_direction} {metric_label}"
+                )
         elif fname.startswith("count_"):
             card = fname.removeprefix("count_")
-            label = card
-            if coeff > 0:
-                rec_text = f"Adding {card} tends to {impact_direction} {metric_label}"
+            card_info = _EXAMPLE_CARDS.get(card)
+            if card_info:
+                friendly = card_info["friendly"]
+                description = card_info["description"]
+                example_name = card_info["example"]
+                label = (
+                    f"Add more {friendly}" if is_positive
+                    else f"Don't add {friendly}"
+                )
+                example_card = {
+                    "name": example_name,
+                    "url": _scryfall_url(example_name),
+                    "image_url": _scryfall_image_url(example_name),
+                }
+                rec_text = (
+                    f"Adding at least one more {description}"
+                    f" (such as {example_name})"
+                    f" tends to {impact_direction} {metric_label}"
+                )
             else:
-                rec_text = f"Adding {card} tends to {impact_direction} {metric_label}"
+                label = (
+                    f"Add more {card}" if is_positive
+                    else f"Don't add {card}"
+                )
+                rec_text = (
+                    f"Adding {card} tends to"
+                    f" {impact_direction} {metric_label}"
+                )
         else:
             label = fname
             rec_text = f"{fname} tends to {impact_direction} {metric_label}"
@@ -328,17 +434,19 @@ def synthesize_recommendations(
                 avg_delta = sum(m["delta"] for m in positive_entries) / len(positive_entries)
                 marginal_agrees = (avg_delta > 0) == (coeff > 0)
 
+        # Per-feature confidence based on t-statistic (unit-invariant)
+        abs_t = abs(c["t_stat"])
         if not marginal_agrees:
             confidence = "low"
-        elif regression["r_squared"] > 0.7:
+        elif abs_t > 3.0:
             confidence = "high"
-        elif regression["r_squared"] > 0.4:
+        elif abs_t > 1.5:
             confidence = "medium"
         else:
             confidence = "low"
 
         # Build detail text from marginal impact if available
-        detail_parts = [f"Regression coefficient: {coeff:+.4f} (std beta: {std_beta:+.4f})"]
+        detail_parts = [f"Regression coefficient: {coeff:+.4f} (t={c['t_stat']:+.2f})"]
         for m in marginal_entries:
             if m["value"] != 0:
                 detail_parts.append(
@@ -347,13 +455,16 @@ def synthesize_recommendations(
                     f"(delta: {m['delta']:+.4f})"
                 )
 
-        recommendations.append({
+        rec_entry: dict[str, Any] = {
             "recommendation": rec_text,
             "impact": round(coeff, 4),
             "confidence": confidence,
             "label": label,
             "detail": "; ".join(detail_parts),
-        })
+        }
+        if example_card is not None:
+            rec_entry["example_card"] = example_card
+        recommendations.append(rec_entry)
 
     # Sort by absolute impact descending (positive first, then negative)
     recommendations.sort(key=lambda x: -x["impact"])
@@ -391,7 +502,7 @@ def predict_top_configs(
     X_train, feature_names, _ = configs_to_feature_matrix(configs)
 
     # Fit WLS on Hyperband data
-    coeffs, intercept, r_sq = fit_ols(X_train, scores, weights)
+    coeffs, intercept, r_sq, _std_errors = fit_ols(X_train, scores, weights)
 
     # Predict scores for ALL configs
     all_feature_dicts = [extract_features(c) for c in all_configs]

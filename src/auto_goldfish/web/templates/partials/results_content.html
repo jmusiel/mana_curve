@@ -5,6 +5,10 @@
 <details class="metric-descriptions">
     <summary>Metric Definitions</summary>
     <dl class="metric-list">
+        <dt>Consistency</dt>
+        <dd>Left-tail ratio: mean mana in the worst 25% of games divided by the overall mean (0&ndash;1 scale). 1.0 = perfectly consistent; lower values mean bad games are much worse than average. Based on the selected mana mode.</dd>
+        <dt>Avg Spells</dt>
+        <dd>Average number of spells cast per game.</dd>
         <dt>Mana Spent: V+D</dt>
         <dd>Total mana spent on value (no-effect) and draw spells. Ramp excluded because it pays for itself. Higher = more resources deployed.</dd>
         <dt>Mana Spent: Value / Draw / Ramp</dt>
@@ -13,18 +17,16 @@
         <dd>Total mana spent on all spells (value + draw + ramp).</dd>
         <dt>Hand Sum</dt>
         <dd>Sum of min(hand_size, 7) per turn. Measures card availability across the game.</dd>
-        <dt>Consistency</dt>
-        <dd>How reliably the deck avoids low-value-mana games (0&ndash;1.2 scale). 1.0 = perfectly consistent. Computed from cumulative value mana distribution.</dd>
         <dt>Bad Turns</dt>
         <dd>Average turns where no spells were cast and the deck wasn&rsquo;t empty. Lower = better.</dd>
         <dt>Mid Turns</dt>
-        <dd>Average turns with fewer than 2 spells and mana spent below the turn number. Lower = better.</dd>
+        <dd>Average turns where fewer than 2 spells were cast, mana spent was below the turn number, and the deck wasn&rsquo;t empty. Lower = better.</dd>
         <dt>Avg Lands / Avg Mulls</dt>
         <dd>Average lands played and mulligans taken per game.</dd>
-        <dt>Avg Draws / Avg Spells</dt>
-        <dd>Average cards drawn and spells cast per game.</dd>
+        <dt>Avg Draws</dt>
+        <dd>Average cards drawn per game.</dd>
         <dt>Mana Percentiles (25th / 50th / 75th)</dt>
-        <dd>Percentiles of value mana spent showing distribution spread.</dd>
+        <dd>Percentiles of mana spent (based on selected mana mode) showing distribution spread.</dd>
     </dl>
 </details>
 <div class="table-wrap">
@@ -32,15 +34,15 @@
     <thead>
         <tr>
             <th rowspan="2">Lands</th>
+            <th rowspan="2">Consistency</th>
+            <th rowspan="2">Avg Spells</th>
             <th colspan="5">Mana Spent</th>
             <th rowspan="2">Hand Sum</th>
-            <th rowspan="2">Consistency</th>
             <th rowspan="2">Bad Turns</th>
             <th rowspan="2">Mid Turns</th>
             <th rowspan="2">Avg Lands</th>
             <th rowspan="2">Avg Mulls</th>
             <th rowspan="2">Avg Draws</th>
-            <th rowspan="2">Avg Spells</th>
             <th colspan="3">Mana Percentiles</th>
         </tr>
         <tr>
@@ -59,19 +61,19 @@
         {% set con_margin = ((r.ci_consistency[1] - r.ci_consistency[0]) / 2) if r.ci_consistency else 0 %}
         <tr>
             <td>{{ r.land_count }}</td>
+            <td>{{ "%.3f"|format(r.consistency) }} <small>&plusmn;{{ "%.4f"|format(con_margin) }}</small></td>
+            <td>{{ "%.2f"|format(r.mean_spells_cast|default(0)) }}</td>
             <td>{{ "%.2f"|format(r.mean_mana_value|default(0)) }} <small>&plusmn;{{ "%.2f"|format(r.ci_mana_value|default(0)) }}</small></td>
             <td>{{ "%.2f"|format(r.mean_mana_draw|default(0)) }} <small>&plusmn;{{ "%.2f"|format(r.ci_mana_draw|default(0)) }}</small></td>
             <td>{{ "%.2f"|format(r.mean_mana_ramp|default(0)) }} <small>&plusmn;{{ "%.2f"|format(r.ci_mana_ramp|default(0)) }}</small></td>
             <td>{{ "%.2f"|format(r.mean_mana) }} <small>&plusmn;{{ "%.2f"|format(r.ci_mana|default(0)) }}</small></td>
             <td>{{ "%.2f"|format(r.mean_mana_total|default(0)) }} <small>&plusmn;{{ "%.2f"|format(r.ci_mana_total|default(0)) }}</small></td>
             <td>{{ "%.1f"|format(r.mean_hand_sum|default(0)) }}</td>
-            <td>{{ "%.3f"|format(r.consistency) }} <small>&plusmn;{{ "%.4f"|format(con_margin) }}</small></td>
             <td>{{ "%.2f"|format(r.mean_bad_turns) }}</td>
             <td>{{ "%.2f"|format(r.mean_mid_turns) }}</td>
             <td>{{ "%.2f"|format(r.mean_lands) }}</td>
             <td>{{ "%.2f"|format(r.mean_mulls) }}</td>
             <td>{{ "%.2f"|format(r.mean_draws|default(0)) }}</td>
-            <td>{{ "%.2f"|format(r.mean_spells_cast|default(0)) }}</td>
             <td>{{ "%.1f"|format(r.percentile_25) }}</td>
             <td>{{ "%.1f"|format(r.percentile_50) }}</td>
             <td>{{ "%.1f"|format(r.percentile_75) }}</td>
@@ -85,6 +87,8 @@
 <h2>Card Performance</h2>
 <p class="card-perf-summary">
     Impact of drawing each card on average mana spent across {{ results[0].card_performance.total_games }} games.
+    Impact = average mana spent in games where the card was drawn minus games where it was not.
+    Positive values mean drawing the card increased total mana output.
 </p>
 <div class="card-perf-grid">
     <div>

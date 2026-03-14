@@ -48,7 +48,7 @@ def _make_simple_dataset():
 class TestFitOLS:
     def test_perfect_linear_fit(self):
         X, scores, feature_names, _ = _make_simple_dataset()
-        coeffs, intercept, r_sq = fit_ols(X, scores)
+        coeffs, intercept, r_sq, std_errors = fit_ols(X, scores)
 
         assert r_sq == pytest.approx(1.0, abs=1e-10)
         assert intercept == pytest.approx(10.0, abs=1e-10)
@@ -58,7 +58,7 @@ class TestFitOLS:
 
     def test_predicted_values(self):
         X, scores, _, _ = _make_simple_dataset()
-        coeffs, intercept, _ = fit_ols(X, scores)
+        coeffs, intercept, _, _ = fit_ols(X, scores)
         y_pred = X @ coeffs + intercept
         np.testing.assert_allclose(y_pred, scores, atol=1e-10)
 
@@ -66,8 +66,8 @@ class TestFitOLS:
         X, scores, _, _ = _make_simple_dataset()
         # Uniform weights should give same result as unweighted
         weights = np.ones(len(scores))
-        coeffs_w, intercept_w, r_sq_w = fit_ols(X, scores, weights)
-        coeffs_u, intercept_u, r_sq_u = fit_ols(X, scores)
+        coeffs_w, intercept_w, r_sq_w, _ = fit_ols(X, scores, weights)
+        coeffs_u, intercept_u, r_sq_u, _ = fit_ols(X, scores)
 
         np.testing.assert_allclose(coeffs_w, coeffs_u, atol=1e-10)
         assert intercept_w == pytest.approx(intercept_u, abs=1e-10)
@@ -91,12 +91,12 @@ class TestRegressionAnalysis:
         expected_std = float(np.std(scores))
         assert reg_dict["score_std"] == pytest.approx(expected_std, abs=1e-5)
 
-    def test_ranked_by_abs_std_beta(self):
+    def test_ranked_by_coefficient_descending(self):
         X, scores, feature_names, _ = _make_simple_dataset()
         reg_dict, _ = regression_analysis(X, scores, feature_names)
 
-        betas = [abs(c["std_beta"]) for c in reg_dict["coefficients"]]
-        assert betas == sorted(betas, reverse=True)
+        coeffs = [c["coefficient"] for c in reg_dict["coefficients"]]
+        assert coeffs == sorted(coeffs, reverse=True)
 
 
 # ── compute_marginal_impact tests ─────────────────────────────────────
@@ -194,6 +194,61 @@ class TestSynthesizeRecommendations:
             assert "confidence" in r
             assert "label" in r
             assert "detail" in r
+
+    def test_land_delta_phrasing(self):
+        """land_delta recommendations use 'Add more lands' / 'Cut lands' labels."""
+        _, scores, feature_names, feature_dicts = _make_simple_dataset()
+        X = np.array([[fd[name] for name in feature_names] for fd in feature_dicts],
+                     dtype=float)
+        reg_dict, _ = regression_analysis(X, scores, feature_names)
+        marginal = compute_marginal_impact(feature_dicts, scores, feature_names)
+
+        recs = synthesize_recommendations(marginal, reg_dict, "mean_mana")
+        land_recs = [r for r in recs if "land" in r["label"].lower()]
+        assert len(land_recs) > 0
+        for r in land_recs:
+            assert r["label"] in ("Add more lands", "Cut lands")
+            assert "at least one" in r["recommendation"]
+
+    def test_known_candidate_has_example_card(self):
+        """Recommendations for known candidates include example_card info."""
+        feature_dicts = [
+            {"land_delta": 0, "count_Draw2(mv2)": 0},
+            {"land_delta": 0, "count_Draw2(mv2)": 1},
+            {"land_delta": 0, "count_Draw2(mv2)": 2},
+        ]
+        feature_names = sorted(feature_dicts[0].keys())
+        X = np.array([[fd[name] for name in feature_names] for fd in feature_dicts],
+                     dtype=float)
+        scores = np.array([8.0, 10.0, 12.0])
+        reg_dict, _ = regression_analysis(X, scores, feature_names)
+        marginal = compute_marginal_impact(feature_dicts, scores, feature_names)
+
+        recs = synthesize_recommendations(marginal, reg_dict, "mean_mana")
+        draw_recs = [r for r in recs if "draw" in r["label"].lower()]
+        assert len(draw_recs) > 0
+        r = draw_recs[0]
+        assert r["label"] == "Add more 2-mana draw"
+        assert "example_card" in r
+        assert r["example_card"]["name"] == "Night's Whisper"
+        assert "scryfall.com" in r["example_card"]["url"]
+        assert "Night's Whisper" in r["recommendation"]
+        assert "such as" in r["recommendation"]
+
+    def test_unknown_candidate_no_example_card(self):
+        """Unknown candidate labels fall back without example_card."""
+        _, scores, feature_names, feature_dicts = _make_simple_dataset()
+        X = np.array([[fd[name] for name in feature_names] for fd in feature_dicts],
+                     dtype=float)
+        reg_dict, _ = regression_analysis(X, scores, feature_names)
+        marginal = compute_marginal_impact(feature_dicts, scores, feature_names)
+
+        recs = synthesize_recommendations(marginal, reg_dict, "mean_mana")
+        card_recs = [r for r in recs if "CardA" in r["label"]]
+        assert len(card_recs) > 0
+        for r in card_recs:
+            assert "example_card" not in r
+            assert r["label"] in ("Add more CardA", "Don't add CardA")
 
 
 # ── analyze_optimization integration test ─────────────────────────────
