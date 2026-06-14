@@ -4,47 +4,347 @@
 <div class="deck-header">
     <h1>{{ name }}</h1>
     <p class="deck-stats">{{ total_cards }} cards &middot; {{ land_count }} lands</p>
-    <div class="deck-actions">
-        <a href="{{ url_for('mana_model.page', deck_name=name) }}" class="btn btn-secondary btn-sm">Mana Model</a>
-        {% if is_local is defined and is_local %}
-        <button class="btn btn-primary btn-sm" onclick="navigateToSim('{{ name }}')">Simulate</button>
-        {% else %}
-        <a href="{{ url_for('simulation.config', deck_name=name) }}" class="btn btn-primary btn-sm">Simulate</a>
-        {% endif %}
+</div>
+
+<!-- Hero: running a simulation is the main thing to do here -->
+<section class="deck-home-hero">
+    <div class="deck-home-hero-text">
+        <h2>Run a simulation</h2>
+        <p>Play this deck thousands of times to find the best land count, the ramp &amp; draw worth adding, and your CASTER score.</p>
     </div>
+    {% if is_local is defined and is_local %}
+    <button class="btn btn-primary btn-hero" onclick='navigateToSim({{ name | tojson }})'>Run full simulation</button>
+    {% else %}
+    <a href="{{ url_for('simulation.config', deck_name=name) }}" class="btn btn-primary btn-hero">Run full simulation</a>
+    {% endif %}
+</section>
+
+<!-- Supporting: instant, closed-form land readout (no simulation needed) -->
+<div class="deck-home-verdict">
+    <span id="home-verdict" class="home-verdict-line hint">Checking your land count...</span>
+    {% if is_local is defined and is_local %}
+    <button class="btn-link" onclick='navigateToManaModel({{ name | tojson }})'>full mana model &rarr;</button>
+    {% else %}
+    <a class="btn-link" href="{{ url_for('mana_model.page', deck_name=name) }}">full mana model &rarr;</a>
+    {% endif %}
 </div>
 
-{% if commanders %}
-<div class="card-group">
-    <h2>Commander ({{ commanders | length }})</h2>
-    <ul class="card-list">
-        {% for card in commanders %}
-        <li>
-            <span class="card-qty">1&times;</span>
-            <span class="card-name">{{ card.name }}</span>
-            <span class="card-cost">{{ card.cost }}</span>
-            <span class="card-cmc" title="Mana value">CMC&nbsp;{{ card.cmc }}</span>
-        </li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
+<!-- Decklist (secondary, below) -->
+<details class="deck-list-details" open>
+    <summary><h2 class="deck-list-summary-title">Decklist</h2></summary>
 
-{% for category, pools in groups %}
-<div class="card-group">
-    <h2>{{ category }} ({{ pools | sum(attribute='count') }})</h2>
-    <ul class="card-list">
-        {% for pool in pools %}
-        <li>
-            <span class="card-qty">{{ pool.count }}&times;</span>
-            <span class="card-name">{{ pool.base_name }}</span>
-            {% if pool.cost %}
-            <span class="card-cost">{{ pool.cost }}</span>
-            {% endif %}
-            <span class="card-cmc" title="Mana value">CMC&nbsp;{{ pool.cmc }}</span>
-        </li>
-        {% endfor %}
-    </ul>
+    {% if commanders %}
+    <div class="card-group">
+        <h3>Commander ({{ commanders | length }})</h3>
+        <ul class="card-list">
+            {% for card in commanders %}
+            <li>
+                <span class="card-qty">1&times;</span>
+                <span class="card-main">
+                    <span class="card-name">{{ card.name }}</span>
+                    <span class="card-label-wrap">
+                        <span class="card-label-pill" data-card-label="{{ card.base_name }}">{{ card.label_text }}</span>
+                        {% if card.can_edit_label %}
+                        <button type="button" class="btn-link card-label-change" onclick='deckLabelerOpen({{ card.base_name | tojson }}, this)'>Change</button>
+                        {% endif %}
+                    </span>
+                </span>
+                <span class="card-cost">{{ card.cost }}</span>
+                <span class="card-cmc" title="Mana value">CMC&nbsp;{{ card.cmc }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% for category, pools in groups %}
+    <div class="card-group">
+        <h3>{{ category }} ({{ pools | sum(attribute='count') }})</h3>
+        <ul class="card-list">
+            {% for pool in pools %}
+            <li>
+                <span class="card-qty">{{ pool.count }}&times;</span>
+                <span class="card-main">
+                    <span class="card-name">{{ pool.base_name }}</span>
+                    <span class="card-label-wrap">
+                        {% if not pool.is_land %}
+                        <span class="card-label-pill" data-card-label="{{ pool.base_name }}">{{ pool.label_text }}</span>
+                        <button type="button" class="btn-link card-label-change" onclick='deckLabelerOpen({{ pool.base_name | tojson }}, this)'>Change</button>
+                        {% endif %}
+                    </span>
+                </span>
+                {% if pool.cost %}
+                <span class="card-cost">{{ pool.cost }}</span>
+                {% endif %}
+                <span class="card-cmc" title="Mana value">CMC&nbsp;{{ pool.cmc }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+</details>
+
+<div id="deck-labeler-home" style="display:none;">
+    <section id="deck-labeler" class="labeler-pane deck-labeler-pane" style="display:none;">
+        <div class="labeler-header">
+            <h2>Change Card Label</h2>
+            <span id="deck-labeler-status" class="labeler-progress"></span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="deckLabelerClose()">Close</button>
+        </div>
+        <div class="labeler-body">
+            <div class="labeler-card-display">
+                <div class="labeler-image-wrap">
+                    <img id="deck-labeler-image" class="labeler-image" src="" alt="">
+                </div>
+                <div class="labeler-card-info">
+                    <strong id="deck-labeler-card-name"></strong>
+                    <span id="deck-labeler-card-meta"></span>
+                    <div id="deck-labeler-tags" class="labeler-tag-grid"></div>
+                    <div id="deck-labeler-cheaper" class="labeler-cheaper-hint" style="display:none;"></div>
+                </div>
+            </div>
+            <div class="labeler-controls">
+                <div id="deck-labeler-summary" class="labeler-annotation-summary"></div>
+                <div id="deck-labeler-flowchart"></div>
+                <div class="labeler-nav">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="deckLabelerUndo()">Undo</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="deckLabelerSubmit()">Save label</button>
+                </div>
+            </div>
+        </div>
+    </section>
 </div>
-{% endfor %}
+
+<script>
+(function() {
+    var deckName = {{ name | tojson }};
+    var isLocal = {{ 'true' if is_local is defined and is_local else 'false' }};
+    var labelCards = {{ label_cards | tojson }};
+    var deckOverrides = {{ saved_overrides | tojson }};
+    var currentLabelCard = null;
+    var currentLog = [];
+    var currentStep = 'cost';
+    var currentCtx = {state: {}, amountContext: ''};
+    var wizard = window.LabelerWizard;
+    var deckLabelerController = null;
+
+    // Instant land readout: a soft, range-based framing (the closed-form model
+    // can't pin an exact "right" number, so we show a band and where you sit).
+    function renderVerdict(data) {
+        var rec = data.recommendation.recommended_lands;
+        var current = data.composition.land_count;
+        var lo = Math.max(20, rec - 2);
+        var hi = rec + 2;
+
+        var tag, klass;
+        if (current >= lo && current <= hi) {
+            tag = 'looks healthy ✓';
+            klass = 'verdict-ok';
+        } else if (current < lo) {
+            tag = 'a bit light';
+            klass = 'verdict-low';
+        } else {
+            tag = 'a bit heavy';
+            klass = 'verdict-high';
+        }
+
+        var el = document.getElementById('home-verdict');
+        el.className = 'home-verdict-line ' + klass;
+        el.textContent =
+            'Lands ' + current + '. Healthy range about ' + lo + ' to ' + hi
+            + '. ' + tag + '. Avg CMC ' + data.composition.avg_cmc
+            + ', ramp ' + data.composition.ramp_cards + '.';
+    }
+
+    function loadVerdict() {
+        var url = '/mana-model/api/' + encodeURIComponent(deckName) + '/analysis';
+        var opts = {};
+        if (isLocal) {
+            var stored = DeckStore.getDeck(deckName);
+            if (stored && stored.cards) {
+                opts = {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({cards: stored.cards, overrides: stored.overrides || {}})
+                };
+            }
+        }
+        fetch(url, opts)
+            .then(function(r) { if (!r.ok) throw new Error('verdict failed'); return r.json(); })
+            .then(renderVerdict)
+            .catch(function() {
+                document.getElementById('home-verdict').textContent =
+                    'Land-count readout unavailable. Open the full mana model.';
+            });
+    }
+
+    loadVerdict();
+
+    function findLabelCard(cardName) {
+        for (var i = 0; i < labelCards.length; i++) {
+            if (labelCards[i].name === cardName) return labelCards[i];
+        }
+        return null;
+    }
+
+    function baseAnnotation(card) {
+        return deckOverrides[card.name] || card.prior_annotation || card.registry_override || {categories: []};
+    }
+
+    function placeDeckLabeler(trigger) {
+        var pane = document.getElementById('deck-labeler');
+        var cardRow = trigger && trigger.closest ? trigger.closest('li') : null;
+        if (!cardRow && currentLabelCard) {
+            document.querySelectorAll('[data-card-label]').forEach(function(el) {
+                if (!cardRow && el.getAttribute('data-card-label') === currentLabelCard.name) {
+                    cardRow = el.closest('li');
+                }
+            });
+        }
+        if (!cardRow || !cardRow.parentNode) return;
+
+        var editorRow = document.getElementById('deck-labeler-row');
+        if (!editorRow) {
+            editorRow = document.createElement('li');
+            editorRow.id = 'deck-labeler-row';
+            editorRow.className = 'deck-labeler-row';
+        }
+        editorRow.appendChild(pane);
+        cardRow.parentNode.insertBefore(editorRow, cardRow.nextSibling);
+    }
+
+    function restoreDeckLabeler() {
+        var pane = document.getElementById('deck-labeler');
+        var home = document.getElementById('deck-labeler-home');
+        var editorRow = document.getElementById('deck-labeler-row');
+        pane.style.display = 'none';
+        home.appendChild(pane);
+        if (editorRow && editorRow.parentNode) {
+            editorRow.parentNode.removeChild(editorRow);
+        }
+    }
+
+    function ensureDeckLabelerController() {
+        if (deckLabelerController) return deckLabelerController;
+        deckLabelerController = window.LabelerController.create({
+            wizard: wizard,
+            flowchart: 'deck-labeler-flowchart',
+            onStateChange: function(ctrl) {
+                currentCtx = ctrl.getContext();
+                currentLog = ctrl.getDecisionLog();
+                currentStep = ctrl.getActiveStep();
+            },
+            onRender: updateDeckLabelerSummary,
+        });
+        return deckLabelerController;
+    }
+
+    function updateDeckLabelerSummary() {
+        if (!currentLabelCard || !deckLabelerController) return;
+        var summary = document.getElementById('deck-labeler-summary');
+        var annotation = deckLabelerController.isComplete()
+            ? deckLabelerController.getEffectData()
+            : baseAnnotation(currentLabelCard);
+        summary.textContent = 'Current label: ' + wizard.describePriorAnnotation(annotation);
+    }
+
+    function renderDeckLabeler() {
+        if (!currentLabelCard || !wizard) return;
+        var pane = document.getElementById('deck-labeler');
+        var image = document.getElementById('deck-labeler-image');
+        var name = document.getElementById('deck-labeler-card-name');
+        var meta = document.getElementById('deck-labeler-card-meta');
+        var tags = document.getElementById('deck-labeler-tags');
+        var cheaper = document.getElementById('deck-labeler-cheaper');
+        var status = document.getElementById('deck-labeler-status');
+
+        pane.style.display = 'block';
+        image.src = 'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(currentLabelCard.name) + '&format=image&version=normal';
+        image.alt = currentLabelCard.name;
+        name.textContent = currentLabelCard.name;
+        meta.textContent = 'Mana value ' + (currentLabelCard.cmc || 0);
+        status.textContent = '';
+
+        tags.innerHTML = '';
+        (currentLabelCard.otags || []).slice(0, 8).forEach(function(tag) {
+            var span = document.createElement('span');
+            span.className = 'labeler-tag labeler-tag-active';
+            span.textContent = tag;
+            tags.appendChild(span);
+        });
+        if (currentLabelCard.cheaper_than_mv) {
+            cheaper.style.display = 'block';
+            cheaper.textContent = 'Can be cast for less than its printed mana value.';
+        } else {
+            cheaper.style.display = 'none';
+        }
+
+        ensureDeckLabelerController().setFromAnnotation(currentLabelCard, baseAnnotation(currentLabelCard), {
+            decodeEmptyAnnotation: true,
+        });
+    }
+
+    function saveDeckOverrides() {
+        if (isLocal) {
+            DeckStore.saveOverrides(deckName, deckOverrides);
+            return Promise.resolve();
+        }
+        return fetch('/sim/' + encodeURIComponent(deckName) + '/overrides', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(deckOverrides)
+        }).then(function(resp) {
+            if (!resp.ok) throw new Error('save failed');
+        });
+    }
+
+    function saveAnnotation(annotation) {
+        return fetch('/sim/' + encodeURIComponent(deckName) + '/annotate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({card_name: currentLabelCard.name, effects: annotation, source: 'human'})
+        }).catch(function() {});
+    }
+
+    window.deckLabelerOpen = function(cardName, trigger) {
+        if (!wizard) return;
+        currentLabelCard = findLabelCard(cardName);
+        if (!currentLabelCard) return;
+        renderDeckLabeler();
+        placeDeckLabeler(trigger);
+        document.getElementById('deck-labeler').scrollIntoView({behavior: 'smooth', block: 'start'});
+    };
+
+    window.deckLabelerClose = function() {
+        restoreDeckLabeler();
+    };
+
+    window.deckLabelerUndo = function() {
+        ensureDeckLabelerController().undo();
+    };
+
+    window.deckLabelerSubmit = function() {
+        if (!currentLabelCard || !ensureDeckLabelerController().isComplete()) {
+            document.getElementById('deck-labeler-status').textContent = 'Finish the label first.';
+            return;
+        }
+        var annotation = ensureDeckLabelerController().getEffectData();
+        deckOverrides[currentLabelCard.name] = annotation;
+        currentLabelCard.prior_annotation = annotation;
+        currentLabelCard.registry_override = annotation;
+        document.querySelectorAll('[data-card-label]').forEach(function(el) {
+            if (el.getAttribute('data-card-label') === currentLabelCard.name) {
+                el.textContent = wizard.describePriorAnnotation(annotation);
+            }
+        });
+        document.getElementById('deck-labeler-status').textContent = 'Saving...';
+        Promise.all([saveDeckOverrides(), saveAnnotation(annotation)]).then(function() {
+            document.getElementById('deck-labeler-status').textContent = 'Saved.';
+            renderDeckLabeler();
+        }).catch(function() {
+            document.getElementById('deck-labeler-status').textContent = 'Save failed.';
+        });
+    };
+})();
+</script>
 {% endblock %}

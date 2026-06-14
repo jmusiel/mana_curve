@@ -17,12 +17,11 @@ web/
 │   └── simulation_runner.py # SimJob + SimulationRunner (background threads)
 ├── templates/
 │   ├── base.html            # Base layout
-│   ├── dashboard.html       # Deck list
-│   ├── import.html          # Archidekt import form
-│   ├── deck_view.html       # Card list grouped by category
+│   ├── dashboard.html       # Deck list (cards link to Deck Home)
+│   ├── import.html          # Import form (Archidekt/Moxfield/paste) -> Deck Home
+│   ├── deck_view.html       # Deck Home: instant land verdict + sim CTA, then decklist
 │   ├── simulate.html        # Config form + Pyodide simulation client
-│   ├── results.html         # Standalone results page
-│   └── partials/            # HTMX fragments (job_status, results_content, validation_error)
+│   └── mana_model.html      # Instant hypergeometric land recommender
 ├── wizard.py                # Card labeling wizard prioritization logic
 └── static/
     ├── style.css
@@ -42,6 +41,18 @@ All simulation runs client-side via Pyodide (CPython in WebAssembly):
 3. On form submit, the main thread fetches deck data (`/sim/api/<deck>/deck`) and effects (`/sim/api/<deck>/effects`), then posts to the worker
 4. Worker runs `pyodide_runner.run_simulation()`, sends progress updates back
 5. On completion, `client_results.js` renders results inline and POSTs to `/sim/api/<deck>/results`. The endpoint returns 200 with `persisted: false` when no `DATABASE_URL` is configured, 200 with `persisted: true` on a successful write, and 500 with an `error` field when persistence is configured but the write fails — so client-side code can distinguish "no DB" from a real outage.
+
+The Curve Value Analysis panel includes a Turn Spend Timeline. It renders the
+serialized `curve_value.turn_structure` payload in `static/js/client_results.js`,
+the sole results renderer for Pyodide/client-rendered results. The timeline's
+spendable spell bars include non-ramp main-deck spells plus commanders; ramp
+setup is tracked as its own series.
+
+Ramp Tradeoff panels are computed eagerly only for the land count shown by
+default. Each result still carries the saved Ramp Tradeoff input and measured
+draw signature, so `client_results.js` can ask the worker to compute other
+land-count panels lazily via `pyodide_runner.compute_ramp_tradeoff_json()`
+without re-running the simulation.
 
 ## API Endpoints
 

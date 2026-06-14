@@ -6,7 +6,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from auto_goldfish.decklist.loader import get_basic_island
-from auto_goldfish.pyodide_runner import run_optimization, run_simulation
+from auto_goldfish.pyodide_runner import (
+    compute_ramp_tradeoff_json,
+    compute_turn_structure_variant_json,
+    run_optimization,
+    run_simulation,
+)
 
 
 def _make_deck_json(n_lands=10, n_spells=5):
@@ -66,6 +71,10 @@ class TestRunSimulation:
         results = json.loads(run_simulation(deck_json, config))
         assert len(results) == 3
         assert [r["land_count"] for r in results] == [9, 10, 11]
+        assert all(r["ramp_tradeoff_input"] for r in results)
+        assert results[0]["ramp_tradeoff"] is None
+        assert results[1]["ramp_tradeoff"] is None
+        assert results[2]["ramp_tradeoff"] is not None
 
     def test_progress_callback(self):
         """Progress callback is called with global progress across land counts."""
@@ -172,6 +181,55 @@ class TestRunSimulation:
         }
         assert expected_keys.issubset(set(r.keys()))
 
+    def test_compute_ramp_tradeoff_json_reuses_saved_input(self):
+        """Lazy panel computation uses saved per-result input plus signature."""
+        deck_json = _make_deck_json()
+        config = json.dumps({
+            "turns": 3,
+            "sims": 10,
+            "min_lands": 10,
+            "max_lands": 10,
+            "seed": 42,
+        })
+        result = json.loads(run_simulation(deck_json, config))[0]
+        lazy_config = json.dumps({
+            "turns": 3,
+            "ramp_tradeoff_input": result["ramp_tradeoff_input"],
+        })
+        panel = json.loads(compute_ramp_tradeoff_json(
+            deck_json,
+            json.dumps(result["mean_cumulative_draws_per_turn"]),
+            lazy_config,
+        ))
+        assert panel["suppressed"] is False
+        assert panel["current_rocks"] == result["ramp_tradeoff_input"]["current_rocks"]
+        assert panel["variants"]
+
+    def test_compute_turn_structure_variant_json_reuses_saved_input(self):
+        """Lazy timeline computation uses saved per-result input plus signature."""
+        deck_json = _make_deck_json()
+        config = json.dumps({
+            "turns": 3,
+            "sims": 10,
+            "min_lands": 10,
+            "max_lands": 10,
+            "seed": 42,
+        })
+        result = json.loads(run_simulation(deck_json, config))[0]
+        lazy_config = json.dumps({
+            "turns": 3,
+            "target_signets": 0,
+            "ramp_tradeoff_input": result["ramp_tradeoff_input"],
+        })
+        payload = json.loads(compute_turn_structure_variant_json(
+            deck_json,
+            json.dumps(result["mean_cumulative_draws_per_turn"]),
+            lazy_config,
+        ))
+        assert payload["target_signets"] == 0
+        assert payload["turn_structure"]["rows"]
+        assert payload["turn_structure"]["with_ramp_value_spend_by_turn"]
+
 
 class TestRunOptimizationDispatch:
     """Verify the algorithm string routes to the correct optimizer class.
@@ -195,6 +253,16 @@ class TestRunOptimizationDispatch:
         }
         cfg.update(extra)
         return json.dumps(cfg)
+
+    def test_optimization_results_carry_lazy_ramp_tradeoff_input(self):
+        """Optimization-shaped results still need the saved input for the UI panel."""
+        deck_json = _make_deck_json()
+        config = self._make_optimization_config("factored", sims=5)
+        results = json.loads(run_optimization(deck_json, config))
+        assert results
+        assert results[0]["opt_config"]
+        assert results[0]["ramp_tradeoff_input"]
+        assert "spendable_curve" in results[0]["ramp_tradeoff_input"]
 
     @pytest.mark.parametrize(
         "algorithm,expected_module,expected_class",

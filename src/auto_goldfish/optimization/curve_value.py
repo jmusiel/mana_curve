@@ -55,6 +55,23 @@ DEFAULT_LOAN_THRESHOLD = 15.0
 # ramp_over_aggressive at the obvious slot.
 DEFAULT_FIXED_DELTA = 0.85
 
+# Stuck-cost aggregation modes for the Implied Ramp sweep. See
+# ``_simulate_float_stuck`` for the per-mode math. ``uniform`` is the
+# original prototype objective (linear accumulation per stuck turn). The
+# other three are smoothing variants explored to fix the bimodal-cliff
+# behaviour identified during evaluation.
+STUCK_MODE_UNIFORM = "uniform"
+STUCK_MODE_TURN_DECAY = "turn_decay"
+STUCK_MODE_PER_CARD_CAP = "per_card_cap"
+STUCK_MODE_MANA_GAP = "mana_gap"
+STUCK_MODES = (
+    STUCK_MODE_UNIFORM,
+    STUCK_MODE_TURN_DECAY,
+    STUCK_MODE_PER_CARD_CAP,
+    STUCK_MODE_MANA_GAP,
+)
+DEFAULT_STUCK_MODE = STUCK_MODE_UNIFORM
+
 # Sigmoid scale for the excess-based commitment factor. alpha = 1 - exp(-X/k)
 # where X is the deck's idealized ramp excess (sum of M*(T-c) - c across ramp
 # pieces). k=50 puts heavy decks (rr_connection X~62) near 0.71, low-ramp
@@ -199,6 +216,36 @@ class CurveVerdict:
 
 
 @dataclass
+class ImpliedRampResult:
+    """Result of the Implied Ramp analysis.
+
+    Sweeps a counterfactual ramp count R (in 2-mana-rock equivalents) over
+    ``[0, R_max]``. For each R, builds a deck with the original value-curve
+    shape scaled to the remaining value slots and computes:
+
+      - ``float_cost(R)``: mana available but unspent (mana-units over T turns)
+      - ``stuck_cost(R)``: mana value of hand cards exceeding available mana,
+        accumulated each turn
+
+    Both are in mana-units; their sum is the deck's total "friction" cost at
+    that ramp level. ``R_star`` minimizes total. ``R_actual`` is the deck's
+    current ramp expressed in rock-equivalents (each piece's idealized excess
+    over T turns divided by one 2-mana-rock's idealized excess).
+    """
+
+    T: int
+    R_actual: float
+    R_star: int
+    R_grid: List[int]
+    float_curve: List[float]
+    stuck_curve: List[float]
+    total_curve: List[float]
+    verdict: str  # "under_ramped" | "right_sized" | "over_ramped"
+    delta_rocks: float  # R_star - R_actual
+    stuck_mode: str = DEFAULT_STUCK_MODE
+
+
+@dataclass
 class CurveValueResult:
     """Top-level wrapper: both metrics + the inputs used."""
 
@@ -207,6 +254,8 @@ class CurveValueResult:
     implied_draw: ImpliedDrawResult
     implied_spell_value: ImpliedSpellValueResult
     curve_verdict: Optional[CurveVerdict] = None
+    turn_structure: Optional["TurnStructureResult"] = None
+    implied_ramp: Optional[ImpliedRampResult] = None
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +304,8 @@ def classify_for_curve_value(
       - L (land count)
       - V (value-pool count: non-land non-ramp non-draw, commanders excluded)
       - V_avg_cmc, V_curve
+      - spendable_curve: non-land non-ramp main-deck spells, including draw
+      - commander_spendable_curve: commanders, available outside the deck
       - ramp_specs: list[RampCardSpec] (only those with mana_per_turn > 0)
       - commanders: list[CommanderSpec]
       - draw_count
@@ -266,6 +317,8 @@ def classify_for_curve_value(
     draw_count = 0
     value_cmcs: List[int] = []
     curve_counter: Dict[int, int] = {}
+    spendable_counter: Dict[int, int] = {}
+    commander_spendable_counter: Dict[int, int] = {}
     in_deck = 0
 
     for card in deck_list:
@@ -279,6 +332,10 @@ def classify_for_curve_value(
         if is_commander:
             for _ in range(qty):
                 commanders.append(CommanderSpec(name=name, cmc=cmc))
+                if not is_land and cmc > 0:
+                    commander_spendable_counter[cmc] = (
+                        commander_spendable_counter.get(cmc, 0) + 1
+                    )
             continue
 
         for _ in range(qty):
@@ -305,6 +362,9 @@ def classify_for_curve_value(
                 ramp_specs.append(RampCardSpec(name=name, cmc=cmc, mana_per_turn=mana_per_turn))
                 continue
 
+            if cmc > 0:
+                spendable_counter[cmc] = spendable_counter.get(cmc, 0) + 1
+
             if is_draw_flag:
                 draw_count += 1
                 continue
@@ -321,6 +381,8 @@ def classify_for_curve_value(
         "V": len(value_cmcs),
         "V_avg_cmc": V_avg_cmc,
         "V_curve": curve_counter,
+        "spendable_curve": spendable_counter,
+        "commander_spendable_curve": commander_spendable_counter,
         "ramp_specs": ramp_specs,
         "commanders": commanders,
         "draw_count": draw_count,
@@ -670,6 +732,10 @@ def schedule_ramp(
     return sched
 
 
+def _scheduled_amount(item: tuple) -> float:
+    return float(item[3]) if len(item) > 3 else 1.0
+
+
 def value_mana_per_turn(ramp_schedule: List[tuple], T: int) -> List[float]:
     """Mana available for value spells at each turn 1..T.
 
@@ -680,12 +746,14 @@ def value_mana_per_turn(ramp_schedule: List[tuple], T: int) -> List[float]:
     out: List[float] = []
     for t in range(1, T + 1):
         m = float(t)  # idealized one land drop per turn
-        for sched_t, _c, M in ramp_schedule:
+        for item in ramp_schedule:
+            sched_t, _c, M = item[:3]
             if sched_t < t:
-                m += M
-        for sched_t, c, _M in ramp_schedule:
+                m += float(M) * _scheduled_amount(item)
+        for item in ramp_schedule:
+            sched_t, c, _M = item[:3]
             if sched_t == t:
-                m -= c
+                m -= float(c) * _scheduled_amount(item)
         out.append(max(0.0, m))
     return out
 
@@ -983,6 +1051,641 @@ def compute_curve_verdict(
 
 
 # ---------------------------------------------------------------------------
+# Turn Structure: post-cast turns of spendable-spell board presence
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TurnStructureRow:
+    """Per-CMC comparison of post-cast turns of spendable-spell board presence.
+
+    Ramp's own board presence is not credited. ``n_ramp_cards`` is the
+    informational count of ramp pieces at this CMC. The counterfactual
+    distributes ramp slots back across the spendable curve in proportion to the
+    deck's existing spendable-spell shape, so its added cards at each CMC are
+    fractional and tracked in ``counterfactual_added``.
+
+    With a draw cap, ``cast`` values are fractional (expected counts under
+    proportional draw of the deck's curve), and ``n_drawn`` denominators are
+    expected drawn counts, not raw deck counts.
+    """
+
+    cmc: int
+    n_value_cards: float
+    n_ramp_cards: int
+    counterfactual_added: float
+    with_ramp_cast: float
+    with_ramp_total_turns: float
+    with_ramp_turns_per_cast: Optional[float]
+    with_ramp_turns_per_drawn: Optional[float]
+    counterfactual_cast: float
+    counterfactual_total_turns: float
+    counterfactual_turns_per_cast: Optional[float]
+    counterfactual_turns_per_drawn: Optional[float]
+    delta_turns: float
+
+
+@dataclass
+class TurnStructureResult:
+    """Top-level result of the turn-structure comparison.
+
+    ``with_ramp_*`` plays the deck as classified. The counterfactual replaces
+    every ramp piece with a spendable spell sampled in proportion to the deck's
+    existing spendable-curve shape -- so the spendable curve grows but keeps shape,
+    and ramp's mana stream is removed. Both scenarios use the same
+    top-of-curve allocator (cast biggest castable first, repeat until mana
+    exhausted). "Spendable" means non-ramp spells; commanders are modeled as
+    always available, while main-deck spendables are draw-capped.
+
+    When ``D`` and a draw schedule are supplied, both scenarios cap
+    castable cards at expected drawn count by turn (``N(c) * draws_t / D``)
+    so totals reflect only cards expected to actually be in hand.
+    """
+
+    T: int
+    rows: List[TurnStructureRow]
+    with_ramp_total_turns: float
+    counterfactual_total_turns: float
+    delta_turns: float
+    with_ramp_mana_stream: List[float]
+    counterfactual_mana_stream: List[float]
+    with_ramp_casts: List[tuple]
+    counterfactual_casts: List[tuple]
+    with_ramp_schedule: List[tuple]
+    counterfactual_schedule: List[tuple]
+    with_ramp_value_spend_by_turn: List[Dict[int, float]]
+    counterfactual_value_spend_by_turn: List[Dict[int, float]]
+    with_ramp_ramp_spend: List[float]
+    counterfactual_ramp_spend: List[float]
+    with_ramp_unused_mana: List[float]
+    counterfactual_unused_mana: List[float]
+    with_ramp_total_value_mana_spent: float
+    counterfactual_total_value_mana_spent: float
+    delta_value_mana_spent: float
+    draw_capped: bool = False
+    per_turn_cumulative_draws: Optional[List[float]] = None
+
+
+def _allocate_top_of_curve(
+    m_t: float, in_hand: Dict[int, float], eps: float = 1e-9
+) -> Dict[int, float]:
+    """Greedy top-of-curve allocator: cast biggest castable first.
+
+    Supports fractional ``in_hand`` counts (so the counterfactual and the
+    draw-capped allocator can use expected card counts). Mutates ``in_hand``;
+    returns ``{cmc: cards_cast_this_turn}``.
+    """
+    cast: Dict[int, float] = {}
+    budget = float(m_t)
+    while budget > eps:
+        choices = [c for c, n in in_hand.items() if c <= budget + eps and n > eps]
+        if not choices:
+            break
+        c = max(choices)
+        # cast up to one full card; budget may allow more on next iter.
+        cast_amount = min(in_hand[c], 1.0, budget / c)
+        if cast_amount <= eps:
+            break
+        in_hand[c] -= cast_amount
+        budget -= cast_amount * c
+        cast[c] = cast.get(c, 0.0) + cast_amount
+    return cast
+
+
+def _allocate_always_available(
+    m_t: float, in_hand: Dict[int, float], eps: float = 1e-9
+) -> Dict[int, float]:
+    """Allocate command-zone spendables, allowing one-mana-short fractions.
+
+    The draw-capped timeline mixes game states into expected mana. A commander
+    that is castable in some states but one mana short in others can therefore
+    sit just below its CMC in expectation. Model that as a fractional cast.
+    """
+    cast: Dict[int, float] = {}
+    budget = float(m_t)
+    while budget > eps:
+        exact = [c for c, n in in_hand.items() if c <= budget + eps and n > eps]
+        if exact:
+            c = max(exact)
+            cast_amount = min(in_hand[c], 1.0, budget / c)
+        else:
+            near = [
+                c for c, n in in_hand.items()
+                if c - 1.0 < budget < c and n > eps
+            ]
+            if not near:
+                break
+            c = max(near)
+            cast_amount = min(in_hand[c], 1.0, budget - (c - 1.0), budget / c)
+        if cast_amount <= eps:
+            break
+        in_hand[c] -= cast_amount
+        budget -= cast_amount * c
+        cast[c] = cast.get(c, 0.0) + cast_amount
+    return cast
+
+
+def _ramp_buckets(ramp_pieces: List[tuple], use_cap: bool) -> List[Dict[str, float]]:
+    """Aggregate interchangeable ramp pieces for expected-availability scheduling."""
+    buckets: Dict[tuple, Dict[str, float]] = {}
+    for c, M in ramp_pieces:
+        key = (int(c), float(M))
+        bucket = buckets.setdefault(
+            key,
+            {
+                "cmc": float(int(c)),
+                "mana_per_turn": float(M),
+                "count": 0.0,
+                "available": 0.0,
+                "cast_so_far": 0.0,
+            },
+        )
+        bucket["count"] += 1.0
+    out = sorted(buckets.values(), key=lambda b: (b["cmc"], b["mana_per_turn"]))
+    if not use_cap:
+        for bucket in out:
+            bucket["available"] = bucket["count"]
+    return out
+
+
+def _play_to_curve_top_of_curve(
+    curve_counts: Dict[int, float],
+    ramp_pieces: List[tuple],
+    T: int,
+    D: Optional[int] = None,
+    per_turn_cumulative_draws: Optional[List[float]] = None,
+    always_available_counts: Optional[Dict[int, float]] = None,
+) -> Dict[str, Any]:
+    """Play-to-curve with top-of-curve allocation; record every cast.
+
+    Without a draw cap (``D`` and per-turn draws both None) every card in
+    ``curve_counts`` is in hand at t=1. With a cap, cards arrive each turn
+    in proportion to the curve: ``delta(c, t) = N(c) * delta_draws[t] / D``.
+    ``always_available_counts`` are in hand from turn 1 in both modes and
+    are allocated before ramp setup; main-deck spendables are allocated after
+    ramp setup.
+
+    Returns ``casts`` (list of ``(turn, cmc, amount)``), ``schedule``,
+    ``mana_stream``, and ``in_hand`` (remaining at end).
+    """
+    always_available_counts = always_available_counts or {}
+    use_cap = D is not None and per_turn_cumulative_draws is not None and D > 0
+    in_hand: Dict[int, float] = (
+        {int(c): 0.0 for c in curve_counts}
+        if use_cap
+        else {int(c): float(n) for c, n in curve_counts.items()}
+    )
+    always_in_hand: Dict[int, float] = {
+        int(c): float(n) for c, n in always_available_counts.items()
+    }
+    ramp_hand = _ramp_buckets(ramp_pieces, use_cap)
+
+    casts: List[tuple] = []
+    schedule: List[tuple] = []
+    mana_stream: List[float] = []
+    active_ramp_mana = 0.0
+    prev_draws = 0.0
+    for t_idx in range(1, T + 1):
+        if use_cap:
+            draws_t = float(per_turn_cumulative_draws[t_idx - 1])
+            delta = max(0.0, draws_t - prev_draws)
+            prev_draws = draws_t
+            draw_share = delta / float(D)
+            for ramp in ramp_hand:
+                count = ramp["count"]
+                p_card_seen = max(0.0, min(1.0, draws_t / float(D)))
+                expected_drawn = count * p_card_seen
+                p_any_drawn = 1.0 - ((1.0 - p_card_seen) ** count)
+                ramp["available"] = max(
+                    0.0,
+                    min(expected_drawn - ramp["cast_so_far"], p_any_drawn),
+                )
+            for c, n in curve_counts.items():
+                in_hand[int(c)] = in_hand.get(int(c), 0.0) + float(n) * draw_share
+
+        total_budget = float(t_idx) + active_ramp_mana
+        budget = total_budget
+        commander_casts = _allocate_always_available(budget, always_in_hand)
+        commander_spend = sum(int(c) * float(amt) for c, amt in commander_casts.items())
+        budget = max(0.0, budget - commander_spend)
+        for c, amt in commander_casts.items():
+            casts.append((t_idx, c, amt))
+
+        new_ramp_mana = 0.0
+        ramp_spend = 0.0
+        ramp_cast_capacity = float("inf") if use_cap else 1.0
+        for ramp in ramp_hand:
+            c = int(ramp["cmc"])
+            if ramp_cast_capacity <= 1e-9:
+                break
+            if budget + 1e-9 < c or ramp["available"] <= 1e-9:
+                continue
+            cast_amount = min(ramp["available"], budget / c, ramp_cast_capacity)
+            if cast_amount <= 1e-9:
+                continue
+            ramp["available"] -= cast_amount
+            ramp["cast_so_far"] += cast_amount
+            budget -= cast_amount * c
+            ramp_spend += cast_amount * c
+            new_ramp_mana += cast_amount * ramp["mana_per_turn"]
+            schedule.append((t_idx, c, ramp["mana_per_turn"], cast_amount))
+            ramp_cast_capacity -= cast_amount
+
+        spendable_budget = max(0.0, budget)
+        mana_stream.append(max(0.0, total_budget - ramp_spend))
+        if spendable_budget <= 0:
+            active_ramp_mana += new_ramp_mana
+            continue
+        per_cmc = _allocate_top_of_curve(spendable_budget, in_hand)
+        for c, amt in per_cmc.items():
+            casts.append((t_idx, c, amt))
+        active_ramp_mana += new_ramp_mana
+
+    return {
+        "casts": casts,
+        "schedule": schedule,
+        "mana_stream": mana_stream,
+        "in_hand": in_hand,
+    }
+
+
+def _curve_proportional_counterfactual(
+    curve_counts: Dict[int, float], ramp_pieces: List[tuple]
+) -> Dict[int, float]:
+    """Distribute each ramp slot across the spendable curve proportionally.
+
+    Each ramp piece becomes ``N(c) / sum(N)`` of a card at every CMC c that
+    already has spendable spells, so total card count grows by ``len(ramp_pieces)``
+    and curve shape is preserved exactly. Result counts are fractional.
+    """
+    out: Dict[int, float] = {int(c): float(n) for c, n in curve_counts.items()}
+    total_value = sum(out.values())
+    n_ramp = len(ramp_pieces)
+    if total_value <= 0 or n_ramp == 0:
+        return out
+    for c in list(out.keys()):
+        out[c] += n_ramp * out[c] / total_value
+    # Floating-point: rescale to exact target if drift accumulates.
+    target = total_value + n_ramp
+    actual = sum(out.values())
+    if actual > 0 and abs(actual - target) > 1e-9:
+        scale = target / actual
+        for c in out:
+            out[c] *= scale
+    return out
+
+
+def _value_spend_by_turn(casts: List[tuple], T: int) -> List[Dict[int, float]]:
+    """Return per-turn value mana spent by CMC from cast records."""
+    out: List[Dict[int, float]] = [dict() for _ in range(T)]
+    for t, c, amt in casts:
+        if 1 <= t <= T:
+            out[t - 1][int(c)] = out[t - 1].get(int(c), 0.0) + int(c) * float(amt)
+    return out
+
+
+def _ramp_spend_by_turn(schedule: List[tuple], T: int) -> List[float]:
+    """Return per-turn mana spent casting ramp pieces."""
+    out = [0.0 for _ in range(T)]
+    for item in schedule:
+        t, c, _M = item[:3]
+        if 1 <= t <= T:
+            out[t - 1] += float(c) * _scheduled_amount(item)
+    return out
+
+
+def _unused_mana_by_turn(
+    mana_stream: List[float],
+    value_spend_by_turn: List[Dict[int, float]],
+) -> List[float]:
+    """Return mana not spent on modeled spendable spells each turn."""
+    out: List[float] = []
+    for m_t, spends in zip(mana_stream, value_spend_by_turn):
+        out.append(max(0.0, float(m_t) - sum(spends.values())))
+    return out
+
+
+def compute_turn_structure(
+    curve_counts: Dict[int, float],
+    ramp_specs: List[RampCardSpec],
+    T: int,
+    D: Optional[int] = None,
+    per_turn_cumulative_draws: Optional[List[float]] = None,
+    always_available_counts: Optional[Dict[int, float]] = None,
+) -> TurnStructureResult:
+    """Compare post-cast turns of spendable-spell board presence.
+
+    For each CMC c, the row reports how many spendable spells get cast under each
+    scenario and the total ``sum(T - cast_turn)`` over those casts. The
+    counterfactual distributes each ramp piece's slot proportionally back
+    across the deck's spendable curve, preserving shape and total card count.
+    Always-available spells, such as commanders, are added to both scenarios
+    but are not used as the shape for replacing ramp slots.
+
+    If ``D`` and ``per_turn_cumulative_draws`` are supplied, cards are only
+    available for casting in proportion to expected draws so totals reflect
+    realistic hand availability.
+    """
+    always_available_counts = always_available_counts or {}
+    ramp_pieces = [(r.cmc, r.mana_per_turn) for r in ramp_specs if r.mana_per_turn > 0]
+    ramp_by_cmc: Dict[int, int] = {}
+    for cmc, _M in ramp_pieces:
+        ramp_by_cmc[int(cmc)] = ramp_by_cmc.get(int(cmc), 0) + 1
+
+    with_run = _play_to_curve_top_of_curve(
+        curve_counts, ramp_pieces, T,
+        D=D, per_turn_cumulative_draws=per_turn_cumulative_draws,
+        always_available_counts=always_available_counts,
+    )
+
+    counterfactual_counts = _curve_proportional_counterfactual(curve_counts, ramp_pieces)
+    cf_run = _play_to_curve_top_of_curve(
+        counterfactual_counts, [], T,
+        D=D, per_turn_cumulative_draws=per_turn_cumulative_draws,
+        always_available_counts=always_available_counts,
+    )
+
+    def agg(casts: List[tuple]) -> Dict[int, Dict[str, float]]:
+        out: Dict[int, Dict[str, float]] = {}
+        for t, c, amt in casts:
+            d = out.setdefault(int(c), {"count": 0.0, "turns": 0.0})
+            d["count"] += amt
+            d["turns"] += amt * max(0, T - t)
+        return out
+
+    with_agg = agg(with_run["casts"])
+    cf_agg = agg(cf_run["casts"])
+
+    use_cap = D is not None and per_turn_cumulative_draws is not None and D > 0
+    draws_T = float(per_turn_cumulative_draws[-1]) if use_cap else None
+
+    all_cmcs = sorted(
+        set(int(c) for c in curve_counts.keys())
+        | set(int(c) for c in counterfactual_counts.keys())
+        | set(int(c) for c in always_available_counts.keys())
+    )
+    rows: List[TurnStructureRow] = []
+    for c in all_cmcs:
+        n_deck = float(curve_counts.get(c, 0))
+        n_always = float(always_available_counts.get(c, 0))
+        n_value = n_deck + n_always
+        n_ramp = int(ramp_by_cmc.get(c, 0))
+        cf_deck_total = float(counterfactual_counts.get(c, 0.0))
+        cf_total = cf_deck_total + n_always
+        cf_added = cf_deck_total - n_deck
+
+        if use_cap:
+            n_drawn_with = n_deck * draws_T / float(D) + n_always
+            n_drawn_cf = cf_deck_total * draws_T / float(D) + n_always
+        else:
+            n_drawn_with = n_value
+            n_drawn_cf = cf_total
+
+        w = with_agg.get(c, {"count": 0.0, "turns": 0.0})
+        k = cf_agg.get(c, {"count": 0.0, "turns": 0.0})
+        w_cast = float(w["count"])
+        k_cast = float(k["count"])
+        w_turns = float(w["turns"])
+        k_turns = float(k["turns"])
+        rows.append(TurnStructureRow(
+            cmc=c,
+            n_value_cards=n_value,
+            n_ramp_cards=n_ramp,
+            counterfactual_added=cf_added,
+            with_ramp_cast=w_cast,
+            with_ramp_total_turns=w_turns,
+            with_ramp_turns_per_cast=(w_turns / w_cast) if w_cast > 1e-9 else None,
+            with_ramp_turns_per_drawn=(w_turns / n_drawn_with) if n_drawn_with > 1e-9 else None,
+            counterfactual_cast=k_cast,
+            counterfactual_total_turns=k_turns,
+            counterfactual_turns_per_cast=(k_turns / k_cast) if k_cast > 1e-9 else None,
+            counterfactual_turns_per_drawn=(k_turns / n_drawn_cf) if n_drawn_cf > 1e-9 else None,
+            delta_turns=w_turns - k_turns,
+        ))
+
+    total_with = sum(r.with_ramp_total_turns for r in rows)
+    total_cf = sum(r.counterfactual_total_turns for r in rows)
+    with_spend = _value_spend_by_turn(with_run["casts"], T)
+    cf_spend = _value_spend_by_turn(cf_run["casts"], T)
+    with_value_spent = sum(sum(turn.values()) for turn in with_spend)
+    cf_value_spent = sum(sum(turn.values()) for turn in cf_spend)
+    return TurnStructureResult(
+        T=T,
+        rows=rows,
+        with_ramp_total_turns=total_with,
+        counterfactual_total_turns=total_cf,
+        delta_turns=total_with - total_cf,
+        with_ramp_mana_stream=list(with_run["mana_stream"]),
+        counterfactual_mana_stream=list(cf_run["mana_stream"]),
+        with_ramp_casts=list(with_run["casts"]),
+        counterfactual_casts=list(cf_run["casts"]),
+        with_ramp_schedule=list(with_run["schedule"]),
+        counterfactual_schedule=list(cf_run["schedule"]),
+        with_ramp_value_spend_by_turn=with_spend,
+        counterfactual_value_spend_by_turn=cf_spend,
+        with_ramp_ramp_spend=_ramp_spend_by_turn(with_run["schedule"], T),
+        counterfactual_ramp_spend=_ramp_spend_by_turn(cf_run["schedule"], T),
+        with_ramp_unused_mana=_unused_mana_by_turn(with_run["mana_stream"], with_spend),
+        counterfactual_unused_mana=_unused_mana_by_turn(cf_run["mana_stream"], cf_spend),
+        with_ramp_total_value_mana_spent=with_value_spent,
+        counterfactual_total_value_mana_spent=cf_value_spent,
+        delta_value_mana_spent=with_value_spent - cf_value_spent,
+        draw_capped=use_cap,
+        per_turn_cumulative_draws=(
+            list(per_turn_cumulative_draws) if use_cap else None
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Implied Ramp
+# ---------------------------------------------------------------------------
+
+ROCK_CMC = 2
+ROCK_MANA_PER_TURN = 1.0
+
+
+def ramp_to_rock_equivalents(ramp_specs: List[RampCardSpec], T: int) -> float:
+    """Convert the deck's ramp package to 2-mana-rock equivalents.
+
+    Each piece's idealized excess ``M*(T-c) - c`` is divided by one rock's
+    excess ``1*(T-2) - 2 = T-4``. Pieces with cmc > T or M <= 0 contribute 0.
+    Negative-excess pieces are floored at 0 so a single bad rock doesn't
+    negate the value of the rest.
+    """
+    one_rock = ROCK_MANA_PER_TURN * (T - ROCK_CMC) - ROCK_CMC
+    if one_rock <= 0:
+        return 0.0
+    total = 0.0
+    for s in ramp_specs:
+        if s.mana_per_turn <= 0 or s.cmc > T:
+            continue
+        excess = s.mana_per_turn * (T - s.cmc) - s.cmc
+        if excess > 0:
+            total += excess
+    return total / one_rock
+
+
+def _scale_curve(V_curve: Dict[int, int], V_slots: float) -> Dict[int, float]:
+    """Rescale ``V_curve`` so the slot total equals ``V_slots``."""
+    total = sum(V_curve.values())
+    if total <= 0 or V_slots <= 0:
+        return {int(c): 0.0 for c in V_curve}
+    factor = V_slots / total
+    return {int(c): float(n) * factor for c, n in V_curve.items()}
+
+
+def _simulate_float_stuck(
+    L: int,
+    scaled_curve: Dict[int, float],
+    R: float,
+    D: int,
+    T: int,
+    commanders: List[CommanderSpec],
+    stuck_mode: str = DEFAULT_STUCK_MODE,
+) -> tuple:
+    """Expected float/stuck mana-units over T turns for a counterfactual deck."""
+    if stuck_mode not in STUCK_MODES:
+        raise ValueError(
+            f"stuck_mode must be one of {STUCK_MODES}, got {stuck_mode!r}"
+        )
+    hand_curve: Dict[int, float] = {int(c): 0.0 for c in scaled_curve}
+    hand_rocks = 0.0
+    hand_lands = 0.0
+    lands_in_play = 0.0
+    rocks_in_play = 0.0
+    cmd_to_cast: List[int] = sorted([c.cmc for c in commanders if 0 < c.cmc <= T])
+
+    float_cost = 0.0
+    stuck_cost = 0.0
+    cards_seen_prev = 0
+    stuck_mass_prev: Dict[int, float] = {int(c): 0.0 for c in scaled_curve}
+
+    for t in range(1, T + 1):
+        seen = cards_seen_by_turn(t)
+        new_cards = seen - cards_seen_prev
+        cards_seen_prev = seen
+
+        if D > 0:
+            for c in hand_curve:
+                hand_curve[c] += new_cards * scaled_curve.get(c, 0.0) / D
+            hand_rocks += new_cards * R / D
+            hand_lands += new_cards * L / D
+
+        land_drop = min(hand_lands, max(0.0, t - lands_in_play), 1.0)
+        hand_lands -= land_drop
+        lands_in_play += land_drop
+
+        m_t = lands_in_play + rocks_in_play
+
+        if cmd_to_cast and cmd_to_cast[0] <= m_t:
+            m_t -= cmd_to_cast.pop(0)
+
+        if hand_rocks > 0 and m_t >= ROCK_CMC:
+            rocks_can_play = min(hand_rocks, m_t / ROCK_CMC)
+            hand_rocks -= rocks_can_play
+            m_t -= rocks_can_play * ROCK_CMC
+            rocks_in_play += rocks_can_play
+
+        for c in sorted(hand_curve.keys(), reverse=True):
+            if c <= 0 or hand_curve[c] <= 0 or m_t < c:
+                continue
+            n_cast = min(hand_curve[c], m_t / c)
+            hand_curve[c] -= n_cast
+            m_t -= n_cast * c
+            if m_t <= 0:
+                break
+
+        float_cost += max(0.0, m_t)
+
+        max_cast = lands_in_play + rocks_in_play
+        for c, n in hand_curve.items():
+            stuck_here = c > max_cast and n > 0
+            if stuck_mode == STUCK_MODE_UNIFORM:
+                if stuck_here:
+                    stuck_cost += c * n
+            elif stuck_mode == STUCK_MODE_TURN_DECAY:
+                if stuck_here:
+                    stuck_cost += (c * n) / t
+            elif stuck_mode == STUCK_MODE_PER_CARD_CAP:
+                if stuck_here:
+                    current_mass = c * n
+                    delta = current_mass - stuck_mass_prev.get(c, 0.0)
+                    if delta > 0:
+                        stuck_cost += delta
+                    stuck_mass_prev[c] = current_mass
+                else:
+                    stuck_mass_prev[c] = 0.0
+            elif stuck_mode == STUCK_MODE_MANA_GAP:
+                if stuck_here:
+                    stuck_cost += (c - max_cast) * n
+
+    return float_cost, stuck_cost
+
+
+def compute_implied_ramp(
+    L: int,
+    V_curve: Dict[int, int],
+    ramp_specs: List[RampCardSpec],
+    commanders: List[CommanderSpec],
+    D: int,
+    T: int,
+    R_max: Optional[int] = None,
+    stuck_mode: str = DEFAULT_STUCK_MODE,
+) -> ImpliedRampResult:
+    """Sweep R over [0, R_max] and return the cost minimizer.
+
+    The flex-slot pool is ``V_total + len(ramp_specs)`` -- all non-land,
+    non-commander slots in the original deck. Each R uses R rocks plus
+    (flex - R) value slots scaled from the original curve. R_max defaults
+    to flex.
+    """
+    V_total = int(sum(V_curve.values()))
+    flex = V_total + len(ramp_specs)
+    if R_max is None:
+        R_max = flex
+    R_max = max(0, min(R_max, flex))
+
+    R_actual = ramp_to_rock_equivalents(ramp_specs, T)
+
+    R_grid: List[int] = list(range(0, R_max + 1))
+    float_curve: List[float] = []
+    stuck_curve: List[float] = []
+    for R in R_grid:
+        V_slots = float(flex - R)
+        scaled = _scale_curve(V_curve, V_slots)
+        f, s = _simulate_float_stuck(
+            L, scaled, float(R), D, T, commanders, stuck_mode=stuck_mode
+        )
+        float_curve.append(f)
+        stuck_curve.append(s)
+
+    total_curve = [f + s for f, s in zip(float_curve, stuck_curve)]
+    best_idx = min(range(len(total_curve)), key=lambda i: total_curve[i])
+    R_star = R_grid[best_idx]
+    delta = R_star - R_actual
+    if abs(delta) <= 1.0:
+        verdict = "right_sized"
+    elif delta > 0:
+        verdict = "under_ramped"
+    else:
+        verdict = "over_ramped"
+
+    return ImpliedRampResult(
+        T=T,
+        R_actual=R_actual,
+        R_star=R_star,
+        R_grid=R_grid,
+        float_curve=float_curve,
+        stuck_curve=stuck_curve,
+        total_curve=total_curve,
+        verdict=verdict,
+        delta_rocks=delta,
+        stuck_mode=stuck_mode,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Top-level entry point
 # ---------------------------------------------------------------------------
 
@@ -1028,10 +1731,34 @@ def compute_curve_value(
         baseline_cmc=BASELINE_CMC,
     )
 
+    turn_structure = compute_turn_structure(
+        curve_counts={int(c): float(n) for c, n in cls["spendable_curve"].items()},
+        ramp_specs=cls["ramp_specs"],
+        T=turns,
+        D=cls["D"],
+        per_turn_cumulative_draws=(
+            implied_draw.per_turn_actual or implied_draw.per_turn_natural
+        ),
+        always_available_counts={
+            int(c): float(n) for c, n in cls["commander_spendable_curve"].items()
+        },
+    )
+
+    implied_ramp = compute_implied_ramp(
+        L=cls["L"],
+        V_curve={int(c): int(n) for c, n in cls["V_curve"].items()},
+        ramp_specs=cls["ramp_specs"],
+        commanders=cls["commanders"],
+        D=cls["D"],
+        T=turns,
+    )
+
     return CurveValueResult(
         turns=turns,
         deck_size_effective=cls["D"],
         implied_draw=implied_draw,
         implied_spell_value=implied_spell_value,
         curve_verdict=curve_verdict,
+        turn_structure=turn_structure,
+        implied_ramp=implied_ramp,
     )

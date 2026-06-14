@@ -8,6 +8,7 @@ It orchestrates a full simulation run using only sequential execution
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from typing import Any, Callable, Dict, List, Optional
 
 from auto_goldfish.effects.card_database import DEFAULT_REGISTRY
@@ -15,6 +16,28 @@ from auto_goldfish.effects.json_loader import build_overridden_registry
 from auto_goldfish.engine.goldfisher import Goldfisher
 from auto_goldfish.engine.mulligan import CurveAwareMulligan
 from auto_goldfish.metrics.reporter import result_to_dict
+
+
+def _decklist_dicts_from_goldfisher(goldfisher: Goldfisher) -> List[Dict[str, Any]]:
+    return [
+        {
+            "name": c.name,
+            "quantity": c.quantity,
+            "oracle_cmc": c.oracle_cmc,
+            "cmc": c.cmc,
+            "cost": c.cost,
+            "text": c.text,
+            "sub_types": list(c.sub_types),
+            "super_types": list(c.super_types),
+            "types": [t.capitalize() for t in c.types],
+            "identity": list(c.identity),
+            "default_category": c.default_category,
+            "user_category": c.user_category,
+            "tag": c.tag,
+            "commander": c.commander,
+        }
+        for c in goldfisher.decklist
+    ]
 
 
 def run_simulation(
@@ -114,12 +137,104 @@ def run_simulation(
         results.append(result_to_dict(
             result,
             turns=turns,
-            deck_list=deck_list,
+            deck_list=_decklist_dicts_from_goldfisher(goldfisher),
             registry=registry,
             overrides=effect_overrides or None,
+            include_ramp_tradeoff=land_count == max_lands,
         ))
 
     return json.dumps(results)
+
+
+def compute_ramp_tradeoff_json(
+    deck_json: str,
+    signature_json: str,
+    config_json: str,
+) -> str:
+    """Compute a lazy Ramp Tradeoff block from already-saved result data."""
+    from auto_goldfish.optimization.ramp_analysis import (
+        compute_ramp_tradeoff,
+        compute_ramp_tradeoff_from_input,
+    )
+
+    deck_list: List[Dict[str, Any]] = json.loads(deck_json)
+    signature = json.loads(signature_json) if signature_json else None
+    config: Dict[str, Any] = json.loads(config_json)
+
+    if config.get("ramp_tradeoff_input"):
+        return json.dumps(compute_ramp_tradeoff_from_input(
+            ramp_tradeoff_input=config["ramp_tradeoff_input"],
+            per_turn_cumulative_draws=signature,
+            turns=config.get("turns", 8),
+        ))
+
+    effect_overrides = config.get("effect_overrides", {})
+    registry = None
+    if effect_overrides:
+        registry = build_overridden_registry(DEFAULT_REGISTRY, effect_overrides)
+
+    return json.dumps(compute_ramp_tradeoff(
+        deck_list=deck_list,
+        per_turn_cumulative_draws=signature,
+        registry=registry,
+        overrides=effect_overrides or None,
+        turns=config.get("turns", 8),
+    ))
+
+
+def compute_turn_structure_variant_json(
+    deck_json: str,
+    signature_json: str,
+    config_json: str,
+) -> str:
+    """Compute a lazy turn-spend timeline for a generic Signet-count variant."""
+    from auto_goldfish.optimization.curve_value import (
+        CommanderSpec,
+        RampCardSpec,
+        compute_turn_structure,
+    )
+    from auto_goldfish.optimization.ramp_analysis import redistribute_curve
+
+    _ = json.loads(deck_json) if deck_json else []
+    signature = json.loads(signature_json) if signature_json else None
+    config: Dict[str, Any] = json.loads(config_json)
+    rt_input = config.get("ramp_tradeoff_input") or {}
+    turns = int(config.get("turns", 8))
+    current_r = int(rt_input.get("current_rocks", 0) or 0)
+    target_r = max(0, min(current_r, int(config.get("target_signets", 0) or 0)))
+    removed = max(0, current_r - target_r)
+
+    spendable_curve = {
+        int(c): float(n)
+        for c, n in (rt_input.get("spendable_curve") or {}).items()
+    }
+    scenario_curve = redistribute_curve(spendable_curve, removed)
+    commanders = [
+        CommanderSpec(name=str(c.get("name", "")), cmc=int(c.get("cmc", 0) or 0))
+        for c in (rt_input.get("commanders") or [])
+        if isinstance(c, dict)
+    ]
+    commander_counts: Dict[int, float] = {}
+    for commander in commanders:
+        if commander.cmc > 0:
+            commander_counts[commander.cmc] = commander_counts.get(commander.cmc, 0.0) + 1.0
+
+    ramp_specs = [
+        RampCardSpec(name="Signet equivalent", cmc=2, mana_per_turn=1.0)
+        for _ in range(target_r)
+    ]
+    turn_structure = compute_turn_structure(
+        curve_counts=scenario_curve,
+        ramp_specs=ramp_specs,
+        T=turns,
+        D=int(rt_input.get("D", 0) or 0),
+        per_turn_cumulative_draws=signature,
+        always_available_counts=commander_counts,
+    )
+    return json.dumps({
+        "target_signets": target_r,
+        "turn_structure": asdict(turn_structure),
+    })
 
 
 def run_optimization(

@@ -5,12 +5,16 @@
  *   Main → Worker:
  *     {type: "init", wheelUrl: string}  -- Load Pyodide and install package
  *     {type: "run", deckJson: string, configJson: string}  -- Run simulation
+ *     {type: "ramp_tradeoff", requestId: string, deckJson: string, signatureJson: string, configJson: string}
+ *     {type: "turn_structure_variant", requestId: string, deckJson: string, signatureJson: string, configJson: string}
  *
  *   Worker → Main:
  *     {type: "init_progress", message: string}  -- Init status updates
  *     {type: "ready"}  -- Pyodide loaded and ready
  *     {type: "progress", current: number, total: number}  -- Sim progress
  *     {type: "result", data: Array}  -- Simulation results
+ *     {type: "ramp_tradeoff_result", requestId: string, resultIndex: number, data: Object}
+ *     {type: "turn_structure_variant_result", requestId: string, data: Object}
  *     {type: "error", message: string}  -- Error occurred
  */
 
@@ -118,6 +122,72 @@ _result
     }
 }
 
+async function computeRampTradeoff(requestId, resultIndex, deckJson, signatureJson, configJson) {
+    if (!pyodide) {
+        postMessage({type: "ramp_tradeoff_error", requestId: requestId, resultIndex: resultIndex, message: "Pyodide not initialized"});
+        return;
+    }
+
+    try {
+        const resultJson = await pyodide.runPythonAsync(`
+from auto_goldfish.pyodide_runner import compute_ramp_tradeoff_json as _compute_rt
+
+_result = _compute_rt(
+    ${JSON.stringify(deckJson)},
+    ${JSON.stringify(signatureJson)},
+    ${JSON.stringify(configJson)},
+)
+_result
+`);
+
+        postMessage({
+            type: "ramp_tradeoff_result",
+            requestId: requestId,
+            resultIndex: resultIndex,
+            data: JSON.parse(resultJson),
+        });
+    } catch (err) {
+        postMessage({
+            type: "ramp_tradeoff_error",
+            requestId: requestId,
+            resultIndex: resultIndex,
+            message: "Ramp Tradeoff failed: " + err.message,
+        });
+    }
+}
+
+async function computeTurnStructureVariant(requestId, deckJson, signatureJson, configJson) {
+    if (!pyodide) {
+        postMessage({type: "turn_structure_variant_error", requestId: requestId, message: "Pyodide not initialized"});
+        return;
+    }
+
+    try {
+        const resultJson = await pyodide.runPythonAsync(`
+from auto_goldfish.pyodide_runner import compute_turn_structure_variant_json as _compute_ts
+
+_result = _compute_ts(
+    ${JSON.stringify(deckJson)},
+    ${JSON.stringify(signatureJson)},
+    ${JSON.stringify(configJson)},
+)
+_result
+`);
+
+        postMessage({
+            type: "turn_structure_variant_result",
+            requestId: requestId,
+            data: JSON.parse(resultJson),
+        });
+    } catch (err) {
+        postMessage({
+            type: "turn_structure_variant_error",
+            requestId: requestId,
+            message: "Turn timeline failed: " + err.message,
+        });
+    }
+}
+
 onmessage = function(e) {
     const msg = e.data;
     if (msg.type === "init") {
@@ -126,5 +196,20 @@ onmessage = function(e) {
         runSimulation(msg.deckJson, msg.configJson);
     } else if (msg.type === "run_optimization") {
         runOptimization(msg.deckJson, msg.configJson);
+    } else if (msg.type === "ramp_tradeoff") {
+        computeRampTradeoff(
+            msg.requestId,
+            msg.resultIndex,
+            msg.deckJson,
+            msg.signatureJson,
+            msg.configJson,
+        );
+    } else if (msg.type === "turn_structure_variant") {
+        computeTurnStructureVariant(
+            msg.requestId,
+            msg.deckJson,
+            msg.signatureJson,
+            msg.configJson,
+        );
     }
 };

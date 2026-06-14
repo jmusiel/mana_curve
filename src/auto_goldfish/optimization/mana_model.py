@@ -15,26 +15,29 @@ DEFAULT_KEEP_RANGE: Tuple[int, int] = (2, 5)
 # Land-count search bounds for the optimization sweep.
 DEFAULT_SEARCH_RANGE: Tuple[int, int] = (25, 45)
 
-# Composite score weights (must sum to 1.0).
-SCORE_WEIGHT_CURVE = 0.35
-SCORE_WEIGHT_MANA = 0.25
-SCORE_WEIGHT_MULLIGAN = 0.20
-SCORE_WEIGHT_FLOOD = 0.20
-
 # Fraction of draw spells assumed to fire by mid-game (conservative).
+# Used by adjusted_expected_mana (the expected-mana tables / what-if calculator).
 DRAW_EARLY_FRACTION = 0.5
 
-# Flood threshold: 7+ lands drawn by turn 5 (in 11 cards seen).
-FLOOD_LAND_COUNT = 7
-FLOOD_TURN = 5
-
-# Composite score weights when 2+ partner commanders are active.
-# Carves 0.05 from each base component to make room for the partner term.
-SCORE_WEIGHT_CURVE_PARTNER = 0.30
-SCORE_WEIGHT_MANA_PARTNER = 0.20
-SCORE_WEIGHT_MULLIGAN_PARTNER = 0.15
-SCORE_WEIGHT_FLOOD_PARTNER = 0.15
-SCORE_WEIGHT_PARTNER = 0.20
+# --- Calibrated land-count recommendation -----------------------------------
+#
+# The recommendation is a closed-form formula fit to *simulator-optimal* land
+# counts across ~100 real commander decks (goldfishing land sweeps at a 14-turn
+# horizon, optimizing value-mana spent). See ADR-0003 and scripts/fit_land_model.py.
+#
+# The fit is ANCHORED to consensus rather than trusting the simulator's absolute
+# level: a balanced avg-CMC-3.0 deck is pinned to 37 lands. The simulator is used
+# only for the *relative* slopes -- how the optimum shifts with curve / ramp /
+# draw -- because the goldfishing optimum itself is noisy (±~3 lands) and
+# horizon-sensitive (short games want more lands, long games fewer). Average mana
+# value is the dominant, robust driver; ramp and draw apply small reductions.
+REC_ANCHOR_LANDS = 37.0    # consensus land count for the anchor deck
+REC_ANCHOR_CMC = 3.0       # average mana value of the anchor deck
+REC_LANDS_PER_CMC = 1.2    # +lands per +1 average mana value (sim-derived, dominant)
+REC_LANDS_PER_RAMP = -0.10  # small reduction per ramp piece (sim-derived, gentle)
+REC_LANDS_PER_DRAW = -0.05  # small reduction per draw piece (conventional; sim signal
+                            # was unreliable due to floor-censoring of draw-heavy decks)
+REC_CLAMP: Tuple[int, int] = (30, 43)  # sane commander land-count band
 
 
 # ---------------------------------------------------------------------------
@@ -248,45 +251,51 @@ def optimal_land_count(
     commander_cmcs: Optional[List[int]] = None,
     search_range: Tuple[int, int] = DEFAULT_SEARCH_RANGE,
 ) -> Dict[str, Any]:
-    """Find the optimal land count by sweeping K and scoring each.
+    """Recommend a land count from a closed-form formula fit to the simulator.
 
-    Score is a weighted composite of:
-    - On-curve probability through key turns
-    - Expected mana at critical turns (based on CMC distribution)
-    - Mulligan rate penalty
-    - Flood penalty
-    - Partner co-availability (only when 2+ commanders provided)
+    The recommendation is ``REC_ANCHOR_LANDS`` adjusted by the deck's average
+    mana value (dominant), ramp count, and draw count, clamped to ``REC_CLAMP``.
+    The coefficients are fit to simulator-optimal land counts across ~100 real
+    decks but anchored to consensus (avg-CMC-3.0 -> 37); see the calibration
+    notes above and ADR-0003.
+
+    Also returns a ``scores`` curve (one entry per land count in *search_range*)
+    that peaks at the recommendation, for the comparison display, plus
+    ``partner_castable_prob`` when 2+ partner commanders are given.
 
     *commander_cmc* (legacy, single int) and *commander_cmcs* (list) are
     both accepted; the list takes precedence when given.
     """
     if cmc_distribution is None:
         cmc_distribution = {}
-
     if commander_cmcs is None:
         commander_cmcs = [commander_cmc] if commander_cmc > 0 else []
 
-    avg_cmc = _weighted_avg_cmc(cmc_distribution) if cmc_distribution else 3.0
-    key_turns = _key_turns_from_cmc(cmc_distribution, commander_cmcs)
+    avg_cmc = _weighted_avg_cmc(cmc_distribution) if cmc_distribution else REC_ANCHOR_CMC
 
-    best_score = -1.0
-    best_k = search_range[0]
-    scores: List[Dict[str, Any]] = []
+    rec_continuous = (
+        REC_ANCHOR_LANDS
+        + REC_LANDS_PER_CMC * (avg_cmc - REC_ANCHOR_CMC)
+        + REC_LANDS_PER_RAMP * ramp_cards
+        + REC_LANDS_PER_DRAW * draw_cards
+    )
+    lo, hi = REC_CLAMP
+    rec_continuous = min(float(hi), max(float(lo), rec_continuous))
+    best_k = int(round(rec_continuous))
 
-    for k in range(search_range[0], search_range[1] + 1):
-        score = _score_land_count(
-            deck_size, k, key_turns, avg_cmc, ramp_cards, draw_cards, commander_cmcs
-        )
-        scores.append({"land_count": k, "score": round(score, 4)})
-        if score > best_score:
-            best_score = score
-            best_k = k
+    # Per-land-count curve for the comparison display: a normalized closeness to
+    # the (continuous) recommendation, so the curve peaks at best_k. Kept for the
+    # comparison table; the recommendation itself comes from the formula above.
+    span = max(1.0, (search_range[1] - search_range[0]) / 2.0)
+    scores = [
+        {"land_count": k, "score": round(max(0.0, 1.0 - abs(k - rec_continuous) / span), 4)}
+        for k in range(search_range[0], search_range[1] + 1)
+    ]
 
     result = {
         "recommended_lands": best_k,
         "deck_size": deck_size,
         "avg_cmc": round(avg_cmc, 2),
-        "key_turns": key_turns,
         "commander_cmcs": list(commander_cmcs),
         "scores": scores,
     }
@@ -305,88 +314,8 @@ def _weighted_avg_cmc(cmc_distribution: Dict[int, int]) -> float:
     """Weighted average CMC from a distribution {cmc: count}."""
     total_cards = sum(cmc_distribution.values())
     if total_cards == 0:
-        return 3.0
+        return REC_ANCHOR_CMC
     return sum(cmc * count for cmc, count in cmc_distribution.items()) / total_cards
-
-
-def _key_turns_from_cmc(
-    cmc_distribution: Dict[int, int],
-    commander_cmcs: Optional[List[int]] = None,
-) -> List[int]:
-    """Determine which turns matter most based on curve."""
-    turns = set()
-    for cmc, count in cmc_distribution.items():
-        if count > 0 and 1 <= cmc <= 10:
-            turns.add(cmc)
-    if commander_cmcs:
-        for cmc in commander_cmcs:
-            if cmc > 0:
-                turns.add(cmc)
-    # Always include common critical turns 3-5
-    turns.update([3, 4, 5])
-    return sorted(turns)
-
-
-def _score_land_count(
-    N: int, K: int,
-    key_turns: List[int],
-    avg_cmc: float,
-    ramp_cards: int,
-    draw_cards: int,
-    commander_cmcs: Optional[List[int]] = None,
-) -> float:
-    """Composite score for a given land count.
-
-    Components: on-curve probability, expected mana efficiency, mulligan
-    penalty, flood penalty. When 2+ partner commanders are given, a 5th
-    partner-castable component is added with rebalanced weights.
-    """
-    # 1. On-curve score (0-1): weighted average of P(on curve) at key turns
-    curve_score = 0.0
-    weight_sum = 0.0
-    for t in key_turns:
-        cards_seen = min(7 + t - 1, N)
-        p = prob_at_least(t, N, K, cards_seen)
-        # Earlier turns weighted more heavily
-        w = 1.0 / t
-        curve_score += w * p
-        weight_sum += w
-    if weight_sum > 0:
-        curve_score /= weight_sum
-
-    # 2. Mana efficiency at avg_cmc turn
-    target_turn = max(1, int(round(avg_cmc)))
-    e_mana = adjusted_expected_mana(target_turn, N, K, ramp_cards, draw_cards)
-    mana_score = min(1.0, e_mana / max(target_turn, 1))
-
-    # 3. Mulligan penalty
-    p_mull = mulligan_probability(N, K)
-    mull_score = 1.0 - p_mull
-
-    # 4. Flood penalty: P(too many lands) by the flood turn
-    cards_at_flood = min(7 + FLOOD_TURN - 1, N)
-    p_flood = prob_at_least(FLOOD_LAND_COUNT, N, K, cards_at_flood)
-    flood_score = 1.0 - p_flood
-
-    if commander_cmcs and len([c for c in commander_cmcs if c > 0]) >= 2:
-        sorted_cmcs = sorted(c for c in commander_cmcs if c > 0)
-        partner_score = prob_both_partners_castable(
-            N, K, sorted_cmcs[0], sorted_cmcs[1]
-        )
-        return (
-            SCORE_WEIGHT_CURVE_PARTNER * curve_score
-            + SCORE_WEIGHT_MANA_PARTNER * mana_score
-            + SCORE_WEIGHT_MULLIGAN_PARTNER * mull_score
-            + SCORE_WEIGHT_FLOOD_PARTNER * flood_score
-            + SCORE_WEIGHT_PARTNER * partner_score
-        )
-
-    return (
-        SCORE_WEIGHT_CURVE * curve_score
-        + SCORE_WEIGHT_MANA * mana_score
-        + SCORE_WEIGHT_MULLIGAN * mull_score
-        + SCORE_WEIGHT_FLOOD * flood_score
-    )
 
 
 # ---------------------------------------------------------------------------

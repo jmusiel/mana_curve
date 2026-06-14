@@ -140,7 +140,8 @@
             }
             var deckUrl = (source === 'text') ? '' : (payload.deck_url || '');
             DeckStore.saveDeck(data.deck_name, data.cards, {}, deckUrl);
-            navigateToSim(data.deck_name);
+            // Land on the deck home (the spine), not the heavy Simulate form.
+            navigateToDeckView(data.deck_name);
         } catch (err) {
             flashEl.className = 'flash flash-error';
             flashEl.textContent = 'Import failed: ' + err.message;

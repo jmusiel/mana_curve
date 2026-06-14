@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Simulation Runs — Auto Goldfish{% endblock %}
+{% block title %}Simulation Runs - Auto Goldfish{% endblock %}
 {% block content %}
 <h1>Simulation Runs</h1>
 
@@ -11,8 +11,8 @@
     <details class="calibration-details">
         <summary>active anchors</summary>
         <p class="calibration-meta">
-            Bayesian shrinkage with pseudo_count={{ calibration.pseudo_count }};
-            empirical bounds taken at p{{ calibration.low_pct|int }} / p{{ calibration.high_pct|int }}.
+            Bayesian shrinkage uses pseudo_count={{ calibration.pseudo_count }}.
+            Empirical bounds use p{{ calibration.low_pct|int }} / p{{ calibration.high_pct|int }}.
             Set <code>AUTO_GOLDFISH_CALIBRATE=0</code> to disable.
         </p>
         <table class="calibration-table">
@@ -35,7 +35,7 @@
         </table>
     </details>
     {% else %}
-    <span class="calibration-badge calibration-badge-off" title="Using built-in default anchors; calibration is disabled or no persisted runs are available yet">
+    <span class="calibration-badge calibration-badge-off" title="Using built-in default anchors. Calibration is disabled or no persisted runs are available yet.">
         Stat anchors: defaults
     </span>
     {% endif %}
@@ -91,9 +91,9 @@
 
 {% else %}
 <div class="empty-state-block">
-    <p><strong>No simulation runs persisted yet.</strong></p>
+    <p>No simulation runs persisted yet.</p>
     <p>This page lists historical runs stored in Postgres. Set the <code>DATABASE_URL</code> environment variable
-       to enable persistence — without it, simulations still run in your browser but results aren't saved between sessions.</p>
+       to enable persistence. Without it, simulations still run in your browser but results aren't saved between sessions.</p>
     <p><a href="{{ url_for('dashboard.index') }}">Back to dashboard</a></p>
 </div>
 {% endif %}
@@ -308,8 +308,8 @@ if (table) {
                 let va = a.children[col].textContent.trim();
                 let vb = b.children[col].textContent.trim();
                 if (type === 'number') {
-                    va = va === '—' ? -Infinity : parseFloat(va);
-                    vb = vb === '—' ? -Infinity : parseFloat(vb);
+                    va = va === '-' ? -Infinity : parseFloat(va);
+                    vb = vb === '-' ? -Infinity : parseFloat(vb);
                     return asc ? va - vb : vb - va;
                 }
                 return asc ? va.localeCompare(vb) : vb.localeCompare(va);

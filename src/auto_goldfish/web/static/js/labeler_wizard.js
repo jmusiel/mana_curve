@@ -358,13 +358,13 @@
         if (cats.length === 0) return 'No effects';
         var parts = cats.map(function (c) {
             if (c.category === 'ramp') {
-                if (c.producer) return 'Ramp: produces ' + (c.producer.mana_amount || 1) + ' mana' + (c.immediate ? ' (immediate)' : '');
-                if (c.land_to_battlefield) return 'Ramp: fetch ' + (c.land_to_battlefield.count || 1) + ' land(s) ' + (c.land_to_battlefield.tempo || 'tapped');
+                if (c.producer) return 'Ramp: produces ' + (c.producer.mana_amount || 1) + ' mana' + (c.immediate ? ' immediately' : '');
+                if (c.land_to_battlefield) return 'Ramp: fetch ' + (c.land_to_battlefield.count || 1) + ' land ' + (c.land_to_battlefield.tempo || 'tapped');
                 if (c.reducer) return 'Ramp: reduce ' + (c.reducer.spell_type || 'spell') + ' cost by ' + (c.reducer.amount || 1);
                 return 'Ramp';
             }
             if (c.category === 'draw') {
-                if (c.immediate) return 'Draw ' + (c.amount || 1) + ' card(s)';
+                if (c.immediate) return 'Draw ' + (c.amount || 1);
                 if (c.per_turn) return 'Draw ' + (c.per_turn.amount || 1) + ' per turn';
                 if (c.per_cast) return 'Draw ' + (c.per_cast.amount || 1) + ' per ' + (c.per_cast.trigger || 'spell') + ' cast';
                 return 'Draw';

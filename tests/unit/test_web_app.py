@@ -217,7 +217,32 @@ class TestDeckView:
             ),
         )
         response = client.get("/decks/testdeck")
-        assert b"Simulate" in response.data
+        # Deck Home funnels into the simulator via the "Run full simulation" CTA.
+        assert b"Run full simulation" in response.data
+        assert b"/sim/testdeck" in response.data
+
+    def test_deck_home_funnel_sections(self, client, tmp_path, monkeypatch):
+        root = _create_test_deck(tmp_path)
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.decks.get_deckpath",
+            lambda name: os.path.join(root, "decks", name, f"{name}.json"),
+        )
+        monkeypatch.setattr(
+            "auto_goldfish.web.routes.decks.load_decklist",
+            lambda name: json.loads(
+                open(os.path.join(root, "decks", name, f"{name}.json")).read()
+            ),
+        )
+        response = client.get("/decks/testdeck")
+        # Deck Home leads with a prominent "Run a simulation" hero + CTA.
+        assert b"deck-home-hero" in response.data
+        assert b"Run full simulation" in response.data
+        # And a compact instant land readout fetched from the mana model API.
+        assert b"home-verdict" in response.data
+        assert b"/mana-model/api/" in response.data
+        # The CASTER card was intentionally removed (almost never available
+        # on Deck Home since it requires a prior run).
+        assert b"home-caster" not in response.data
 
     def test_deck_view_shows_commander(self, client, tmp_path, monkeypatch):
         root = _create_test_deck(tmp_path)
