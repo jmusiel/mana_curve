@@ -3,6 +3,7 @@
 import pytest
 
 from auto_goldfish.optimization.mana_model import (
+    DEFAULT_SEARCH_RANGE,
     adjusted_expected_mana,
     expected_mana_on_turn,
     expected_mana_table,
@@ -198,6 +199,82 @@ class TestOptimalLandCount:
     def test_scores_list(self):
         result = optimal_land_count(deck_size=99, search_range=(33, 37))
         assert len(result["scores"]) == 5  # 33,34,35,36,37
+
+
+class TestOptimalLandCountInteriorOptimum:
+    """Regression: the score must have an interior optimum, not pin to the
+    top of the search range.
+
+    The composite score used to rise monotonically with land count (the flood
+    term never bit), so every deck was recommended the search ceiling (45)
+    regardless of its curve. These tests lock in a real interior optimum.
+    """
+
+    def test_recommendation_not_pinned_to_search_ceiling(self):
+        # A very low-curve deck must not be told to run the maximum land count.
+        result = optimal_land_count(
+            deck_size=99,
+            cmc_distribution={1: 30, 2: 30},
+        )
+        assert result["recommended_lands"] < DEFAULT_SEARCH_RANGE[1]
+
+    def test_score_curve_has_interior_peak(self):
+        # Scores must rise then fall — the peak is neither the first nor the
+        # last land count in the sweep.
+        result = optimal_land_count(
+            deck_size=99,
+            cmc_distribution={1: 30, 2: 30},
+        )
+        scores = [s["score"] for s in result["scores"]]
+        peak = scores.index(max(scores))
+        assert 0 < peak < len(scores) - 1, (
+            f"score peak at index {peak} of {len(scores)} — expected interior"
+        )
+
+    def test_curve_strictly_shifts_recommendation(self):
+        # Cheap deck wants strictly fewer lands than an expensive one.
+        low = optimal_land_count(deck_size=99, cmc_distribution={1: 30, 2: 30})
+        high = optimal_land_count(
+            deck_size=99, cmc_distribution={5: 20, 6: 20, 7: 20}
+        )
+        assert low["recommended_lands"] < high["recommended_lands"]
+
+    def test_more_ramp_recommends_fewer_lands(self):
+        # Holding the curve fixed, adding ramp should not increase the land rec.
+        cmc = {2: 20, 3: 20, 4: 15}
+        no_ramp = optimal_land_count(deck_size=99, cmc_distribution=cmc, ramp_cards=0)
+        lots_ramp = optimal_land_count(deck_size=99, cmc_distribution=cmc, ramp_cards=12)
+        assert lots_ramp["recommended_lands"] <= no_ramp["recommended_lands"]
+
+
+class TestCalibratedRecommendation:
+    """The recommendation is a sim-fit formula anchored to consensus
+    (avg-CMC-3.0 -> 37 lands), clamped to a sane band. See ADR-0003.
+    """
+
+    def test_anchor_deck_recommends_consensus(self):
+        # avg CMC exactly 3.0, no ramp/draw -> the 37-land anchor.
+        result = optimal_land_count(deck_size=99, cmc_distribution={3: 60})
+        assert result["recommended_lands"] == 37
+
+    def test_ramp_and_draw_heavy_low_curve_is_sane(self):
+        # hermes-like: avg CMC 2.4, 13 ramp, 24 draw. The old composite floored
+        # this to ~27; the calibrated formula keeps it in a believable band.
+        result = optimal_land_count(
+            deck_size=100, cmc_distribution={2: 36, 3: 24}, ramp_cards=13, draw_cards=24
+        )
+        assert 32 <= result["recommended_lands"] <= 37
+
+    def test_clamped_to_band(self):
+        lo, hi = 30, 43
+        # Extreme low end: cheap curve + tons of ramp/draw.
+        low = optimal_land_count(
+            deck_size=99, cmc_distribution={1: 60}, ramp_cards=30, draw_cards=30
+        )
+        # Extreme high end: very expensive curve.
+        high = optimal_land_count(deck_size=99, cmc_distribution={8: 60})
+        assert low["recommended_lands"] >= lo
+        assert high["recommended_lands"] <= hi
 
 
 # ---------------------------------------------------------------------------

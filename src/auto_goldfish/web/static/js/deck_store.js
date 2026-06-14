@@ -1,5 +1,5 @@
 /**
- * DeckStore — localStorage CRUD for user deck data.
+ * DeckStore - localStorage CRUD for user deck data.
  *
  * Each deck is stored as {cards: [...], overrides: {...}, last_accessed: <ms>}.
  * All decks live under a single localStorage key.
@@ -112,7 +112,7 @@ var DeckStore = {
 };
 
 /**
- * Leaderboard — localStorage-based top-10 tracking across three metrics.
+ * Leaderboard - localStorage-based top-10 tracking across three metrics.
  */
 var Leaderboard = {
     _key: 'ag_leaderboard',
@@ -229,6 +229,16 @@ var Leaderboard = {
     }
 };
 
+function resetDocumentScroll() {
+    try {
+        window.scrollTo({left: 0, top: 0, behavior: 'auto'});
+    } catch (e) {
+        window.scrollTo(0, 0);
+    }
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+}
+
 /**
  * Navigate to the simulation page for a deck. Prefers localStorage data
  * (POST) but falls back to a plain GET when the deck is only on disk
@@ -267,6 +277,7 @@ async function navigateToSim(deckName) {
     var html = await resp.text();
     document.open(); document.write(html); document.close();
     history.pushState(null, '', url);
+    resetDocumentScroll();
 }
 
 /**
@@ -287,6 +298,7 @@ async function navigateToManaModel(deckName) {
     var html = await resp.text();
     document.open(); document.write(html); document.close();
     history.pushState(null, '', '/mana-model/' + encodeURIComponent(deckName));
+    resetDocumentScroll();
 }
 
 /**
@@ -299,10 +311,11 @@ async function navigateToDeckView(deckName) {
     var resp = await fetch('/decks/' + encodeURIComponent(deckName), {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({cards: deck.cards})
+        body: JSON.stringify({cards: deck.cards, overrides: deck.overrides || {}})
     });
     if (!resp.ok) { alert('Failed to load deck view'); return; }
     var html = await resp.text();
     document.open(); document.write(html); document.close();
     history.pushState(null, '', '/decks/' + encodeURIComponent(deckName));
+    resetDocumentScroll();
 }

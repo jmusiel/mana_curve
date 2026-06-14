@@ -297,8 +297,20 @@ class TestComputeDeckScore:
         keys = set(score.as_dict().keys())
         assert keys == {
             "consistency", "acceleration", "snowball",
-            "tuning", "efficiency", "reach",
+            "tuning", "efficiency", "reach", "overall",
         }
+
+    def test_overall_is_plain_mean_of_six_axes(self):
+        score = DeckScore(
+            consistency=6, acceleration=4, snowball=8,
+            tuning=5, efficiency=7, reach=6,
+        )
+        assert score.overall == round((6 + 4 + 8 + 5 + 7 + 6) / 6.0, 1)
+        assert score.as_dict()["overall"] == score.overall
+
+    def test_overall_in_range(self):
+        score = compute_deck_score(_make_result(), turns=10)
+        assert 1 <= score.overall <= 10
 
     def test_format_block_contains_all_stats(self):
         score = compute_deck_score(_make_result(), turns=10)

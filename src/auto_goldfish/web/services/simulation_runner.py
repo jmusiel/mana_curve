@@ -22,6 +22,28 @@ from auto_goldfish.engine.mulligan import CurveAwareMulligan
 from auto_goldfish.metrics.reporter import result_to_dict
 
 
+def _decklist_dicts_from_goldfisher(goldfisher: Goldfisher) -> List[Dict[str, Any]]:
+    return [
+        {
+            "name": c.name,
+            "quantity": c.quantity,
+            "oracle_cmc": c.oracle_cmc,
+            "cmc": c.cmc,
+            "cost": c.cost,
+            "text": c.text,
+            "sub_types": list(c.sub_types),
+            "super_types": list(c.super_types),
+            "types": [t.capitalize() for t in c.types],
+            "identity": list(c.identity),
+            "default_category": c.default_category,
+            "user_category": c.user_category,
+            "tag": c.tag,
+            "commander": c.commander,
+        }
+        for c in goldfisher.decklist
+    ]
+
+
 @dataclass
 class SimJob:
     job_id: str
@@ -131,9 +153,10 @@ class SimulationRunner:
                     result_dict = result_to_dict(
                         result,
                         turns=job.config.get("turns", 10),
-                        deck_list=deck_list,
+                        deck_list=_decklist_dicts_from_goldfisher(goldfisher),
                         registry=registry,
                         overrides=effect_overrides or None,
+                        include_ramp_tradeoff=i == max_lands,
                     )
 
                     with self._lock:

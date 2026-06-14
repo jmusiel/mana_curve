@@ -364,6 +364,40 @@ def test_classify_excludes_commanders_from_deck_size():
     assert cls["V"] == 62
 
 
+def test_classify_tracks_spendable_draw_spells_and_commanders():
+    deck = [
+        _land("Plains", qty=37),
+        _spell("Cmdr", cmc=4, qty=1, commander=True),
+        _spell("Draw Spell", cmc=2, qty=2),
+        _spell("Value Spell", cmc=3, qty=3),
+    ]
+    overrides = {
+        "Draw Spell": {"categories": [{"category": "draw"}]},
+    }
+    cls = classify_for_curve_value(deck, registry=None, overrides=overrides)
+    assert cls["V_curve"] == {3: 3}
+    assert cls["spendable_curve"] == {2: 2, 3: 3}
+    assert cls["commander_spendable_curve"] == {4: 1}
+    assert cls["draw_count"] == 2
+
+
+def test_classify_counts_draw_spells_as_spendable_not_value_curve():
+    deck = [
+        _land(qty=37),
+        _spell("Cantrip", cmc=1, qty=2, types=["Sorcery"]),
+        _spell("Filler", cmc=3, qty=60),
+    ]
+    overrides = {"Cantrip": {"categories": [{"category": "draw"}]}}
+
+    cls = classify_for_curve_value(deck, registry=None, overrides=overrides)
+
+    assert cls["draw_count"] == 2
+    assert cls["V"] == 60
+    assert cls["V_curve"] == {3: 60}
+    assert cls["spendable_curve"] == {1: 2, 3: 60}
+    assert cls["V_avg_cmc"] == pytest.approx(3.0)
+
+
 def test_classify_promotes_only_mana_producing_ramp():
     """With registry=None, no card has mana_per_turn > 0 so no ramp is promoted."""
     deck = [
@@ -372,6 +406,30 @@ def test_classify_promotes_only_mana_producing_ramp():
     ]
     cls = classify_for_curve_value(deck, registry=None, overrides=None)
     assert cls["ramp_specs"] == []
+
+
+def test_turn_structure_uses_spendable_curve_and_commanders():
+    deck = (
+        [_land(qty=37)]
+        + [_spell("Cmdr", cmc=4, qty=1, commander=True)]
+        + [_spell("Draw Spell", cmc=2, qty=10)]
+        + [_spell("Value Spell", cmc=3, qty=10)]
+    )
+    overrides = {
+        "Draw Spell": {"categories": [{"category": "draw"}]},
+    }
+    cv = compute_curve_value(
+        deck, registry=None, overrides=overrides, turns=4,
+        actual_per_turn_cumulative_draws=[7, 8, 9, 10],
+    )
+    ts = cv.turn_structure
+    assert ts is not None
+    rows = {row.cmc: row for row in ts.rows}
+    assert 2 in rows
+    assert 3 in rows
+    assert 4 in rows
+    assert rows[4].n_value_cards == 1.0
+    assert rows[4].with_ramp_cast == 1.0
 
 
 def test_compute_curve_value_end_to_end_no_registry():
@@ -402,6 +460,8 @@ def test_compute_curve_value_uses_actual_draws_when_provided():
     assert res.implied_draw.actual_total_draws == 20.0
     assert res.implied_draw.per_turn_actual is not None
     assert len(res.implied_draw.per_turn_actual) == 8
+    assert res.turn_structure is not None
+    assert res.turn_structure.per_turn_cumulative_draws == [7, 8, 9.5, 11, 13, 15, 18, 20]
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +486,25 @@ def test_real_registry_promotes_arcane_signet_as_ramp():
     ]
     cls = classify_for_curve_value(deck, registry=DEFAULT_REGISTRY)
     assert any(r.name == "Arcane Signet" and r.mana_per_turn == 1.0 for r in cls["ramp_specs"])
+
+
+def test_compute_curve_value_attaches_turn_structure():
+    from auto_goldfish.effects.card_database import DEFAULT_REGISTRY
+
+    deck = (
+        [_land(qty=37)]
+        + [{"name": "Sol Ring", "cmc": 1, "quantity": 1, "types": ["Artifact"]}]
+        + [_spell(f"v{i}", cmc=3, qty=1) for i in range(61)]
+    )
+    cv = compute_curve_value(deck, registry=DEFAULT_REGISTRY, overrides=None, turns=8)
+    ts = cv.turn_structure
+    assert ts is not None
+    assert ts.T == 8
+    assert ts.draw_capped is True
+    assert ts.per_turn_cumulative_draws == cv.implied_draw.per_turn_natural
+    assert ts.with_ramp_ramp_spend[0] == pytest.approx(7 / 99)
+    assert len(ts.with_ramp_value_spend_by_turn) == 8
+    assert len(ts.counterfactual_value_spend_by_turn) == 8
 
 
 def test_goldfisher_exposes_full_decklist_dicts_for_optimizer_paths():
@@ -751,6 +830,9 @@ def test_compute_curve_value_serializes_verdict_via_asdict():
     assert "curve_verdict" in d
     assert "rows" in d["curve_verdict"]
     assert "net_flat" in d["curve_verdict"]
+    assert "turn_structure" in d
+    assert "with_ramp_value_spend_by_turn" in d["turn_structure"]
+    assert "counterfactual_unused_mana" in d["turn_structure"]
 
 
 def test_compute_curve_value_dict_is_json_safe_with_uncastable_slot():

@@ -207,6 +207,8 @@ a:hover { text-decoration: underline; }
 .card-list { list-style: none; }
 .card-list li {
     display: flex;
+    align-items: center;
+    gap: 0.4rem;
     justify-content: space-between;
     padding: 0.2rem 0;
     font-size: 0.9rem;
@@ -218,9 +220,54 @@ a:hover { text-decoration: underline; }
     text-align: right;
     margin-right: 0.6rem;
 }
-.card-name { flex: 1; }
+.card-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+.card-name { min-width: 10rem; }
+.card-label-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+}
+.card-label-pill {
+    display: inline-block;
+    max-width: min(34rem, 100%);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    color: #3730a3;
+    border-radius: 999px;
+    padding: 0.05rem 0.45rem;
+    font-size: 0.74rem;
+    line-height: 1.35;
+}
+.card-label-change {
+    border: 0;
+    background: transparent;
+    color: #2563eb;
+    cursor: pointer;
+    font-size: 0.78rem;
+    padding: 0;
+}
+.card-label-change:hover { text-decoration: underline; }
 .card-cost { color: #64748b; margin: 0 0.5rem; font-variant-numeric: tabular-nums; }
 .card-cmc { color: #94a3b8; min-width: 4rem; text-align: right; font-size: 0.8rem; }
+.deck-labeler-pane { margin-top: 1rem; }
+.card-list li.deck-labeler-row {
+    display: block;
+    padding: 0.45rem 0 0.9rem 2.85rem;
+}
+.deck-labeler-row .deck-labeler-pane {
+    margin: 0;
+}
 .deck-header .deck-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
 .form-actions { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
 
@@ -1301,9 +1348,12 @@ th[data-tip]:focus::after {
 }
 .flowchart-answer {
     display: inline-block;
+    border: 0;
     background: #2563eb;
     color: #fff;
+    font-family: inherit;
     font-size: 0.8rem;
+    line-height: 1.4;
     font-weight: 500;
     padding: 0.15rem 0.6rem;
     border-radius: 999px;
@@ -1797,6 +1847,12 @@ h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
     grid-template-columns: 1fr 1fr;
     gap: 1.5rem;
 }
+.curve-value-draw {
+    grid-column: 1 / -1;
+}
+.curve-value-power {
+    grid-column: 1 / -1;
+}
 @media (max-width: 900px) {
     .curve-value-grid { grid-template-columns: 1fr; }
 }
@@ -1827,6 +1883,68 @@ h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
 .cv-deficit-pos strong { color: #b91c1c; }
 .cv-deficit-ok { border-color: #86efac; background: #f0fdf4; }
 .cv-deficit-ok strong { color: #15803d; }
+.cv-delta-pos { border-color: #86efac; background: #f0fdf4; }
+.cv-delta-pos strong { color: #15803d; }
+.cv-delta-neg { border-color: #fca5a5; background: #fef2f2; }
+.cv-delta-neg strong { color: #b91c1c; }
+.cv-delta-flat { border-color: #cbd5e1; background: #f8fafc; }
+.cv-delta-flat strong { color: #475569; }
+.curve-value-turn-spend {
+    margin: 1rem 0 1.5rem;
+    padding: 0.85rem 0 0;
+    border-top: 1px solid #e2e8f0;
+}
+.lazy-panel-prompt {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.65rem 0.8rem;
+    margin: 0.75rem 0;
+    color: #334155;
+    font-size: 0.9rem;
+}
+.lazy-panel-prompt select {
+    width: auto;
+    padding: 0.25rem 0.45rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #fff;
+}
+.cv-lazy-result {
+    margin-top: 0.75rem;
+}
+.cv-lazy-result .curve-value-summary-row {
+    justify-content: flex-end;
+}
+.cv-turn-spend-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.curve-value-turn-chart-wrap {
+    height: 340px;
+    position: relative;
+    margin-top: 0.4rem;
+}
+.cv-turn-spend-charts {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 0.4rem;
+}
+.cv-turn-spend-chart-wrap {
+    height: 260px;
+    margin-top: 0;
+}
+@media (max-width: 700px) {
+    .curve-value-turn-chart-wrap { height: 420px; }
+    .cv-turn-spend-chart-wrap { height: 320px; }
+}
 .curve-value-chart-wrap {
     height: 240px;
     position: relative;
@@ -1908,6 +2026,127 @@ h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
     font-variant-numeric: normal !important;
     line-height: 1.35;
 }
+
+/* Ramp Tradeoff panel */
+.ramp-tradeoff-section {
+    margin: 1.5rem 0;
+    padding: 1rem 1.25rem;
+    background: #f8fafb;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.ramp-tradeoff-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+.ramp-tradeoff-header h2 { margin: 0; }
+.rt-subtitle {
+    margin: 0.25rem 0 0;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+.rt-land-select-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #475569;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+.rt-land-select-label select {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 0.3rem 0.5rem;
+    background: #fff;
+}
+.ramp-tradeoff-help {
+    margin: 0 0 1rem;
+    padding: 0.5rem 0.85rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    color: #334155;
+}
+.ramp-tradeoff-help summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #1e293b;
+}
+.ramp-tradeoff-help p {
+    margin: 0.45rem 0;
+    line-height: 1.45;
+}
+.rt-summary-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0.35rem 0 0.75rem;
+}
+.rt-stat {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.4rem 0.65rem;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.45rem;
+}
+.rt-stat span {
+    color: #64748b;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.rt-stat strong { color: #0f172a; }
+.rt-callouts {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.35rem 0 0.85rem;
+}
+.rt-callouts p {
+    margin: 0;
+    padding: 0.55rem 0.75rem;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 6px;
+    color: #9a3412;
+    line-height: 1.35;
+}
+.ramp-tradeoff-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    gap: 1rem;
+}
+@media (max-width: 900px) {
+    .ramp-tradeoff-header { flex-direction: column; }
+    .ramp-tradeoff-grid { grid-template-columns: 1fr; }
+}
+.rt-chart-wrap {
+    height: 280px;
+    position: relative;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.5rem;
+}
+.rt-note {
+    margin: 0.75rem 0 0;
+    color: #475569;
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+.rt-loading,
+.rt-suppressed {
+    padding: 0.8rem 0.95rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    color: #475569;
+}
 .cv-tag {
     display: inline-block;
     font-size: 0.78rem;
@@ -1974,3 +2213,139 @@ h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
 .cv-active-lands { color: #1d4ed8; font-weight: 600; }
 .cv-active-spells { color: #7e22ce; font-weight: 600; }
 
+
+/* ============================================================
+   Newcomer-first UX: page taglines, explainers, Deck Home funnel,
+   CASTER overall headline, optimize-tile expert subtitles.
+   ============================================================ */
+
+/* Plain-language framing line under a page H1 */
+.page-tagline,
+.deck-home-tagline {
+    color: #475569;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    max-width: 60ch;
+    margin: -0.25rem 0 1rem;
+}
+
+/* Collapsible "How this works" explainer (collapsed by default) */
+.how-it-works {
+    margin: 0 0 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+.how-it-works > summary {
+    cursor: pointer;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #2563eb;
+    list-style: none;
+}
+.how-it-works > summary::before { content: "ⓘ "; }
+.how-it-works[open] > summary { border-bottom: 1px solid #e2e8f0; }
+.how-it-works-body {
+    padding: 0.6rem 0.9rem;
+    font-size: 0.88rem;
+    color: #475569;
+    line-height: 1.55;
+}
+.how-it-works-body p { margin: 0 0 0.6rem; }
+.how-it-works-body p:last-child { margin-bottom: 0; }
+
+/* Expert term demoted under a newcomer-first optimize-tile title (ADR-0002) */
+.opt-tile-expert {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.68rem;
+    color: #94a3b8;
+    letter-spacing: 0.02em;
+    margin-top: 0.1rem;
+}
+
+/* CASTER overall headline (results view) */
+.caster-overall {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    margin: 0.25rem 0 0.75rem;
+}
+.caster-overall-num {
+    font-size: 2.6rem;
+    font-weight: 800;
+    line-height: 1;
+    color: #1a1a2e;
+}
+.caster-overall-max { font-size: 1rem; color: #94a3b8; font-weight: 600; }
+.caster-overall-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #64748b;
+    align-self: flex-end;
+    margin-bottom: 0.35rem;
+}
+
+/* ---- Deck Home ---- */
+/* Hero: running a simulation is the primary action on the page. */
+.deck-home-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    padding: 1.4rem 1.6rem;
+    margin: 1.25rem 0 0.75rem;
+}
+.deck-home-hero-text { flex: 1; min-width: 220px; }
+.deck-home-hero-text h2 { font-size: 1.35rem; margin: 0 0 0.3rem; color: #1a1a2e; }
+.deck-home-hero-text p { margin: 0; color: #475569; font-size: 0.95rem; line-height: 1.5; max-width: 52ch; }
+.btn-hero {
+    font-size: 1.1rem;
+    padding: 0.85rem 1.8rem;
+    white-space: nowrap;
+}
+
+/* Compact, low-key instant land readout under the hero. */
+.deck-home-verdict {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin: 0 0 1.5rem;
+    padding: 0 0.2rem;
+}
+.home-verdict-line { font-size: 0.95rem; color: #475569; }
+.home-verdict-line.verdict-ok strong { color: #15803d; }
+.home-verdict-line.verdict-low strong,
+.home-verdict-line.verdict-high strong { color: #b45309; }
+.btn-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #2563eb;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.btn-link:hover { text-decoration: underline; }
+
+/* Decklist demoted below the hero */
+.deck-list-details { margin-top: 1rem; }
+.deck-list-details > summary { cursor: pointer; list-style: none; }
+.deck-list-summary-title { display: inline-block; font-size: 1.2rem; margin: 0; }
+.deck-list-details > summary::after { content: " ▸"; color: #94a3b8; }
+.deck-list-details[open] > summary::after { content: " ▾"; color: #94a3b8; }
+
+/* CASTER share-card action row (results view) */
+.caster-share-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin: 0 0 0.85rem;
+}
+.caster-share-status { color: #15803d; font-size: 0.85rem; }

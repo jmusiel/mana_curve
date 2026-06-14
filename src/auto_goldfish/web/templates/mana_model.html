@@ -2,10 +2,18 @@
 {% block title %}Mana Model: {{ deck_name }} - Auto Goldfish{% endblock %}
 {% block content %}
 <h1>Mana Model: {{ deck_name }}</h1>
+<p class="page-tagline">An instant land-count recommendation from probability math. No simulation, no waiting. It answers "how many lands should I run?" and shows expected mana turn by turn.</p>
+<details class="how-it-works">
+    <summary>How this works</summary>
+    <div class="how-it-works-body">
+        <p>This uses hypergeometric math to answer how likely the deck is to draw enough lands by each turn, then recommends a land count in microseconds.</p>
+        <p>It's the quick answer. The Simulator is the deeper counterpart: it plays full games, validates this land count, and optimizes ramp and draw.</p>
+    </div>
+</details>
 
 <div style="margin-bottom:1.5rem;">
     {% if is_local is defined and is_local %}
-    <button class="btn btn-primary" onclick="navigateToSim('{{ deck_name }}')">Go to Simulator</button>
+    <button class="btn btn-primary" onclick='navigateToSim({{ deck_name | tojson }})'>Go to Simulator</button>
     {% else %}
     <a href="{{ url_for('simulation.config', deck_name=deck_name) }}" class="btn btn-primary">Go to Simulator</a>
     {% endif %}
@@ -19,7 +27,7 @@
     <div class="mana-model-grid">
         <section class="mana-panel">
             <h3>Expected Mana by Turn</h3>
-            <p class="mana-panel-hint">Per-turn mana for the deck's <em>current</em> land count.</p>
+            <p class="mana-panel-hint">Per-turn mana for the deck's current land count.</p>
             <table class="mana-table" id="mana-model-table">
                 <thead>
                     <tr>
@@ -114,14 +122,14 @@
             div.style.display = 'none';
             return;
         }
-        var html = '<strong>Analyze for:</strong> ';
+        var html = 'Analyze for: ';
         html += '<label style="margin-right:1rem;"><input type="radio" name="cmd-filter" value="all"'
             + (commanderFilter === null || commanderFilter === 'all' ? ' checked' : '')
             + '> Both partners</label>';
         commanders.forEach(function(c, idx) {
             html += '<label style="margin-right:1rem;"><input type="radio" name="cmd-filter" value="' + idx + '"'
                 + (commanderFilter === String(idx) ? ' checked' : '')
-                + '> Only ' + c.name + ' (' + c.cmc + ')</label>';
+                + '> Only ' + c.name + ', CMC ' + c.cmc + '</label>';
         });
         div.innerHTML = html;
         div.style.display = '';
@@ -152,15 +160,15 @@
             var active = data.active_commander_cmcs || [];
             if (active.length === comp.commanders.length) {
                 commanderLabel = ' | Commanders: ' + comp.commanders.map(function(c) {
-                    return c.name + ' (' + c.cmc + ')';
+                    return c.name + ', CMC ' + c.cmc;
                 }).join(' + ');
             } else {
                 // Only one active -- show which.
                 var only = comp.commanders.find(function(c) { return c.cmc === active[0]; });
-                commanderLabel = ' | Commander: ' + (only ? only.name : '?') + ' (' + active[0] + ')';
+                commanderLabel = ' | Commander: ' + (only ? only.name : '?') + ', CMC ' + active[0];
             }
         } else if (comp.commander_name) {
-            commanderLabel = ' | Commander: ' + comp.commander_name + ' (CMC ' + comp.commander_cmc + ')';
+            commanderLabel = ' | Commander: ' + comp.commander_name + ', CMC ' + comp.commander_cmc;
         }
 
         var partnerLine = '';
@@ -170,8 +178,8 @@
         }
 
         recDiv.innerHTML =
-            '<strong>Recommendation:</strong> ' + rec.recommended_lands + ' lands'
-            + ' (currently ' + comp.land_count + ', ' + deltaStr + ')'
+            'Recommendation: ' + rec.recommended_lands + ' lands'
+            + '<br><small>Current: ' + comp.land_count + ' lands, ' + deltaStr + '</small>'
             + '<br><small>Avg CMC: ' + comp.avg_cmc + ' | Ramp: ' + comp.ramp_cards + ' | Draw: ' + comp.draw_cards
             + commanderLabel
             + '</small>'
@@ -202,9 +210,9 @@
         }
 
         var mullDiv = document.getElementById('mana-model-mulligan');
-        mullDiv.innerHTML = '<strong>Mulligan Rate:</strong> '
-            + 'Current (' + comp.land_count + ' lands): ' + (data.mulligan.current_rate * 100).toFixed(1) + '%'
-            + ' | Recommended (' + rec.recommended_lands + ' lands): ' + (data.mulligan.recommended_rate * 100).toFixed(1) + '%';
+        mullDiv.innerHTML = 'Mulligan rate: '
+            + 'Current with ' + comp.land_count + ' lands: ' + (data.mulligan.current_rate * 100).toFixed(1) + '%'
+            + ' | Recommended with ' + rec.recommended_lands + ' lands: ' + (data.mulligan.recommended_rate * 100).toFixed(1) + '%';
 
         // Defaults: don't overwrite values pre-populated from the query string.
         var params = new URLSearchParams(window.location.search);
@@ -230,9 +238,9 @@
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            var html = '<strong>Mulligan rate:</strong> ' + (data.mulligan_rate * 100).toFixed(1) + '%';
+            var html = 'Mulligan rate: ' + (data.mulligan_rate * 100).toFixed(1) + '%';
             if (ramp || draw) {
-                html += ' <small>(expected mana includes ramp=' + ramp + ', draw=' + draw + ')</small>';
+                html += ' <small>Expected mana includes ramp ' + ramp + ' and draw ' + draw + '.</small>';
             }
             html += '<br><table class="mana-table"><thead><tr><th>Turn</th><th>Expected Mana</th><th>On Curve</th><th>Screw</th></tr></thead><tbody>';
             data.mana_table.forEach(function(row) {

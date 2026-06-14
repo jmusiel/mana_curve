@@ -13,19 +13,10 @@ from flask import Blueprint, abort, jsonify, render_template, request, send_file
 logger = logging.getLogger(__name__)
 
 from auto_goldfish.decklist.loader import get_deckpath, load_decklist, load_overrides, save_overrides
-from auto_goldfish.effects.builtin import (
-    DiscardCards,
-    DrawCards,
-    ImmediateMana,
-    LandToBattlefield,
-    PerCastDraw,
-    PerTurnDraw,
-    ProduceMana,
-    ReduceCost,
-)
 from auto_goldfish.effects.card_database import DEFAULT_REGISTRY
 from auto_goldfish.effects.json_loader import get_effect_schema
 from auto_goldfish.effects.otag_loader import load_otag_registry
+from auto_goldfish.web.effect_labels import describe_effects, effects_to_override
 from auto_goldfish.web.wizard import build_wizard_card_list
 
 # Client-side compute limits (enforced in JS)
@@ -35,56 +26,8 @@ MAX_LAND_SWEEP = 10
 
 bp = Blueprint("simulation", __name__, url_prefix="/sim")
 
-
-
-def _effects_to_override(card_effects):
-    """Convert a CardEffects instance to the category-based JSON override format."""
-    categories = []
-    for effect in card_effects.on_play:
-        if isinstance(effect, ProduceMana):
-            categories.append({"category": "ramp", "immediate": False,
-                               "producer": {"mana_amount": effect.amount}})
-        elif isinstance(effect, ImmediateMana):
-            categories.append({"category": "ramp", "immediate": True,
-                               "producer": {"mana_amount": effect.amount}})
-        elif isinstance(effect, LandToBattlefield):
-            tempo = "tapped" if effect.tapped else "untapped"
-            categories.append({"category": "ramp", "immediate": True,
-                               "land_to_battlefield": {"count": effect.count, "tempo": tempo}})
-        elif isinstance(effect, ReduceCost):
-            categories.append({"category": "ramp", "immediate": False,
-                               "reducer": {"spell_type": effect.spell_type, "amount": effect.amount}})
-        elif isinstance(effect, DrawCards):
-            categories.append({"category": "draw", "immediate": True, "amount": effect.amount})
-        elif isinstance(effect, DiscardCards):
-            categories.append({"category": "discard", "amount": effect.amount})
-    for effect in card_effects.per_turn:
-        if isinstance(effect, PerTurnDraw):
-            categories.append({"category": "draw", "immediate": False,
-                               "per_turn": {"amount": effect.amount}})
-    for effect in card_effects.cast_trigger:
-        if isinstance(effect, PerCastDraw):
-            categories.append({"category": "draw", "immediate": False,
-                               "per_cast": {"amount": effect.amount, "trigger": effect.trigger}})
-
-    result = {"categories": categories}
-    if card_effects.priority:
-        result["priority"] = card_effects.priority
-    return result
-
-
-def _describe_effects(card_effects):
-    """Build a human-readable description of a CardEffects instance."""
-    parts = []
-    for effect in card_effects.on_play:
-        parts.append(f"{type(effect).__name__}({', '.join(f'{k}={v}' for k, v in vars(effect).items())})" if vars(effect) else type(effect).__name__)
-    for effect in card_effects.per_turn:
-        parts.append(f"{type(effect).__name__}({', '.join(f'{k}={v}' for k, v in vars(effect).items())})" if vars(effect) else type(effect).__name__)
-    for effect in card_effects.cast_trigger:
-        parts.append(f"{type(effect).__name__}({', '.join(f'{k}={v}' for k, v in vars(effect).items())})" if vars(effect) else type(effect).__name__)
-    for effect in card_effects.mana_function:
-        parts.append(type(effect).__name__)
-    return ", ".join(parts) if parts else ""
+_effects_to_override = effects_to_override
+_describe_effects = describe_effects
 
 
 @bp.route("/<deck_name>", methods=["GET", "POST"])

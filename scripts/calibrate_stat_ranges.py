@@ -8,11 +8,13 @@ For each calibration deck, this script:
   3. Computes the *scaled* 1-10 score using the current bounds.
   4. Writes one CSV row with both raw and scaled values plus deck metadata.
 
-NOTE: Tuning and Efficiency now derive from compute_curve_verdict, which
-requires the deck_list and registry. This script's raw extractors for
-those two axes return neutral placeholders (0.5) until the script is
-updated to thread deck_list through; the scaled scores will reflect that
-neutral input. Re-run after rewiring to recalibrate.
+Tuning and Efficiency derive from the analytical curve_value bundle
+(compute_curve_value -> curve_verdict + implied_draw), which needs the
+deck_list, the effect registry, and the simulation's measured draws. This
+script threads all three through the *production* helper
+(reporter._compute_curve_value) and the production raw extractors
+(deck_score.compute_raw_stats), so the calibrated raws/scores match exactly
+what the app computes -- no re-implementation, no drift.
 
 After all decks run, it prints a per-stat summary (min / p10 / p50 / p90 /
 max for both raw and scaled values) so we can see:
@@ -48,12 +50,14 @@ import numpy as np
 from auto_goldfish.decklist.archidekt import list_user_decks
 from auto_goldfish.decklist.loader import get_deckpath, load_decklist
 from auto_goldfish.engine.goldfisher import Goldfisher, SimulationResult
-from auto_goldfish.metrics.deck_score import compute_deck_score
+from auto_goldfish.metrics.deck_score import compute_raw_stats, score_from_raw
+from auto_goldfish.metrics.reporter import _compute_curve_value
 from auto_goldfish.optimization.benchmark_decks import (
     BENCHMARK_DECKS,
     BenchmarkDeck,
     get_benchmark_deck_dicts,
 )
+from auto_goldfish.optimization.curve_value import CurveValueResult
 
 
 # ---------------------------------------------------------------------------
@@ -229,21 +233,6 @@ def _raw_consistency(result: SimulationResult, turns: int) -> Tuple[float, float
     return composite, tail_score, bad_score, std_score
 
 
-def _raw_tuning(result: SimulationResult) -> float:
-    """Tuning composite -- placeholder until this script threads deck_list
-    + curve_verdict through. Real tuning lives in deck_score._raw_tuning
-    and needs CurveValueResult; the SimulationResult alone can't produce it.
-    """
-    return 0.5
-
-
-def _raw_efficiency(result: SimulationResult, turns: int) -> float:
-    """Efficiency composite -- placeholder until this script threads
-    curve_value through. Real efficiency is 1 - actual_deficit / N_max
-    from compute_curve_verdict's implied_draw."""
-    return 0.5
-
-
 def _raw_snowball(result: SimulationResult, turns: int) -> Tuple[float, float, float]:
     """Returns (acceleration_ratio, late_avg_normalized, early_avg)."""
     mpt = result.mean_mana_per_turn
@@ -283,13 +272,21 @@ CSV_FIELDS = [
 
 
 def build_row(
-    deck: CalibrationDeck, result: SimulationResult, turns: int
+    deck: CalibrationDeck,
+    result: SimulationResult,
+    turns: int,
+    curve_value: Optional[CurveValueResult] = None,
 ) -> Dict[str, Any]:
     raw_cons, c_tail, c_bad, c_std = _raw_consistency(result, turns)
-    raw_tuning = _raw_tuning(result)
-    raw_eff = _raw_efficiency(result, turns)
     raw_snowball_accel, raw_snowball_late, _ = _raw_snowball(result, turns)
-    score = compute_deck_score(result, turns=turns)
+    # Tuning and Efficiency raws come from the production pipeline (they need
+    # the analytical curve_value, not just the SimulationResult). Computing the
+    # full raw bundle here also guarantees the scaled score below matches what
+    # the app produces for the same inputs.
+    raw_stats = compute_raw_stats(result, turns, curve_value=curve_value)
+    raw_tuning = raw_stats.tuning
+    raw_eff = raw_stats.efficiency
+    score = score_from_raw(raw_stats)
 
     return {
         "deck": deck.name,
@@ -540,7 +537,23 @@ def main() -> int:
         t0 = time.perf_counter()
         result = gf.simulate()
         elapsed = time.perf_counter() - t0
-        row = build_row(deck, result, args.turns)
+
+        # Analytical curve_value (Tuning/Efficiency inputs) via the production
+        # helper, threading the deck list + measured draws. Degrades to None
+        # exactly like the app does, so those two axes fall back to neutral.
+        try:
+            curve_value = _compute_curve_value(
+                deck_list=cards,
+                registry=None,
+                overrides=None,
+                turns=args.turns,
+                result=result,
+            )
+        except Exception as exc:
+            print(f"  [warn] curve_value failed for {deck.name}: {exc}")
+            curve_value = None
+
+        row = build_row(deck, result, args.turns, curve_value)
         rows.append(row)
         print(
             f"  -> C={row['consistency']} A={row['acceleration']} "

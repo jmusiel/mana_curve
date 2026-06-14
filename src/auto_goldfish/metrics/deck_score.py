@@ -110,7 +110,28 @@ class DeckScore:
     efficiency: int
     reach: int
 
-    def as_dict(self) -> Dict[str, int]:
+    @property
+    def overall(self) -> float:
+        """At-a-glance headline: the plain mean of the six axes, on the 1--10 scale.
+
+        Deliberately a simple unweighted mean (no per-axis weighting) so the
+        number is trivially explainable. It is a hook/summary only -- the
+        six-stat profile remains the source of truth (see ADR-0002 / CONTEXT.md).
+        """
+        return round(
+            (
+                self.consistency
+                + self.acceleration
+                + self.snowball
+                + self.tuning
+                + self.efficiency
+                + self.reach
+            )
+            / 6.0,
+            1,
+        )
+
+    def as_dict(self) -> Dict[str, float]:
         return {
             "consistency": self.consistency,
             "acceleration": self.acceleration,
@@ -118,6 +139,7 @@ class DeckScore:
             "tuning": self.tuning,
             "efficiency": self.efficiency,
             "reach": self.reach,
+            "overall": self.overall,
         }
 
     def format_block(self) -> str:
@@ -128,8 +150,12 @@ class DeckScore:
         lines.append("|     DECK STAT BLOCK      |")
         lines.append("+" + "-" * 26 + "+")
         for name, value in self.as_dict().items():
+            if name == "overall":
+                continue
             filled = "█" * value + "░" * (bar_width - value)
             lines.append(f"| {name.upper():<13} {value:>2} {filled} |")
+        lines.append("+" + "-" * 26 + "+")
+        lines.append(f"| {'OVERALL':<13} {self.overall:>4} / 10      |")
         lines.append("+" + "-" * 26 + "+")
         return "\n".join(lines)
 

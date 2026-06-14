@@ -6,6 +6,15 @@
 {% block title %}Simulate {{ deck_name }} - Auto Goldfish{% endblock %}
 {% block content %}
 <h1>Simulate: {{ deck_name }}</h1>
+<p class="page-tagline">Plays your deck thousands of times against no opponent to find the best land count, useful ramp and draw additions, and your CASTER score. The defaults give a good answer. Press <strong>Run Simulation</strong>.</p>
+<details class="how-it-works">
+    <summary>How this works</summary>
+    <div class="how-it-works-body">
+        <p>Goldfishing means playing your deck against no opponent to see how reliably it develops mana and casts spells. We run that many times and average the results.</p>
+        <p>Then the optimizer tries nearby land counts and candidate ramp or draw cards, then reports which changes improve the metric selected under What should we optimize for?</p>
+        <p>Everything runs in your browser. Nothing is sent to a server. The first run loads the engine in about 10 seconds. Later runs are fast.</p>
+    </div>
+</details>
 <form id="sim-form">
 
     <!-- Card Labeler Wizard -->
@@ -30,7 +39,7 @@
                         <span id="labeler-tag-card-advantage" class="labeler-tag">card-advantage</span>
                         <span id="labeler-tag-cheaper-than-mv" class="labeler-tag">cheaper-than-mv</span>
                     </div>
-                    <div id="labeler-cheaper-hint" class="labeler-cheaper-hint" style="display:none;">This card may cost less than its mana value — verify the cost</div>
+                    <div id="labeler-cheaper-hint" class="labeler-cheaper-hint" style="display:none;">This card may cost less than its mana value. Verify the cost.</div>
                 </div>
                 <div class="labeler-card-nav">
                     <button type="button" class="btn btn-secondary btn-sm" id="labeler-prev-btn" onclick="labelerPrev()" disabled>&larr; Prev</button>
@@ -58,7 +67,7 @@
     <div class="label-banner">
         <div class="label-banner-text">
             <strong>{{ wizard_cards | length }} distinct card{{ 's' if wizard_cards | length != 1 else '' }} ha{{ 've' if wizard_cards | length != 1 else 's' }} suggested effect labels.</strong>
-            <span class="label-banner-hint">Suggestions are auto-generated and may not always match how the card actually plays &mdash; reviewing them sharpens ramp/draw recommendations. All copies of the same card share one label.</span>
+            <span class="label-banner-hint">Suggestions are auto-generated and may not always match how the card actually plays. Reviewing them sharpens ramp and draw recommendations. All copies of the same card share one label.</span>
         </div>
         <div class="label-banner-actions">
             <button type="button" class="btn btn-primary btn-sm" id="label-cards-btn" onclick="labelerOpen(WIZARD_CARDS)">Open Card Labeler</button>
@@ -83,19 +92,22 @@
         <div class="optimize-picker-legend">What should we optimize for?</div>
         <div class="optimize-tiles" id="optimize-tiles">
             <div class="opt-tile selected" data-target="karsten_ecms" tabindex="0" role="radio" aria-checked="true">
-                <div class="opt-tile-title">Karsten-ECMS <span class="opt-tile-default-tag">Default</span></div>
+                <div class="opt-tile-title">Best all-around <span class="opt-tile-default-tag">Default</span></div>
+                <div class="opt-tile-expert">Karsten-ECMS</div>
                 <div class="opt-tile-desc">Mana spent compounded forward across remaining turns. Best general-purpose target.</div>
             </div>
             <div class="opt-tile" data-target="floor_performance" tabindex="0" role="radio" aria-checked="false">
-                <div class="opt-tile-title">Floor performance</div>
+                <div class="opt-tile-title">Best worst-case games</div>
+                <div class="opt-tile-expert">Floor performance</div>
                 <div class="opt-tile-desc">Average mana spent in the worst 25% of games. Picks for consistency.</div>
             </div>
             <div class="opt-tile" data-target="mana" tabindex="0" role="radio" aria-checked="false">
-                <div class="opt-tile-title">Total mana</div>
+                <div class="opt-tile-title">Most raw power</div>
+                <div class="opt-tile-expert">Total mana</div>
                 <div class="opt-tile-desc">Raw mana spent across all turns. Picks for raw power.</div>
             </div>
         </div>
-        <div class="optimize-picker-hint">Other targets (consistency, spells cast) are available under <em>Advanced settings</em>.</div>
+        <div class="optimize-picker-hint">Other targets, including consistency and spells cast, are available under Advanced settings.</div>
         <input type="hidden" id="optimize-target" name="optimize_target" value="karsten_ecms">
     </div>
 
@@ -153,7 +165,7 @@
                 </datalist>
                 <div class="range-sweep-info">
                     Sweep: <strong id="sweep-label">{{ default_max - default_min }}</strong> land counts
-                    ({{ default_min }} &ndash; {{ default_max }})
+                    {{ default_min }} to {{ default_max }}
                 </div>
                 <input type="hidden" id="min_lands" name="min_lands" value="{{ default_min }}">
                 <input type="hidden" id="max_lands" name="max_lands" value="{{ default_max }}">
@@ -194,8 +206,8 @@
             <div class="form-group" style="margin-bottom:0;">
                 <label for="optimize-target-extra">Switch to a non-default target <span class="info-tip" data-tip="Selecting a target here clears the tile selection above and overrides what's optimized.">i</span></label>
                 <select id="optimize-target-extra">
-                    <option value="" selected>— Use selected tile above —</option>
-                    <option value="consistency">Consistency (left-tail ratio)</option>
+                    <option value="" selected>Use selected tile above</option>
+                    <option value="consistency">Consistency, left-tail ratio</option>
                     <option value="spells_cast">Number of spells cast</option>
                 </select>
             </div>
@@ -205,7 +217,7 @@
             <h3>Play strategy</h3>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="mana-mode">Consider mana spent on <span class="info-tip" data-tip="Which spell types count toward the 'mana spent' metric and percentiles. Value-only counts spells with no effects; Value + Draw includes draw spells; Total counts everything including ramp.">i</span></label>
+                    <label for="mana-mode">Consider mana spent on <span class="info-tip" data-tip="Which spell types count toward the 'mana spent' metric and percentiles. Value-only counts spells with no effects. Value + Draw includes draw spells. Total counts everything including ramp.">i</span></label>
                     <select id="mana-mode" name="mana_mode">
                         <option value="value" selected>Value spells only</option>
                         <option value="value_draw">Value + Draw spells</option>
@@ -232,7 +244,7 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="mana-efficiency">Mana Efficiency <span class="info-tip" data-tip="How the simulator selects which combination of spells to cast. Greedy plays them in priority order; Maximize Mana Spent uses a knapsack solver to waste the least mana; Maximize Spell Count casts as many spells as possible.">i</span></label>
+                    <label for="mana-efficiency">Mana Efficiency <span class="info-tip" data-tip="How the simulator selects which combination of spells to cast. Greedy plays them in priority order. Maximize Mana Spent uses a knapsack solver to waste the least mana. Maximize Spell Count casts as many spells as possible.">i</span></label>
                     <select id="mana-efficiency" name="mana_efficiency">
                         <option value="greedy" selected>Greedy (default)</option>
                         <option value="mana_efficient">Maximize Mana Spent</option>
@@ -299,7 +311,7 @@
             <h3>Engine</h3>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="algorithm">Optimizer Algorithm <span class="info-tip" data-tip="Factored evaluates each change independently (land count, draw, ramp) with adaptive sampling — fast and interpretable. Racing uses CRN-paired sequential elimination over the full config space. Hyperband uses successive halving (slower but most exhaustive).">i</span></label>
+                    <label for="algorithm">Optimizer Algorithm <span class="info-tip" data-tip="Factored evaluates each change independently with adaptive sampling, so it is fast and interpretable. Racing uses CRN-paired sequential elimination over the full config space. Hyperband uses successive halving and is the most exhaustive.">i</span></label>
                     <select id="algorithm" name="algorithm">
                         <option value="factored" selected>Factored (recommended)</option>
                         <option value="racing">Racing (fast)</option>
@@ -350,7 +362,7 @@
         </div>
     </details>
 
-    <!-- Card Effects editor — full per-card override list, kept collapsed and demoted -->
+    <!-- Card Effects editor - full per-card override list, kept collapsed and demoted -->
     {% if card_effects is defined and card_effects %}
     {% set with_effects = card_effects | selectattr('has_effects') | list %}
     {% set without_effects = card_effects | rejectattr('has_effects') | list %}
@@ -434,9 +446,9 @@
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary" id="submit-btn" form="sim-form">Run Simulation</button>
                 {% if is_local is defined and is_local %}
-                <button type="button" class="btn btn-secondary" onclick="navigateToManaModel('{{ deck_name }}')" title="Closed-form hypergeometric land-count recommendation, no simulation needed">Open Mana Model (instant)</button>
+                <button type="button" class="btn btn-secondary" onclick='navigateToManaModel({{ deck_name | tojson }})' title="Closed-form hypergeometric land-count recommendation, no simulation needed">Open Mana Model</button>
                 {% else %}
-                <a href="{{ url_for('mana_model.page', deck_name=deck_name) }}" class="btn btn-secondary" title="Closed-form hypergeometric land-count recommendation, no simulation needed">Open Mana Model (instant)</a>
+                <a href="{{ url_for('mana_model.page', deck_name=deck_name) }}" class="btn btn-secondary" title="Closed-form hypergeometric land-count recommendation, no simulation needed">Open Mana Model</a>
                 {% endif %}
             </div>
         </div>
@@ -491,7 +503,7 @@ window.CASTER_CALIBRATION = {{ caster_calibration | tojson }};
         minLabel.textContent = minVal;
         maxLabel.textContent = maxVal;
         sweepLabel.textContent = sweep;
-        sweepInfo.innerHTML = 'Sweep: <strong>' + sweep + '</strong> land counts (' + minVal + ' \u2013 ' + maxVal + ')';
+        sweepInfo.innerHTML = 'Sweep: <strong>' + sweep + '</strong> land counts, ' + minVal + ' to ' + maxVal;
         minInput.value = minVal;
         maxInput.value = maxVal;
 
@@ -507,7 +519,7 @@ window.CASTER_CALIBRATION = {{ caster_calibration | tojson }};
     maxSlider.addEventListener('input', update);
 })();
 
-// Optimize-for tile picker — clicking a tile sets the hidden input value;
+// Optimize-for tile picker - clicking a tile sets the hidden input value;
 // the "Other targets" select inside Advanced clears tiles and overrides.
 (function() {
     const tiles = document.querySelectorAll('#optimize-tiles .opt-tile');
@@ -1021,233 +1033,30 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
     let ctx = {state: {}, amountContext: ''};  // mutable context for applyDecision
     let decisionLog = [];   // [{stepId, prompt, chosenValue, chosenLabel}]
     let activeStep = null;  // current step ID to render
+    let labelerController = null;
     const submittedCards = new Set();  // card names that received human feedback this session
     const sessionId = crypto.randomUUID();  // unique ID for this wizard session
 
-    // --- Flowchart rendering ---
-    function renderFlowchart() {
-        const container = document.getElementById('labeler-flowchart');
-        container.innerHTML = '';
-
-        // Render answered nodes
-        decisionLog.forEach(function(entry, idx) {
-            const node = document.createElement('div');
-            node.className = 'flowchart-node flowchart-node-answered';
-            const prompt = document.createElement('span');
-            prompt.className = 'flowchart-prompt';
-            prompt.textContent = LW.promptFor(entry.stepId, entry);
-            node.appendChild(prompt);
-
-            // Show all options for this step: selected in blue, others in gray
-            var allOptions = LW.getOptionsForStep(entry.stepId, entry.chosenValue);
-            var btns = document.createElement('span');
-            btns.className = 'flowchart-options';
-            allOptions.forEach(function(opt) {
-                var chip = document.createElement('span');
-                if (String(opt.value) === String(entry.chosenValue)) {
-                    chip.className = 'flowchart-answer';
-                    chip.textContent = opt.label;
-                    chip.title = 'Click to change from here';
-                    chip.addEventListener('click', function() { rewindTo(idx); });
-                } else {
-                    chip.className = 'flowchart-answer flowchart-answer-alt';
-                    chip.textContent = opt.label;
-                    chip.title = 'Switch to ' + opt.label;
-                    chip.addEventListener('click', function() { rewindAndChoose(idx, opt.value); });
-                }
-                btns.appendChild(chip);
-            });
-            node.appendChild(btns);
-            container.appendChild(node);
+    function ensureLabelerController() {
+        if (labelerController) return labelerController;
+        labelerController = window.LabelerController.create({
+            wizard: LW,
+            flowchart: 'labeler-flowchart',
+            submitButton: 'labeler-submit-btn',
+            undoButton: 'labeler-undo-btn',
+            onStateChange: function(ctrl) {
+                ctx = ctrl.getContext();
+                decisionLog = ctrl.getDecisionLog();
+                activeStep = ctrl.getActiveStep();
+            },
+            onRender: updateConfirmAllButton,
+            onNeitherComplete: function() {
+                currentIndex++;
+                updateDisplay();
+                return true;
+            },
         });
-
-        // Show/hide Submit button based on whether tree is complete
-        var submitBtn = document.getElementById('labeler-submit-btn');
-        var undoBtn = document.getElementById('labeler-undo-btn');
-        if (!activeStep && decisionLog.length > 0) {
-            submitBtn.style.display = '';
-        } else {
-            submitBtn.style.display = 'none';
-        }
-        // Show undo button when there are decisions to undo
-        undoBtn.style.display = (decisionLog.length > 0) ? '' : 'none';
-
-        // Show/hide Confirm All button
-        updateConfirmAllButton();
-
-        // Render active step (if tree is not yet complete)
-        if (!activeStep) return;
-        var def = STEP_DEFS[activeStep];
-        if (!def) return;
-
-        var node = document.createElement('div');
-        node.className = 'flowchart-node flowchart-node-active';
-
-        if (def.type === 'amount') {
-            renderAmountNode(node);
-        } else if (def.type === 'cost') {
-            renderCostNode(node);
-        } else if (def.options) {
-            renderOptionsNode(node, def);
-        }
-        container.appendChild(node);
-    }
-
-
-    // Rewind to index N and immediately apply a different choice
-    function rewindAndChoose(index, newValue) {
-        var kept = decisionLog.slice(0, index);
-        ctx = {state: {}, amountContext: ''};
-        var replayStep = LW.getFirstStep();
-        kept.forEach(function(entry) {
-            replayStep = LW.applyDecision(entry.stepId, entry.chosenValue, ctx);
-        });
-        decisionLog = kept;
-        activeStep = replayStep;
-        // Now apply the new choice at this step
-        labelerChoose(newValue);
-    }
-
-    function renderAmountNode(node) {
-        const p = document.createElement('p');
-        p.className = 'labeler-prompt';
-        p.textContent = LW.getAmountPrompt(ctx.amountContext, ctx.state);
-        node.appendChild(p);
-        const btns = document.createElement('div');
-        btns.className = 'flowchart-options';
-        [1, 2, 3].forEach(function(n, idx) {
-            var b = document.createElement('span');
-            b.className = 'flowchart-answer flowchart-answer-alt';
-            var hint = document.createElement('span');
-            hint.className = 'flowchart-key-hint';
-            hint.textContent = String(n);
-            b.appendChild(hint);
-            b.appendChild(document.createTextNode(String(n)));
-            b.addEventListener('click', function() { labelerChoose(n); });
-            btns.appendChild(b);
-        });
-        var span = document.createElement('span');
-        span.className = 'labeler-custom-amount';
-        var inp = document.createElement('input');
-        inp.type = 'number';
-        inp.min = '1';
-        inp.max = '20';
-        inp.value = '4';
-        inp.style.width = '4rem';
-        inp.id = 'labeler-custom-amount';
-        inp.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                labelerChoose(parseInt(inp.value) || 1);
-                inp.blur();
-            }
-        });
-        span.appendChild(inp);
-        var okBtn = document.createElement('button');
-        okBtn.type = 'button';
-        okBtn.className = 'btn btn-secondary btn-sm';
-        okBtn.textContent = 'OK';
-        okBtn.addEventListener('click', function() {
-            labelerChoose(parseInt(inp.value) || 1);
-        });
-        span.appendChild(okBtn);
-        btns.appendChild(span);
-        node.appendChild(btns);
-    }
-
-    function renderCostNode(node) {
-        const p = document.createElement('p');
-        p.className = 'labeler-prompt';
-        p.textContent = STEP_DEFS.cost.prompt;
-        node.appendChild(p);
-        const btns = document.createElement('div');
-        btns.className = 'flowchart-options';
-        for (var n = 1; n <= 9; n++) {
-            (function(num) {
-                var b = document.createElement('span');
-                b.className = 'flowchart-answer flowchart-answer-alt';
-                var hint = document.createElement('span');
-                hint.className = 'flowchart-key-hint';
-                hint.textContent = String(num);
-                b.appendChild(hint);
-                b.appendChild(document.createTextNode(String(num)));
-                b.addEventListener('click', function() { labelerChoose(num); });
-                btns.appendChild(b);
-            })(n);
-        }
-        // Custom input (key 0 focuses it)
-        var span = document.createElement('span');
-        span.className = 'labeler-custom-amount';
-        var zeroHint = document.createElement('span');
-        zeroHint.className = 'flowchart-key-hint';
-        zeroHint.textContent = '0';
-        span.appendChild(zeroHint);
-        var inp = document.createElement('input');
-        inp.type = 'number';
-        inp.min = '0';
-        inp.max = '20';
-        inp.placeholder = '#';
-        inp.style.width = '3rem';
-        inp.id = 'labeler-cost-custom';
-        inp.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === 'ArrowDown') {
-                e.preventDefault();
-                var val = parseInt(inp.value, 10);
-                if (!isNaN(val) && val >= 0) {
-                    labelerChoose(val);
-                }
-                inp.blur();
-            }
-        });
-        span.appendChild(inp);
-        var okBtn = document.createElement('button');
-        okBtn.type = 'button';
-        okBtn.className = 'btn btn-secondary btn-sm';
-        okBtn.textContent = 'OK';
-        okBtn.addEventListener('click', function() {
-            var val = parseInt(inp.value, 10);
-            if (!isNaN(val) && val >= 0) labelerChoose(val);
-        });
-        span.appendChild(okBtn);
-        btns.appendChild(span);
-        node.appendChild(btns);
-    }
-
-    function renderOptionsNode(node, def) {
-        const p = document.createElement('p');
-        p.className = 'labeler-prompt';
-        p.textContent = def.prompt;
-        node.appendChild(p);
-        const btns = document.createElement('div');
-        btns.className = 'flowchart-options';
-        def.options.forEach(function(opt, idx) {
-            var b = document.createElement('span');
-            b.className = 'flowchart-answer flowchart-answer-alt';
-            var numLabel = document.createElement('span');
-            numLabel.className = 'flowchart-key-hint';
-            numLabel.textContent = String(idx + 1);
-            b.appendChild(numLabel);
-            b.appendChild(document.createTextNode(opt.label));
-            b.addEventListener('click', function() { labelerChoose(opt.value); });
-            btns.appendChild(b);
-        });
-        node.appendChild(btns);
-    }
-
-    // --- State rewinding ---
-    function rewindTo(index) {
-        // Keep decisions up to (not including) the clicked index
-        const kept = decisionLog.slice(0, index);
-        // Reset state and replay kept decisions silently
-        ctx = {state: {}, amountContext: ''};
-        var replayStep = LW.getFirstStep();
-        kept.forEach(function(entry) {
-            replayStep = LW.applyDecision(entry.stepId, entry.chosenValue, ctx);
-        });
-        decisionLog = kept;
-        // The active step is the one that was at `index`
-        activeStep = replayStep;
-        renderFlowchart();
+        return labelerController;
     }
 
     function updateProgressBar() {
@@ -1305,25 +1114,6 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
             'https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(card.name) + '&format=image&version=normal';
         document.getElementById('labeler-progress').textContent =
             'Card ' + (currentIndex + 1) + ' of ' + cards.length;
-        ctx = {state: {}, amountContext: ''};
-        decisionLog = [];
-
-        // If card has prior annotation, decode it into a full decision tree
-        if (card.prior_annotation && card.prior_annotation.categories && card.prior_annotation.categories.length > 0) {
-            decisionLog = LW.decodeAnnotation(card.prior_annotation, card);
-            // Replay decisions to rebuild state
-            var result = LW.replayDecisions(decisionLog);
-            ctx.state = result.state;
-            ctx.amountContext = result.amountContext;
-            activeStep = null;  // tree complete, show Submit
-        } else {
-            // Pre-fill cost with CMC for all cards, start at classify
-            var costVal = card.cmc || 0;
-            decisionLog.push({stepId: 'cost', prompt: STEP_DEFS.cost.prompt, chosenValue: costVal, chosenLabel: String(costVal)});
-            LW.applyDecision('cost', costVal, ctx);
-            activeStep = 'classify';
-        }
-
         // Update card navigation buttons and checkmark
         document.getElementById('labeler-prev-btn').disabled = (currentIndex === 0);
         document.getElementById('labeler-next-btn').disabled = (currentIndex >= cards.length - 1);
@@ -1332,7 +1122,9 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
 
         updateProgressBar();
         updateAnnotationSummary();
-        renderFlowchart();
+        ensureLabelerController().setFromAnnotation(card, card.prior_annotation, {
+            decodeEmptyAnnotation: false,
+        });
     }
 
     function postAnnotation(cardName, effects, source) {
@@ -1349,7 +1141,7 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
     };
 
     window.labelerUndo = function() {
-        if (decisionLog.length > 0) rewindTo(decisionLog.length - 1);
+        ensureLabelerController().undo();
     };
 
     window.labelerConfirmAll = function() {
@@ -1397,28 +1189,7 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
     };
 
     window.labelerChoose = function(value) {
-        var curStep = activeStep;
-        var currentPrompt = (curStep === 'amount') ? LW.getAmountPrompt(ctx.amountContext, ctx.state) : STEP_DEFS[curStep].prompt;
-        var chosenLabel = LW.labelFor(curStep, value);
-
-        var nextStep = LW.applyDecision(curStep, value, ctx);
-
-        // Push to decision log
-        decisionLog.push({stepId: curStep, prompt: currentPrompt, chosenValue: value, chosenLabel: chosenLabel});
-
-        if (nextStep === '_done') {
-            // Auto-skip for "neither" — no meaningful annotation to submit
-            if (ctx.state.mainType === 'neither') {
-                currentIndex++;
-                updateDisplay();
-                return;
-            }
-            // Tree complete — show Submit button, no active step
-            activeStep = null;
-        } else {
-            activeStep = nextStep;
-        }
-        renderFlowchart();
+        ensureLabelerController().choose(value);
     };
 
     function saveAndNext() {
@@ -1549,6 +1320,7 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
     let pyodideInitializing = false;
     let resolvedWheelUrl = null;
     let lastConfig = null;
+    let lastDeckJson = null;
 
     const form = document.getElementById('sim-form');
     const jobStatus = document.getElementById('job-status');
@@ -1562,7 +1334,7 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
     function setSimRunning(running) {
         submitBtn.disabled = running;
         if (running) {
-            submitBtn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>Running…';
+            submitBtn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>Running...';
         } else {
             submitBtn.innerHTML = submitBtnDefaultHTML;
         }
@@ -1709,7 +1481,7 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
         var elapsed = (performance.now() - simStartTime) / 1000;
         var rate = current / elapsed;
         var remaining = rate > 0 ? (total - current) / rate : 0;
-        return ' — ' + formatTime(elapsed) + ' elapsed, ~' + formatTime(remaining) + ' remaining';
+        return ' - ' + formatTime(elapsed) + ' elapsed, ~' + formatTime(remaining) + ' remaining';
     }
 
     function handleWorkerMessage(e) {
@@ -1773,16 +1545,20 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
             html += '</div>';
             jobStatus.innerHTML = html;
             var stickyLabel;
-            if (phase === 'enum') stickyLabel = 'Enumerating… ' + pct + '%';
-            else if (phase === 'eval' && lastConfig && lastConfig.optimization_enabled) stickyLabel = 'Evaluating… ' + pct + '%';
-            else stickyLabel = 'Simulating… ' + pct + '%';
+            if (phase === 'enum') stickyLabel = 'Enumerating... ' + pct + '%';
+            else if (phase === 'eval' && lastConfig && lastConfig.optimization_enabled) stickyLabel = 'Evaluating... ' + pct + '%';
+            else stickyLabel = 'Simulating... ' + pct + '%';
             setStickyStatus(stickyLabel);
         } else if (msg.type === 'result') {
             jobStatus.innerHTML = '';
             localResults.innerHTML = '';
             try {
-                ClientResults.render(localResults, msg.data, DECK_NAME);
-                setStickyStatusTransient('Done — results below.', 'done', 5000);
+                ClientResults.render(localResults, msg.data, DECK_NAME, {
+                    worker: worker,
+                    deckJson: lastDeckJson,
+                    config: lastConfig,
+                });
+                setStickyStatusTransient('Done. Results below.', 'done', 5000);
             } catch (e) {
                 console.error('[simulate] render threw:', e);
                 localResults.innerHTML = '<div style="color:red;border:1px solid red;padding:1rem">'
@@ -1805,6 +1581,22 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
                     body: JSON.stringify({config: lastConfig, results: msg.data})
                 }).catch(function() {});
             }
+        } else if (msg.type === 'ramp_tradeoff_result') {
+            if (window.ClientResults && ClientResults.handleRampTradeoffResult) {
+                ClientResults.handleRampTradeoffResult(msg);
+            }
+        } else if (msg.type === 'ramp_tradeoff_error') {
+            if (window.ClientResults && ClientResults.handleRampTradeoffError) {
+                ClientResults.handleRampTradeoffError(msg);
+            }
+        } else if (msg.type === 'turn_structure_variant_result') {
+            if (window.ClientResults && ClientResults.handleTurnStructureVariantResult) {
+                ClientResults.handleTurnStructureVariantResult(msg);
+            }
+        } else if (msg.type === 'turn_structure_variant_error') {
+            if (window.ClientResults && ClientResults.handleTurnStructureVariantError) {
+                ClientResults.handleTurnStructureVariantError(msg);
+            }
         } else if (msg.type === 'error') {
             jobStatus.innerHTML = '<div class="job-status error"><p>Error: ' + msg.message + '</p></div>';
             setSimRunning(false);
@@ -1818,7 +1610,7 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
 
         if (!pyodideReady) {
             setSimRunning(true);
-            setStickyStatus('Waiting for engine to load…');
+            setStickyStatus('Waiting for engine to load...');
             jobStatus.innerHTML = '<div class="job-status"><p>Waiting for engine to load...</p></div>';
             if (!pyodideInitializing) initWorker();
             const retryInterval = setInterval(function() {
@@ -1835,7 +1627,7 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
 
     async function startLocalSimulation() {
         setSimRunning(true);
-        setStickyStatus('Fetching deck data…');
+        setStickyStatus('Fetching deck data...');
         localResults.innerHTML = '';
         jobStatus.innerHTML = '<div class="job-status"><p>Fetching deck data...</p></div>';
 
@@ -1906,13 +1698,14 @@ const DECK_NAME_FOR_ANNOTATE = {{ deck_name | tojson }};
             const workerType = 'run_optimization';
 
             lastConfig = config;
+            lastDeckJson = JSON.stringify(deckData);
             simStartTime = performance.now();
             lastProgressUpdate = 0;
             jobStatus.innerHTML = '<div class="job-status"><p>Starting optimization...</p></div>';
-            setStickyStatus('Starting optimization…');
+            setStickyStatus('Starting optimization...');
             worker.postMessage({
                 type: workerType,
-                deckJson: JSON.stringify(deckData),
+                deckJson: lastDeckJson,
                 configJson: JSON.stringify(config),
             });
         } catch (err) {

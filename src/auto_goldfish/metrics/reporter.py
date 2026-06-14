@@ -110,6 +110,7 @@ def result_to_dict(
     deck_list: list | None = None,
     registry=None,
     overrides: dict | None = None,
+    include_ramp_tradeoff: bool = False,
 ) -> Dict[str, Any]:
     """Convert SimulationResult to a JSON-serializable dict.
 
@@ -161,6 +162,29 @@ def result_to_dict(
             curve_value_obj = None
     curve_value_dict = _sanitize_for_json(asdict(curve_value_obj)) if curve_value_obj is not None else None
 
+    ramp_tradeoff_input = None
+    if deck_list is not None:
+        try:
+            ramp_tradeoff_input = _compute_ramp_tradeoff_input(
+                deck_list=deck_list,
+                registry=registry,
+                overrides=overrides,
+            )
+        except Exception:
+            ramp_tradeoff_input = None
+
+    ramp_tradeoff_dict = None
+    if include_ramp_tradeoff and ramp_tradeoff_input is not None:
+        try:
+            ramp_tradeoff_dict = _compute_ramp_tradeoff(
+                ramp_tradeoff_input=ramp_tradeoff_input,
+                turns=turns,
+                result=result,
+            )
+        except Exception:
+            ramp_tradeoff_dict = None
+    ramp_tradeoff_dict = _sanitize_for_json(ramp_tradeoff_dict)
+
     raw = compute_raw_stats(result, turns, curve_value=curve_value_obj)
     anchors, calibration_meta = get_active_anchors()
     score = score_from_raw(raw, anchors)
@@ -180,6 +204,8 @@ def result_to_dict(
         "deck_raw": raw.as_dict(),
         "calibration": calibration_dict,
         "curve_value": curve_value_dict,
+        "ramp_tradeoff_input": ramp_tradeoff_input,
+        "ramp_tradeoff": ramp_tradeoff_dict,
         "land_count": result.land_count,
         "mean_mana": result.mean_mana,
         "mean_mana_value": result.mean_mana_value,
@@ -254,6 +280,43 @@ def _compute_curve_value(
         turns=turns,
         actual_total_draws=float(result.mean_draws) if result.mean_draws else None,
         actual_per_turn_cumulative_draws=actual_per_turn,
+    )
+
+
+def _compute_ramp_tradeoff(
+    ramp_tradeoff_input: dict,
+    turns: int,
+    result: SimulationResult,
+):
+    from auto_goldfish.optimization.ramp_analysis import compute_ramp_tradeoff_from_input
+
+    actual_per_turn = (
+        list(result.mean_cumulative_draws_per_turn)
+        if result.mean_cumulative_draws_per_turn
+        else None
+    )
+    return compute_ramp_tradeoff_from_input(
+        ramp_tradeoff_input=ramp_tradeoff_input,
+        per_turn_cumulative_draws=actual_per_turn,
+        turns=turns,
+    )
+
+
+def _compute_ramp_tradeoff_input(
+    deck_list: list,
+    registry,
+    overrides: dict | None,
+):
+    from auto_goldfish.optimization.ramp_analysis import classify_ramp_tradeoff_input
+    from auto_goldfish.effects.card_database import DEFAULT_REGISTRY
+
+    if registry is None:
+        registry = DEFAULT_REGISTRY
+
+    return classify_ramp_tradeoff_input(
+        deck_list=deck_list,
+        registry=registry,
+        overrides=overrides,
     )
 
 

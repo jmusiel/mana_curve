@@ -1,9 +1,9 @@
 /**
  * Client-side results renderer.
  *
- * Renders simulation results from JSON into HTML, replicating the
- * server-side results_content.html template. Used when simulations
- * run client-side via Pyodide.
+ * Renders simulation results from JSON into HTML. This is the sole results
+ * renderer: simulations run client-side via Pyodide and there is no
+ * server-side results template.
  */
 
 // Use `var` + idempotent guard because deck_store.js's navigateToSim() does
@@ -12,6 +12,11 @@
 // page bootstrap, leaving the simulate page non-functional.
 var ClientResults = window.ClientResults || (function() {
     'use strict';
+
+    let rampTradeoffContext = null;
+    let curveValueContext = null;
+    const pendingRampTradeoff = {};
+    const pendingTurnStructure = {};
 
     // -- Tooltip management (shared with server-side rendering) --
 
@@ -96,28 +101,28 @@ var ClientResults = window.ClientResults || (function() {
     const CASTER_STATS = [
         {name: 'Consistency', key: 'consistency', color: '#eab308',
          desc: 'How rarely the deck bricks',
-         lowMeaning: 'worst-case games are catastrophic — frequent floods, stalls, or dead hands.',
-         highMeaning: 'almost every game runs smoothly; the bottom 25% looks much like the average.'},
+         lowMeaning: 'worst-case games are catastrophic. Frequent floods, stalls, or dead hands.',
+         highMeaning: 'almost every game runs smoothly. The bottom 25% looks much like the average.'},
         {name: 'Acceleration', key: 'acceleration', color: '#ef4444',
          desc: 'Early-game mana deployment',
-         lowMeaning: 'slow opening — barely any mana spent over the first four turns.',
+         lowMeaning: 'slow opening. Barely any mana spent over the first four turns.',
          highMeaning: 'explosive early game with multiple ramp/draw plays before turn 5.'},
         {name: 'Snowball', key: 'snowball', color: '#8b5cf6',
          desc: 'How much advantage compounds over time',
-         lowMeaning: 'late game stays flat — the deck does not pull away from its early curve.',
-         highMeaning: 'late turns dwarf the early game; the deck snowballs hard once it gets going.'},
+         lowMeaning: 'late game stays flat. The deck does not pull away from its early curve.',
+         highMeaning: 'late turns dwarf the early game. The deck snowballs hard once it gets going.'},
         {name: 'Tuning', key: 'tuning', color: '#22c55e',
          desc: 'How well the curve composition matches the ramp\'s pace per CMC',
          lowMeaning: 'ramp pace is paying for high-CMC slots the deck does not have enough of.',
-         highMeaning: 'every CMC slot delivers what the ramp is paying for — curve and ramp are in sync.'},
+         highMeaning: 'every CMC slot delivers what the ramp is paying for. Curve and ramp are in sync.'},
         {name: 'Efficiency', key: 'efficiency', color: '#3b82f6',
          desc: 'Whether the deck draws enough cards to spend its mana',
          lowMeaning: 'draw rate falls short of what is needed to spend the mana the deck generates.',
-         highMeaning: 'draw rate keeps up with mana production; nearly all generated mana gets spent.'},
+         highMeaning: 'draw rate keeps up with mana production. Nearly all generated mana gets spent.'},
         {name: 'Reach', key: 'reach', color: '#f97316',
          desc: 'Peak mana output and ceiling',
-         lowMeaning: 'low ceiling — even the best games never spend that much mana.',
-         highMeaning: 'explosive peak turns; the top 25% of games spend a huge amount of mana.'},
+         lowMeaning: 'low ceiling. Even the best games never spend that much mana.',
+         highMeaning: 'explosive peak turns. The top 25% of games spend a huge amount of mana.'},
     ];
 
     function renderCasterExplanation() {
@@ -126,26 +131,26 @@ var ClientResults = window.ClientResults || (function() {
         let html = '<details class="caster-help">';
         html += '<summary>What does my CASTER Score mean?</summary>';
         html += '<div class="caster-help-body">';
-        html += '<p>Each stat is rescaled to <strong>1&ndash;10</strong> against ';
+        html += '<p>Each stat is scaled from 1 to 10 against ';
         if (cal.calibrated && cal.n_rows > 0) {
-            html += 'an empirical distribution of <strong>' + cal.n_rows + ' run'
-                + (cal.n_rows === 1 ? '' : 's') + '</strong> across <strong>'
-                + cal.n_decks + ' deck' + (cal.n_decks === 1 ? '' : 's') + '</strong> '
-                + 'in this database (anchors at p' + Math.round(cal.low_pct) + '/p'
-                + Math.round(cal.high_pct) + ' with Bayesian shrinkage, pseudo_count='
-                + cal.pseudo_count + '). ';
+            html += 'an empirical distribution of ' + cal.n_rows + ' run'
+                + (cal.n_rows === 1 ? '' : 's') + ' across '
+                + cal.n_decks + ' deck' + (cal.n_decks === 1 ? '' : 's') + ' '
+                + 'in this database. Anchors use p' + Math.round(cal.low_pct) + '/p'
+                + Math.round(cal.high_pct) + ' with Bayesian shrinkage and pseudo_count='
+                + cal.pseudo_count + '. ';
         } else {
-            html += 'the built-in default anchors (no DB calibration available). ';
+            html += 'the built-in default anchors. No database calibration is available yet. ';
         }
-        html += 'A score of <strong>1</strong> matches the low anchor; <strong>10</strong> matches the high anchor.</p>';
+        html += 'Score 1 matches the low anchor. Score 10 matches the high anchor.</p>';
 
         html += '<table class="caster-help-table"><thead><tr>'
             + '<th>Stat</th><th>What it measures</th>'
-            + '<th>Score 1 looks like…</th><th>Score 10 looks like…</th>'
+            + '<th>Score 1</th><th>Score 10</th>'
             + '</tr></thead><tbody>';
         for (const s of CASTER_STATS) {
             html += '<tr>';
-            html += '<td><strong style="color:' + s.color + '">' + s.name + '</strong></td>';
+            html += '<td style="color:' + s.color + '">' + s.name + '</td>';
             html += '<td>' + escapeHtml(s.desc) + '</td>';
             html += '<td>' + escapeHtml(s.lowMeaning) + '</td>';
             html += '<td>' + escapeHtml(s.highMeaning) + '</td>';
@@ -153,8 +158,7 @@ var ClientResults = window.ClientResults || (function() {
         }
         html += '</tbody></table>';
         if (!cal.calibrated) {
-            html += '<p class="caster-help-foot">Set <code>AUTO_GOLDFISH_CALIBRATE=1</code> '
-                + '(default) and run more decks to switch from default anchors to a live calibration.</p>';
+            html += '<p class="caster-help-foot"><code>AUTO_GOLDFISH_CALIBRATE=1</code> is the default. Run more decks to switch from default anchors to a live calibration.</p>';
         } else {
             html += '<p class="caster-help-foot">Calibration refreshes automatically as new runs land in the DB. '
                 + 'Set <code>AUTO_GOLDFISH_CALIBRATE=0</code> to disable.</p>';
@@ -163,13 +167,181 @@ var ClientResults = window.ClientResults || (function() {
         return html;
     }
 
+    // --- CASTER share card (client-side image; no server) ---
+    // Data prep lives in caster_card.js (window.CasterCard) so it's testable.
+    // The canvas drawing + share/clipboard glue below needs a real DOM.
+
+    function _truncateToWidth(ctx, text, maxW) {
+        text = String(text == null ? '' : text);
+        if (ctx.measureText(text).width <= maxW) return text;
+        while (text.length > 1 && ctx.measureText(text + '...').width > maxW) {
+            text = text.slice(0, -1);
+        }
+        return text + '...';
+    }
+
+    // Compose a 1080x1080 PNG-able canvas: header, overall, radar, six stats.
+    function drawCasterCard(data, radarCanvas) {
+        const S = 1080;
+        const sans = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        const c = document.createElement('canvas');
+        c.width = S; c.height = S;
+        const ctx = c.getContext('2d');
+
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, S, S);
+
+        // Header band
+        ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, S, 160);
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 46px ' + sans;
+        ctx.fillText('CASTER Score', 56, 64);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '400 30px ' + sans;
+        ctx.fillText(_truncateToWidth(ctx, data.deckName, 560), 56, 116);
+        ctx.textAlign = 'right';
+        ctx.font = '600 28px ' + sans;
+        ctx.fillText('auto-goldfish', S - 56, 80);
+
+        // Overall headline
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = '#64748b';
+        ctx.font = '600 30px ' + sans;
+        ctx.fillText('OVERALL', 60, 250);
+        ctx.fillStyle = '#1a1a2e';
+        ctx.font = '800 150px ' + sans;
+        const numStr = String(data.overall);
+        ctx.fillText(numStr, 56, 380);
+        const numW = ctx.measureText(numStr).width;
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '600 56px ' + sans;
+        ctx.fillText('/ 10', 56 + numW + 24, 380);
+
+        // Radar (centered square) - reuse the already-rendered Chart.js canvas
+        if (radarCanvas && radarCanvas.width) {
+            const rSize = 460;
+            try { ctx.drawImage(radarCanvas, (S - rSize) / 2, 415, rSize, rSize); } catch (e) {}
+        }
+
+        // Six stats: 3 columns x 2 rows along the bottom
+        const stats = data.stats || [];
+        const colW = (S - 112) / 3;
+        const baseY = 930;
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i < stats.length; i++) {
+            const x = 56 + (i % 3) * colW;
+            const y = baseY + Math.floor(i / 3) * 78;
+            ctx.beginPath();
+            ctx.fillStyle = stats[i].color || '#64748b';
+            ctx.arc(x + 12, y, 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#475569';
+            ctx.font = '500 26px ' + sans;
+            ctx.textAlign = 'left';
+            ctx.fillText(stats[i].name, x + 36, y);
+            ctx.fillStyle = '#1a1a2e';
+            ctx.font = '800 32px ' + sans;
+            ctx.textAlign = 'right';
+            ctx.fillText(String(stats[i].value), x + colW - 28, y);
+        }
+        return c;
+    }
+
+    function _downloadCard(blob, fname) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = fname;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    function _copyOrDownload(blob, fname, setStatus) {
+        if (navigator.clipboard && typeof window.ClipboardItem !== 'undefined') {
+            navigator.clipboard.write([new window.ClipboardItem({'image/png': blob})])
+                .then(function () { setStatus('Copied! Paste it anywhere.'); })
+                .catch(function () { _downloadCard(blob, fname); setStatus('Image downloaded.'); });
+        } else {
+            _downloadCard(blob, fname);
+            setStatus('Image downloaded.');
+        }
+    }
+
+    // Progressive enhancement: native share sheet (mobile) -> clipboard -> download.
+    function shareCasterCard(data, statusEl) {
+        function setStatus(msg) { if (statusEl) statusEl.textContent = msg || ''; }
+        let canvas;
+        try {
+            canvas = drawCasterCard(data, document.getElementById('deckScoreRadar'));
+        } catch (e) {
+            setStatus('Could not build the card.');
+            return;
+        }
+        setStatus('Preparing...');
+        canvas.toBlob(function (blob) {
+            if (!blob) { setStatus('Could not build the card.'); return; }
+            const fname = String(data.deckName || 'deck').replace(/[^a-z0-9_-]+/gi, '_') + '-caster.png';
+            let file = null;
+            try { file = new File([blob], fname, {type: 'image/png'}); } catch (e) { file = null; }
+
+            if (file && navigator.canShare && navigator.canShare({files: [file]})) {
+                navigator.share({
+                    files: [file],
+                    title: 'CASTER Score',
+                    text: data.deckName + ' - CASTER ' + data.overall + '/10'
+                }).then(function () { setStatus('Shared.'); })
+                  .catch(function (err) {
+                      if (err && err.name === 'AbortError') { setStatus(''); }
+                      else { _copyOrDownload(blob, fname, setStatus); }
+                  });
+                return;
+            }
+            _copyOrDownload(blob, fname, setStatus);
+        }, 'image/png');
+    }
+
+    // Wire the Share button after the radar canvas has been rendered.
+    function wireCasterShare(results, deckName) {
+        const btn = document.querySelector('.caster-share-btn');
+        if (!btn) return;
+        const r = (results && results.length) ? results[results.length - 1] : null;
+        const score = r && r.deck_score;
+        if (!score || typeof window.CasterCard === 'undefined') {
+            const row = document.querySelector('.caster-share-row');
+            if (row) row.style.display = 'none';
+            return;
+        }
+        const statusEl = document.querySelector('.caster-share-status');
+        const data = CasterCard.cardData(score, deckName, CASTER_STATS);
+        btn.addEventListener('click', function () { shareCasterCard(data, statusEl); });
+    }
+
     function renderDeckScore(results) {
         // Use the last result (highest land count) for the score
         const r = results[results.length - 1];
         const score = r.deck_score;
         if (!score) return '';
 
+        // Overall headline: plain mean of the six axes. Prefer the value the
+        // engine computed (score.overall); fall back to a client-side mean so
+        // older cached results still show a headline.
+        let overall = score.overall;
+        if (typeof overall !== 'number') {
+            const vals = CASTER_STATS.map(s => score[s.key] || 0);
+            overall = Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
+        }
+
         let html = '<div class="deck-score-section"><h2>CASTER Score</h2>';
+        html += '<div class="caster-overall" title="Plain mean of the six axes below. The six-stat profile is the real picture.">'
+            + '<span class="caster-overall-num">' + overall + '</span>'
+            + '<span class="caster-overall-max">/ 10</span>'
+            + '<span class="caster-overall-label">Overall</span>'
+            + '</div>';
+        html += '<div class="caster-share-row">'
+            + '<button type="button" class="btn btn-secondary btn-sm caster-share-btn">Share score card</button>'
+            + '<span class="caster-share-status hint" role="status" aria-live="polite"></span>'
+            + '</div>';
         html += renderCasterExplanation();
         html += '<div class="deck-score-grid">';
         // Radar chart canvas
@@ -207,34 +379,63 @@ var ClientResults = window.ClientResults || (function() {
         // Help block
         html += '<details class="curve-value-help"><summary>What does this mean?</summary>';
         html += '<div class="curve-value-help-body">';
-        html += '<p><strong>Implied Draw</strong> &mdash; how many cards your deck needs to <em>see</em> during the game to (a) hit its land drops, (b) draw the ramp pieces it commits slots to, and (c) find enough non-ramp non-draw spells (&ldquo;spells&rdquo; below) to spend the mana those lands and ramp pieces produce. The chart breaks the requirement into three stacked bands at each turn; the top of the stack is the analytical cards-required:</p>';
+        html += '<p>Implied Draw estimates how many cards the deck needs to see by each turn to hit land drops, find committed ramp, and still have spendable spells.</p>';
         html += '<ul>';
-        html += '<li><strong>Cards you need either way</strong> (grey) &mdash; the smaller of the two requirements, i.e. the cards both constraints demand at this turn. Always visible regardless of which constraint dominates.</li>';
-        html += '<li><strong>Extra cards to draw enough lands</strong> (blue, stacked on the floor) &mdash; how many more cards you\'d have to draw beyond the floor to reliably hit your land drops. Visible at turns when drawing lands is the limiting constraint (typically early/mid game).</li>';
-        html += '<li><strong>Extra cards to draw enough spells</strong> (purple, stacked on the floor) &mdash; how many more cards you\'d have to draw beyond the floor to reliably find non-ramp non-draw spells to spend your mana on. Visible at turns when drawing spells is the limiting constraint (typically late game in heavily-ramped decks). Only one of the two coloured caps is non-zero per turn.</li>';
+        html += '<li>Need either way: the overlap between the land and spell requirements.</li>';
+        html += '<li>Extra for lands: the gap when land drops are the bottleneck.</li>';
+        html += '<li>Extra for spells: the gap when spendable spells are the bottleneck.</li>';
         html += '</ul>';
-        html += '<p>The orange line is the cards your deck actually drew on average across the simulation; the dashed grey line is the natural draw rate (no draw spells). The deficit at the rightmost turn is the gap from the top of the stack to the orange line.</p>';
-        html += '<p>The table under the chart shows the per-turn breakdown explicitly &mdash; it\'s ground truth, useful for sanity-checking the visualization.</p>';
+        html += '<p>The orange line is actual average cards drawn. The grey dashed line is natural draw. The table under the chart shows the per-turn breakdown.</p>';
         const verdictForHelp = cv.curve_verdict;
-        const helpBaseline = verdictForHelp ? verdictForHelp.baseline_cmc : 2;
         const helpNoRamp = !!(verdictForHelp && verdictForHelp.no_ramp);
-        html += '<p><strong>Implied Spell Value</strong> compares two views of each CMC slot:</p>';
+        html += '<p>Implied Spell Value compares two views of each CMC slot:</p>';
         html += '<ul>';
-        html += '<li><strong>A &mdash; Required:</strong> the bar each c-drop must clear. Set by how much extra mana your ramp produces over the game (each piece contributes M&times;remaining&nbsp;turns&nbsp;&minus;&nbsp;cost). More excess = stronger bar. Cutting any ramp piece always softens the bar.</li>';
-        html += '<li><strong>B &mdash; Deck implies:</strong> what your curve actually delivers per slot, simulated play-to-curve. Compared to the baseline slot.</li>';
+        html += '<li>A required: the bar each CMC slot needs to clear.</li>';
+        html += '<li>B deck implies: what the curve delivers in simulation.</li>';
         html += '</ul>';
-        html += '<p>When A and B agree, the row is <strong>coherent</strong>. When B &lt; A, the row is <strong>ramp over-aggressive</strong> &mdash; your slot delivers less than the bar; soften the bar by cutting ramp. When B &gt; A, the row has <strong>slack</strong> &mdash; you can use weaker cards there.</p>';
-        html += '<p>The headline badge is <em>net mana-turns at flat power</em>: positive means ramp pays for itself even before any high-CMC payoff; negative means high-CMC slots must compensate.</p>';
+        html += '<p>When B is lower than A, the slot is ramp over-aggressive. When B is higher than A, the slot has slack.</p>';
+        html += '<p>The headline badge is net mana-turns at flat power. Positive means ramp pays for itself before any high-CMC payoff. Negative means high-CMC slots must compensate.</p>';
         if (helpNoRamp) {
-            html += '<p><em>No permanent ramp, so the bar collapses to 1&times; everywhere &mdash; A is just measuring per-slot mana efficiency.</em></p>';
+            html += '<p>No permanent ramp, so the bar collapses to 1&times; everywhere. A is measuring per-slot mana efficiency.</p>';
         }
         html += '</div></details>';
+
+        const ts = cv.turn_structure;
+        if (ts && ts.rows && ts.rows.length > 0) {
+            const valueDelta = ts.delta_value_mana_spent || 0;
+            const deltaClass = valueDelta > 0.05 ? 'pos' : (valueDelta < -0.05 ? 'neg' : 'flat');
+            html += '<div class="curve-value-turn-spend">';
+            html += '<div class="cv-turn-spend-head">';
+            html += '<h3>Curve Out Timeline</h3>';
+            html += '<div class="curve-value-summary-row">';
+            html += '<span class="cv-stat"><span class="cv-label">With current ramp</span> <strong>' + fmt(ts.with_ramp_total_value_mana_spent || 0, 1) + '</strong></span>';
+            html += '</div></div>';
+            html += '<div class="cv-turn-spend-charts">';
+            html += '<div class="curve-value-turn-chart-wrap cv-turn-spend-chart-wrap"><canvas id="curveValueTurnSpendWithRampChart"></canvas></div>';
+            html += '</div>';
+            const currentSignets = parseInt(((r.ramp_tradeoff_input || {}).current_rocks || 0), 10);
+            if (currentSignets > 0) {
+                html += '<div class="lazy-panel-prompt cv-less-ramp-control">';
+                html += '<span>Would you like to see this with less ramp?</span>';
+                html += '<select id="curveValueLessRampSelect">';
+                for (let signets = 0; signets < currentSignets; signets++) {
+                    const label = signets === 0 ? 'No ramp' : (signets + ' Signet' + (signets === 1 ? '' : 's'));
+                    html += '<option value="' + signets + '"' + (signets === 0 ? ' selected' : '') + '>' + label + '</option>';
+                }
+                html += '</select>';
+                html += '<button type="button" class="btn btn-secondary btn-sm" id="curveValueLessRampBtn">Show scenario</button>';
+                html += '</div>';
+                html += '<div id="curveValueLessRampResult" class="cv-lazy-result" style="display:none;"></div>';
+            }
+            html += '<p class="cv-hint">Bars compare spendable spell mana by CMC, ramp setup mana, and unspent mana. Spendable includes draw spells, value spells, and commanders. Ramp is tracked separately. CMC colors run from low-cost blue to high-cost orange.</p>';
+            html += '</div>';
+        }
 
         html += '<div class="curve-value-grid">';
 
         // Implied Draw
         html += '<div class="curve-value-draw">';
-        html += '<h3>Implied Draw</h3>';
+        html += '<h3>Curve Implications</h3>';
         html += '<div class="curve-value-summary-row">';
         html += '<span class="cv-stat"><span class="cv-label">Cards needed</span> <strong>' + fmt(id_.N_max, 1) + '</strong></span>';
         html += '<span class="cv-stat"><span class="cv-label">Actually drawn</span> <strong>' + fmt(id_.actual_total_draws || 0, 1) + '</strong></span>';
@@ -249,7 +450,7 @@ var ClientResults = window.ClientResults || (function() {
         const idActual = id_.per_turn_actual || [];
         if (idLands.length > 0) {
             html += '<details class="cv-breakdown-details">';
-            html += '<summary>Per-turn breakdown (ground truth)</summary>';
+            html += '<summary>Per-turn breakdown</summary>';
             html += '<table class="cv-breakdown-table"><thead><tr>';
             html += '<th>Turn</th><th>Lands req</th><th>Spells req</th><th>Required = max</th><th>Active</th><th>Actual MC</th>';
             html += '</tr></thead><tbody>';
@@ -265,7 +466,7 @@ var ClientResults = window.ClientResults || (function() {
                 html += '<td>' + fmt(V, 2) + '</td>';
                 html += '<td><strong>' + fmt(req, 2) + '</strong></td>';
                 html += '<td class="cv-active-' + dom + '">' + dom + '</td>';
-                html += '<td>' + (act != null ? fmt(act, 2) : '—') + '</td>';
+                html += '<td>' + (act != null ? fmt(act, 2) : '-') + '</td>';
                 html += '</tr>';
             }
             html += '</tbody></table></details>';
@@ -277,30 +478,33 @@ var ClientResults = window.ClientResults || (function() {
         const actualDraws = id_.actual_total_draws || 0;
         if (deficitPos) {
             html += '<p class="cv-hint">';
-            html += '<strong>Deficit:</strong> your deck draws ~' + fmt(actualDraws, 1) + ' cards per game, ';
+            html += 'Deficit: your deck draws about ' + fmt(actualDraws, 1) + ' cards per game, ';
             html += fmt(deficit, 1) + ' short of the ' + fmt(id_.N_max, 1) + '-card analytical requirement. ';
             html += 'With your value pool\'s avg cost of ' + fmt(id_.V_avg_cmc, 2) + ' mana and ' + id_.V + '/' + id_.D + ' share of the deck, ';
             html += 'each missing card averages ' + fmt(valuePerCard, 2) + ' mana of value-spell spending ';
-            html += '(' + fmt(id_.V_avg_cmc, 2) + ' &times; ' + id_.V + '/' + id_.D + ') &mdash; ';
-            html += 'that translates to roughly <strong>' + fmt(deficitMana, 1) + ' mana of value spells going unspent</strong> per game on average.';
+            html += 'That translates to roughly ' + fmt(deficitMana, 1) + ' mana of value spells going unspent per game on average.';
             html += '</p>';
         } else {
             html += '<p class="cv-hint">';
-            html += 'Your deck draws ~' + fmt(actualDraws, 1) + ' cards per game, ';
+            html += 'Your deck draws about ' + fmt(actualDraws, 1) + ' cards per game, ';
             html += 'meeting the ' + fmt(id_.N_max, 1) + '-card analytical requirement. ';
-            html += 'Value mana is fully spent in expectation &mdash; no significant late-game waste.';
+            html += 'Value mana is fully spent in expectation. There is no significant late-game waste.';
             html += '</p>';
         }
+        html += '<div class="lazy-panel-prompt">';
+        html += '<span>Would you like to see the spell value implied by your ramp suite?</span>';
+        html += '<button type="button" class="btn btn-secondary btn-sm" id="curveValuePowerBtn">Show spell value</button>';
+        html += '</div>';
         html += '</div>';
 
         // Implied Spell Value (A vs B verdict)
-        html += '<div class="curve-value-power">';
+        html += '<div id="curveValuePowerPanel" class="curve-value-power" style="display:none;">';
         html += '<h3>Implied Spell Value</h3>';
         const verdict = cv.curve_verdict;
         if (verdict) {
             const baseline = verdict.baseline_cmc;
             if (verdict.no_ramp) {
-                html += '<p class="cv-rate-line">No permanent ramp &mdash; bar collapses to 1&times; everywhere</p>';
+                html += '<p class="cv-rate-line">No permanent ramp. The bar collapses to 1&times; everywhere.</p>';
             } else {
                 const excess = (verdict.idealized_excess != null ? verdict.idealized_excess : 0).toFixed(0);
                 const strength = ((verdict.ramp_share || 0) * 100).toFixed(0);
@@ -317,22 +521,22 @@ var ClientResults = window.ClientResults || (function() {
                 html += '&check; Ramp is net-positive at flat power: <strong>+' + netFlat.toFixed(0) + ' mana-turns</strong>. ';
                 html += 'Per-CMC gaps below show where extra power is still required.';
             } else if (netNeg) {
-                html += '&#9888; Ramp loses <strong>' + Math.abs(netFlat).toFixed(0) + ' mana-turns</strong> at flat power; the gaps below show which slots must compensate.';
+                html += '&#9888; Ramp loses <strong>' + Math.abs(netFlat).toFixed(0) + ' mana-turns</strong> at flat power. The gaps below show which slots must compensate.';
             } else {
-                html += 'Ramp is roughly self-paying at flat power (net &asymp; 0 mana-turns).';
+                html += 'Ramp is roughly self-paying at flat power. Net is about 0 mana-turns.';
             }
             html += '</div>';
 
             html += '<div class="curve-value-power-chart-wrap"><canvas id="curveValuePowerChart"></canvas></div>';
 
             html += '<table class="cv-power-table"><thead><tr>';
-            html += '<th>CMC</th><th>Cards</th><th>A &mdash; Required</th><th>B &mdash; Deck implies</th><th>Reading</th>';
+            html += '<th>CMC</th><th>Cards</th><th>A required</th><th>B deck implies</th><th>Reading</th>';
             html += '</tr></thead><tbody>';
             const rows = verdict.rows || [];
             for (const row of rows) {
                 const kindClass = 'cv-row-' + (row.kind || '').replace(/_/g, '-');
-                const aTxt = (row.a_required != null && isFinite(row.a_required)) ? (fmt(row.a_required, 2) + '&times;') : '—';
-                const bTxt = (row.b_implicit != null && isFinite(row.b_implicit)) ? (fmt(row.b_implicit, 2) + '&times;') : '—';
+                const aTxt = (row.a_required != null && isFinite(row.a_required)) ? (fmt(row.a_required, 2) + '&times;') : '-';
+                const bTxt = (row.b_implicit != null && isFinite(row.b_implicit)) ? (fmt(row.b_implicit, 2) + '&times;') : '-';
                 html += '<tr class="' + kindClass + '">';
                 html += '<td>' + row.cmc + '</td>';
                 html += '<td>' + Math.round(row.n_cards || 0) + '</td>';
@@ -349,11 +553,11 @@ var ClientResults = window.ClientResults || (function() {
                 } else if (row.kind === 'ramp_over_aggressive') {
                     const gap = row.gap || 1;
                     html += '<span class="cv-tag cv-tag-warn">&#9888; gap ' + gap.toFixed(1) + '&times;</span>';
-                    html += '<small class="cv-action">Your ' + row.cmc + '-drops are ' + gap.toFixed(1) + '&times; short. Cut a ramp piece to soften the bar &mdash; any cut helps; cutting fast ramp like Sol Ring helps most.</small>';
+                    html += '<small class="cv-action">Your ' + row.cmc + '-drops are ' + gap.toFixed(1) + '&times; short. Cut a ramp piece to soften the bar. Any cut helps, and cutting fast ramp like Sol Ring helps most.</small>';
                 } else if (row.kind === 'over_allocated') {
                     const slack = row.slack || 1;
                     html += '<span class="cv-tag cv-tag-slack">&check; slack ' + fmt(slack, 2) + '&times;</span>';
-                    html += '<small class="cv-action">Your ' + row.cmc + '-drops have slack &mdash; these slots can be weaker without hurting coherence.</small>';
+                    html += '<small class="cv-action">Your ' + row.cmc + '-drops have slack. These slots can be weaker without hurting coherence.</small>';
                 } else if (row.kind === 'no_slots') {
                     html += '<span class="cv-tag cv-tag-base">no slots</span>';
                 }
@@ -364,15 +568,191 @@ var ClientResults = window.ClientResults || (function() {
 
             html += '<p class="cv-hint">';
             html += '<strong>A</strong> = the bar your ramp sets. <strong>B</strong> = what your curve delivers. ';
-            html += 'When B falls short of A, cutting ramp softens the bar; when B exceeds A, you have slack to use weaker cards.';
+            html += 'When B falls short of A, cutting ramp softens the bar. When B exceeds A, you have slack to use weaker cards.';
             html += '</p>';
         } else {
-            html += '<p class="cv-hint">No value spells in deck &mdash; verdict undefined.</p>';
+            html += '<p class="cv-hint">No value spells in deck. Verdict undefined.</p>';
         }
         html += '</div>';  // power
 
         html += '</div></div>';  // grid, section
         return html;
+    }
+
+    function uniqueSortedCmcs(rows) {
+        const seen = {};
+        for (const row of (rows || [])) {
+            if (row.cmc != null) seen[String(row.cmc)] = true;
+        }
+        return Object.keys(seen).map(function(x) { return parseInt(x, 10); })
+            .filter(function(x) { return !isNaN(x); })
+            .sort(function(a, b) { return a - b; });
+    }
+
+    function mixRgb(a, b, p) {
+        return [
+            Math.round(a[0] + (b[0] - a[0]) * p),
+            Math.round(a[1] + (b[1] - a[1]) * p),
+            Math.round(a[2] + (b[2] - a[2]) * p),
+        ];
+    }
+
+    function cmcGradientColor(cmc, cmcs) {
+        if (!cmcs || cmcs.length <= 1) return 'rgb(37, 99, 235)';
+        const idx = Math.max(0, cmcs.indexOf(cmc));
+        const p = idx / Math.max(1, cmcs.length - 1);
+        const stops = [
+            [37, 99, 235],
+            [22, 163, 74],
+            [249, 115, 22],
+        ];
+        const rgb = p <= 0.5
+            ? mixRgb(stops[0], stops[1], p / 0.5)
+            : mixRgb(stops[1], stops[2], (p - 0.5) / 0.5);
+        return 'rgb(' + rgb[0] + ', ' + rgb[1] + ', ' + rgb[2] + ')';
+    }
+
+    function turnValue(ts, path, turnIdx, cmc) {
+        const turns = ts[path] || [];
+        const row = turns[turnIdx] || {};
+        return row[String(cmc)] || row[cmc] || 0;
+    }
+
+    function turnValueTotal(ts, path, turnIdx, cmcs) {
+        return cmcs.reduce(function(total, cmc) {
+            return total + turnValue(ts, path, turnIdx, cmc);
+        }, 0);
+    }
+
+    function turnSpendChartData(ts) {
+        const cmcs = uniqueSortedCmcs(ts.rows);
+        const turns = ts.T || Math.max(
+            (ts.with_ramp_value_spend_by_turn || []).length,
+            (ts.counterfactual_value_spend_by_turn || []).length
+        );
+        const labels = [];
+        for (let t = 1; t <= turns; t++) labels.push('T' + t);
+
+        let yMax = 0;
+        for (let i = 0; i < turns; i++) {
+            yMax = Math.max(
+                yMax,
+                turnValueTotal(ts, 'with_ramp_value_spend_by_turn', i, cmcs)
+                    + ((ts.with_ramp_ramp_spend || [])[i] || 0)
+                    + ((ts.with_ramp_unused_mana || [])[i] || 0),
+                turnValueTotal(ts, 'counterfactual_value_spend_by_turn', i, cmcs)
+                    + ((ts.counterfactual_unused_mana || [])[i] || 0)
+            );
+        }
+        yMax = yMax > 0 ? yMax * 1.08 : undefined;
+
+        return {cmcs: cmcs, labels: labels, yMax: yMax};
+    }
+
+    function renderTurnSpendScenarioChart(canvas, ts, title, valuePath, unusedValues, rampValues, yMaxOverride) {
+        if (!canvas || !ts || !ts.rows || ts.rows.length === 0) return;
+        const chartData = turnSpendChartData(ts);
+        const labels = chartData.labels;
+        const cmcs = chartData.cmcs;
+        const datasets = [];
+        for (const cmc of cmcs) {
+            const color = cmcGradientColor(cmc, cmcs);
+            datasets.push({
+                label: 'CMC ' + cmc,
+                data: labels.map(function(_label, i) {
+                    return turnValue(ts, valuePath, i, cmc);
+                }),
+                stack: 'mana',
+                backgroundColor: color,
+                borderColor: '#ffffff',
+                borderWidth: 1,
+            });
+        }
+        if (rampValues) {
+            datasets.push({
+                label: 'ramp setup',
+                data: rampValues,
+                stack: 'mana',
+                backgroundColor: 'rgba(100, 116, 139, 0.85)',
+                borderColor: '#ffffff',
+                borderWidth: 1,
+            });
+        }
+        datasets.push({
+            label: 'unspent mana',
+            data: unusedValues || [],
+            stack: 'mana',
+            backgroundColor: 'rgba(226, 232, 240, 0.75)',
+            borderColor: '#cbd5e1',
+            borderWidth: 1,
+        });
+
+        const existing = Chart.getChart(canvas);
+        if (existing) existing.destroy();
+        new Chart(canvas, {
+            type: 'bar',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                categoryPercentage: 0.82,
+                barPercentage: 0.88,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: title,
+                    },
+                    tooltip: {
+                        callbacks: {
+                            title: function(items) {
+                                const label = items[0] && items[0].label ? items[0].label : '';
+                                return label + ' / ' + title;
+                            },
+                            label: function(item) {
+                                const label = item.dataset && item.dataset.label ? item.dataset.label : '';
+                                const value = item.parsed && item.parsed.y ? item.parsed.y : 0;
+                                return label + ': ' + Number(value).toFixed(1);
+                            },
+                            footer: function(items) {
+                                const total = items.reduce(function(sum, item) {
+                                    const value = item.parsed && item.parsed.y ? item.parsed.y : 0;
+                                    return sum + Number(value);
+                                }, 0);
+                                return 'Total: ' + total.toFixed(1);
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: { stacked: true, title: { display: true, text: 'Turn' } },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        max: yMaxOverride || chartData.yMax,
+                        title: { display: true, text: 'Spendable mana / available' },
+                    },
+                },
+            },
+        });
+    }
+
+    function renderCurveValueTurnSpendChart(results) {
+        const withRampCanvas = document.getElementById('curveValueTurnSpendWithRampChart');
+        if (!withRampCanvas) return;
+        const r = results[results.length - 1];
+        const cv = r && r.curve_value;
+        const ts = cv && cv.turn_structure;
+        if (!ts || !ts.rows || ts.rows.length === 0) return;
+
+        renderTurnSpendScenarioChart(
+            withRampCanvas,
+            ts,
+            'With current ramp',
+            'with_ramp_value_spend_by_turn',
+            ts.with_ramp_unused_mana || [],
+            ts.with_ramp_ramp_spend || []
+        );
     }
 
     function renderCurveValueChart(results) {
@@ -564,14 +944,14 @@ var ClientResults = window.ClientResults || (function() {
                 labels: labels,
                 datasets: [
                     {
-                        label: 'A — required (your ramp\'s pace)',
+                        label: 'A required, your ramp\'s pace',
                         data: aVals,
                         backgroundColor: '#3b82f6',
                         borderColor: '#1d4ed8',
                         borderWidth: 1,
                     },
                     {
-                        label: 'B — what your deck implies',
+                        label: 'B, what your deck implies',
                         data: bVals,
                         backgroundColor: '#f59e0b',
                         borderColor: '#b45309',
@@ -618,6 +998,432 @@ var ClientResults = window.ClientResults || (function() {
             },
             plugins: [gapLabelPlugin],
         });
+    }
+
+    function initCurveValueLazyPanels(results, options) {
+        options = options || {};
+        const result = results && results.length ? results[results.length - 1] : null;
+        curveValueContext = {
+            result: result,
+            worker: options.worker,
+            deckJson: options.deckJson,
+            config: options.config || {},
+            results: results,
+        };
+
+        const powerBtn = document.getElementById('curveValuePowerBtn');
+        const powerPanel = document.getElementById('curveValuePowerPanel');
+        if (powerBtn && powerPanel) {
+            powerBtn.addEventListener('click', function() {
+                powerPanel.style.display = 'block';
+                powerBtn.closest('.lazy-panel-prompt').style.display = 'none';
+                renderCurveValuePowerChart(results);
+            });
+        }
+
+        const lessRampBtn = document.getElementById('curveValueLessRampBtn');
+        const lessRampSelect = document.getElementById('curveValueLessRampSelect');
+        if (lessRampBtn && lessRampSelect) {
+            lessRampBtn.addEventListener('click', function() {
+                const target = parseInt(lessRampSelect.value, 10);
+                const out = document.getElementById('curveValueLessRampResult');
+                if (!out || isNaN(target)) return;
+                out.style.display = 'block';
+                out.innerHTML = '<div class="rt-loading">Computing timeline...</div>';
+                if (!requestTurnStructureVariant(target)) {
+                    out.innerHTML = '<div class="rt-suppressed">This timeline is not available in this view.</div>';
+                }
+            });
+        }
+    }
+
+    function requestTurnStructureVariant(targetSignets) {
+        if (!curveValueContext || !curveValueContext.worker || !curveValueContext.result) return false;
+        const result = curveValueContext.result;
+        if (!result.ramp_tradeoff_input) return false;
+        const requestId = 'ts-' + Date.now() + '-' + targetSignets;
+        pendingTurnStructure[requestId] = targetSignets;
+        const config = Object.assign({}, curveValueContext.config, {
+            ramp_tradeoff_input: result.ramp_tradeoff_input,
+            target_signets: targetSignets,
+        });
+        curveValueContext.worker.postMessage({
+            type: 'turn_structure_variant',
+            requestId: requestId,
+            deckJson: curveValueContext.deckJson || '[]',
+            signatureJson: JSON.stringify(result.mean_cumulative_draws_per_turn || []),
+            configJson: JSON.stringify(config),
+        });
+        return true;
+    }
+
+    function handleTurnStructureVariantResult(msg) {
+        const targetSignets = msg.data && msg.data.target_signets != null
+            ? msg.data.target_signets : pendingTurnStructure[msg.requestId];
+        delete pendingTurnStructure[msg.requestId];
+        const out = document.getElementById('curveValueLessRampResult');
+        if (!out) return;
+        const ts = msg.data && msg.data.turn_structure;
+        if (!ts) {
+            out.innerHTML = '<div class="rt-suppressed">Timeline could not be computed.</div>';
+            return;
+        }
+        const title = targetSignets === 0
+            ? 'No ramp'
+            : targetSignets + ' Signet' + (targetSignets === 1 ? '' : 's');
+        const scenarioTotal = ts.with_ramp_total_value_mana_spent || 0;
+        const currentTs = curveValueContext
+            && curveValueContext.result
+            && curveValueContext.result.curve_value
+            && curveValueContext.result.curve_value.turn_structure;
+        const currentTotal = currentTs ? (currentTs.with_ramp_total_value_mana_spent || 0) : 0;
+        const valueDelta = currentTotal - scenarioTotal;
+        const deltaClass = valueDelta > 0.05 ? 'pos' : (valueDelta < -0.05 ? 'neg' : 'flat');
+        out.innerHTML = '<div class="curve-value-summary-row">'
+            + '<span class="cv-stat"><span class="cv-label">' + escapeHtml(title) + '</span> <strong>' + fmt(scenarioTotal, 1) + '</strong></span>'
+            + '<span class="cv-stat cv-delta-' + deltaClass + '"><span class="cv-label">Spendable delta</span> <strong>' + fmt(valueDelta, 1) + '</strong></span>'
+            + '</div>'
+            + '<div class="curve-value-turn-chart-wrap cv-turn-spend-chart-wrap"><canvas id="curveValueTurnSpendScenarioChart"></canvas></div>';
+        renderTurnSpendScenarioChart(
+            document.getElementById('curveValueTurnSpendScenarioChart'),
+            ts,
+            title,
+            'with_ramp_value_spend_by_turn',
+            ts.with_ramp_unused_mana || [],
+            ts.with_ramp_ramp_spend || []
+        );
+    }
+
+    function handleTurnStructureVariantError(msg) {
+        delete pendingTurnStructure[msg.requestId];
+        const out = document.getElementById('curveValueLessRampResult');
+        if (out) {
+            out.innerHTML = '<div class="rt-suppressed">Timeline could not be computed: '
+                + escapeHtml(msg.message || 'unknown error') + '</div>';
+        }
+    }
+
+    function initialRampTradeoffIndex(results) {
+        for (let i = results.length - 1; i >= 0; i--) {
+            if (results[i] && results[i].ramp_tradeoff) return i;
+        }
+        return Math.max(0, results.length - 1);
+    }
+
+    function rampTradeoffLandChoices(results) {
+        const byLand = {};
+        for (let i = 0; i < results.length; i++) {
+            const r = results[i];
+            if (!r || !r.ramp_tradeoff_input || r.land_count == null) continue;
+            const key = String(r.land_count);
+            if (byLand[key] == null || (r.ramp_tradeoff && !results[byLand[key]].ramp_tradeoff)) {
+                byLand[key] = i;
+            }
+        }
+        return Object.keys(byLand)
+            .map(function(land) { return {land_count: parseInt(land, 10), index: byLand[land]}; })
+            .sort(function(a, b) { return a.land_count - b.land_count; });
+    }
+
+    function formatSignetVariantLabel(label) {
+        if (label === 'no_ramp') return 'No ramp';
+        return String(label || '')
+            .replace(/rock[- ]equivalent/g, 'Signet-equivalent')
+            .replace(/rocks/g, 'Signets')
+            .replace(/rock/g, 'Signet');
+    }
+
+    function renderRampTradeoff(results) {
+        if (!results || !results.length) return '';
+        const hasInput = results.some(function(r) { return r && r.ramp_tradeoff_input; });
+        if (!hasInput) return '';
+
+        const choices = rampTradeoffLandChoices(results);
+        if (!choices.length) return '';
+        const preferred = initialRampTradeoffIndex(results);
+        let html = '<div class="ramp-tradeoff-section">';
+        html += '<div class="ramp-tradeoff-header">';
+        html += '<div><h2>Ramp Tradeoff</h2>';
+        html += '<p class="rt-subtitle">Your deck\'s ramp approximated in Signet-equivalent units using the average number of draws measured during the simulation.</p></div>';
+        html += '</div>';
+        html += '<div class="lazy-panel-prompt">';
+        html += '<span>Do you want to see the tradeoff of cutting or adding ramp?</span>';
+        html += '<label class="rt-land-select-label">Current lands ';
+        html += '<select id="rampTradeoffLandSelect">';
+        for (const choice of choices) {
+            const sel = choice.index === preferred ? ' selected' : '';
+            html += '<option value="' + choice.index + '"' + sel + '>' + choice.land_count + '</option>';
+        }
+        html += '</select></label>';
+        html += '<button type="button" class="btn btn-secondary btn-sm" id="rampTradeoffLoadBtn">Show Ramp Tradeoff</button>';
+        html += '</div>';
+        html += '<details class="ramp-tradeoff-help"><summary>How to read this</summary>';
+        html += '<p>Each column is a generic two-mana Signet-equivalent variant of the same deck. The line chart shows surplus mana and stuck cards. The bars show how often the deck sees 0, 1, 2, or 3+ Signets by turn 5.</p>';
+        html += '<p>Spend rate is mana spent as a share of mana available. A high spend rate at very low ramp is not a score to maximize. It can simply mean there was little mana to waste.</p>';
+        html += '</details>';
+        html += '<div id="rampTradeoffBody"></div>';
+        html += '</div>';
+        return html;
+    }
+
+    function renderRampTradeoffBody(result) {
+        const rt = result && result.ramp_tradeoff;
+        if (!rt) {
+            return '<div class="rt-loading">Computing this land count when selected...</div>';
+        }
+        if (rt.suppressed) {
+            return '<div class="rt-suppressed">' + escapeHtml(rt.reason || 'Ramp Tradeoff is not available for this deck.') + '</div>';
+        }
+        const variants = rt.variants || [];
+        if (!variants.length) {
+            return '<div class="rt-suppressed">Ramp Tradeoff is not available for this deck.</div>';
+        }
+
+        let html = '<div class="rt-summary-row">';
+        html += '<span class="rt-stat"><span>Current Signets</span><strong>' + rt.current_rocks + '</strong></span>';
+        html += '<span class="rt-stat"><span>Spendable spells</span><strong>' + fmt(rt.spendable_slots || 0, 0) + '</strong></span>';
+        html += '<span class="rt-stat"><span>Trials / variant</span><strong>' + rt.n_trials + '</strong></span>';
+        html += '<span class="rt-stat"><span>Early ramp</span><strong>Turn ' + rt.phase1_turn + '</strong></span>';
+        html += '</div>';
+
+        if (rt.callouts && rt.callouts.length) {
+            html += '<div class="rt-callouts">';
+            rt.callouts.forEach(function(callout) {
+                html += '<p>' + escapeHtml(callout) + '</p>';
+            });
+            html += '</div>';
+        }
+
+        html += '<div class="ramp-tradeoff-grid">';
+        html += '<div class="rt-chart-wrap"><canvas id="rampTradeoffMainChart"></canvas></div>';
+        html += '<div class="rt-chart-wrap"><canvas id="rampTradeoffScenarioChart"></canvas></div>';
+        html += '</div>';
+        const cardsSeen = rt.cards_seen_by_phase1 != null ? fmt(rt.cards_seen_by_phase1, 0) : '?';
+        html += '<p class="rt-note">Early ramp = Signets among about ' + cardsSeen + ' cards seen by turn ' + rt.phase1_turn + '. The same draw signature is held fixed across variants, so cantrip-heavy decks may make cutting ramp look safer than it really is.</p>';
+        return html;
+    }
+
+    function renderRampTradeoffCharts(results) {
+        const select = document.getElementById('rampTradeoffLandSelect');
+        const index = select ? parseInt(select.value, 10) : initialRampTradeoffIndex(results);
+        renderRampTradeoffChartsForResult(results[index]);
+    }
+
+    function renderRampTradeoffChartsForResult(result) {
+        const rt = result && result.ramp_tradeoff;
+        if (!rt || rt.suppressed || !rt.variants || !rt.variants.length) return;
+        renderRampTradeoffMainChart(rt);
+        renderRampTradeoffScenarioChart(rt);
+    }
+
+    function renderRampTradeoffMainChart(rt) {
+        const canvas = document.getElementById('rampTradeoffMainChart');
+        if (!canvas) return;
+        const existing = Chart.getChart('rampTradeoffMainChart');
+        if (existing) existing.destroy();
+
+        const variants = rt.variants || [];
+        const labels = variants.map(function(v) { return formatSignetVariantLabel(v.label); });
+        const unspent = variants.map(function(v) { return v.unspent_mana; });
+        const stuck = variants.map(function(v) { return v.stuck_cards; });
+        const spendRates = variants.map(function(v) { return v.spend_rate; });
+
+        new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Expected unspent mana',
+                        data: unspent,
+                        borderColor: '#2563eb',
+                        backgroundColor: '#2563eb',
+                        yAxisID: 'y',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        tension: 0.2,
+                    },
+                    {
+                        label: 'Expected stuck cards',
+                        data: stuck,
+                        borderColor: '#dc2626',
+                        backgroundColor: '#dc2626',
+                        yAxisID: 'y1',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        tension: 0.2,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    title: { display: true, text: 'Surplus mana vs. stuck cards by Signet-equivalent variant' },
+                    tooltip: {
+                        callbacks: {
+                            footer: function(items) {
+                                const idx = items[0] ? items[0].dataIndex : 0;
+                                const v = variants[idx];
+                                if (!v) return '';
+                                return 'Signets: ' + v.R + '\nSpend rate: ' + Math.round((v.spend_rate || 0) * 100) + '%';
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: { title: { display: true, text: 'Variant' } },
+                    y: { type: 'linear', position: 'left', beginAtZero: true, title: { display: true, text: 'Unspent mana' } },
+                    y1: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Stuck cards' } },
+                },
+            },
+        });
+    }
+
+    function renderRampTradeoffScenarioChart(rt) {
+        const canvas = document.getElementById('rampTradeoffScenarioChart');
+        if (!canvas) return;
+        const existing = Chart.getChart('rampTradeoffScenarioChart');
+        if (existing) existing.destroy();
+
+        const variants = rt.variants || [];
+        const labels = variants.map(function(v) { return formatSignetVariantLabel(v.label); });
+        const colors = ['#ef4444', '#f59e0b', '#22c55e', '#2563eb'];
+        const names = ['0 Signets', '1 Signet', '2 Signets', '3+ Signets'];
+        const datasets = ['0', '1', '2', '3'].map(function(bucket, i) {
+            return {
+                label: names[i],
+                data: variants.map(function(v) { return (v.scenario_probs && v.scenario_probs[bucket] || 0) * 100; }),
+                backgroundColor: colors[i],
+                stack: 'early-ramp',
+            };
+        });
+
+        new Chart(canvas, {
+            type: 'bar',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    title: { display: true, text: 'Early ramp scenarios: Signets seen by turn ' + rt.phase1_turn },
+                    tooltip: {
+                        callbacks: {
+                            label: function(item) {
+                                return item.dataset.label + ': ' + item.parsed.y.toFixed(1) + '%';
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: { stacked: true, title: { display: true, text: 'Variant' } },
+                    y: { stacked: true, beginAtZero: true, max: 100, title: { display: true, text: 'Probability' } },
+                },
+            },
+        });
+    }
+
+    function initRampTradeoff(results, options) {
+        const section = document.querySelector('.ramp-tradeoff-section');
+        if (!section) return;
+        options = options || {};
+        rampTradeoffContext = {
+            results: results,
+            worker: options.worker,
+            deckJson: options.deckJson,
+            config: options.config || {},
+        };
+        const select = document.getElementById('rampTradeoffLandSelect');
+        const loadBtn = document.getElementById('rampTradeoffLoadBtn');
+        function loadSelectedRampTradeoff() {
+            if (!select) return;
+            const idx = parseInt(select.value, 10);
+            const result = results[idx];
+            const body = document.getElementById('rampTradeoffBody');
+            if (!body || !result) return;
+            body.dataset.loaded = 'true';
+            if (result.ramp_tradeoff) {
+                body.innerHTML = renderRampTradeoffBody(result);
+                renderRampTradeoffChartsForResult(result);
+                return;
+            }
+            body.innerHTML = '<div class="rt-loading">Computing Ramp Tradeoff for ' + result.land_count + ' lands...</div>';
+            if (!requestLazyRampTradeoff(idx)) {
+                body.innerHTML = '<div class="rt-suppressed">Ramp Tradeoff for this land count is not available in this view.</div>';
+            }
+        }
+        if (loadBtn) {
+            loadBtn.addEventListener('click', loadSelectedRampTradeoff);
+        }
+        if (select) {
+            select.addEventListener('change', function() {
+                const idx = parseInt(select.value, 10);
+                const result = results[idx];
+                const body = document.getElementById('rampTradeoffBody');
+                if (!body || !result) return;
+                if (body.dataset.loaded !== 'true') return;
+                if (result.ramp_tradeoff) {
+                    body.innerHTML = renderRampTradeoffBody(result);
+                    renderRampTradeoffChartsForResult(result);
+                    return;
+                }
+                body.innerHTML = '<div class="rt-loading">Computing Ramp Tradeoff for ' + result.land_count + ' lands...</div>';
+                if (!requestLazyRampTradeoff(idx)) {
+                    body.innerHTML = '<div class="rt-suppressed">Ramp Tradeoff for this land count is not available in this view.</div>';
+                }
+            });
+        }
+    }
+
+    function requestLazyRampTradeoff(index) {
+        if (!rampTradeoffContext || !rampTradeoffContext.worker) return false;
+        const result = rampTradeoffContext.results[index];
+        if (!result || !result.ramp_tradeoff_input) return false;
+        const requestId = 'rt-' + Date.now() + '-' + index;
+        pendingRampTradeoff[requestId] = index;
+        const config = Object.assign({}, rampTradeoffContext.config, {
+            ramp_tradeoff_input: result.ramp_tradeoff_input,
+        });
+        rampTradeoffContext.worker.postMessage({
+            type: 'ramp_tradeoff',
+            requestId: requestId,
+            resultIndex: index,
+            deckJson: rampTradeoffContext.deckJson || '[]',
+            signatureJson: JSON.stringify(result.mean_cumulative_draws_per_turn || []),
+            configJson: JSON.stringify(config),
+        });
+        return true;
+    }
+
+    function handleRampTradeoffResult(msg) {
+        if (!rampTradeoffContext) return;
+        const index = msg.resultIndex != null ? msg.resultIndex : pendingRampTradeoff[msg.requestId];
+        const result = rampTradeoffContext.results[index];
+        if (!result) return;
+        result.ramp_tradeoff = msg.data;
+        delete pendingRampTradeoff[msg.requestId];
+        const select = document.getElementById('rampTradeoffLandSelect');
+        const currentIndex = select ? parseInt(select.value, 10) : initialRampTradeoffIndex(rampTradeoffContext.results);
+        if (currentIndex === index) {
+            const body = document.getElementById('rampTradeoffBody');
+            if (body) {
+                body.innerHTML = renderRampTradeoffBody(result);
+                renderRampTradeoffChartsForResult(result);
+            }
+        }
+    }
+
+    function handleRampTradeoffError(msg) {
+        delete pendingRampTradeoff[msg.requestId];
+        const select = document.getElementById('rampTradeoffLandSelect');
+        if (!select || parseInt(select.value, 10) !== msg.resultIndex) return;
+        const body = document.getElementById('rampTradeoffBody');
+        if (body) {
+            body.innerHTML = '<div class="rt-suppressed">Ramp Tradeoff could not be computed: '
+                + escapeHtml(msg.message || 'unknown error') + '</div>';
+        }
     }
 
     function renderDeckScoreChart(results) {
@@ -672,7 +1478,7 @@ var ClientResults = window.ClientResults || (function() {
             <summary>Metric Definitions</summary>
             <dl class="metric-list">
                 <dt>Consistency</dt>
-                <dd>Left-tail ratio: mean mana in the worst 25% of games divided by the overall mean (0&ndash;1 scale). 1.0 = perfectly consistent; lower values mean bad games are much worse than average. Based on the selected mana mode.</dd>
+                <dd>Left-tail ratio: mean mana in the worst 25% of games divided by the overall mean (0-1 scale). 1.0 = perfectly consistent; lower values mean bad games are much worse than average. Based on the selected mana mode.</dd>
                 <dt>Avg Spells</dt>
                 <dd>Average number of spells cast per game.</dd>
                 <dt>Mana Spent: V+D</dt>
@@ -770,17 +1576,17 @@ var ClientResults = window.ClientResults || (function() {
         let html = '<h2>Card Performance</h2>';
         html += '<details class="card-perf-help">'
             + '<summary>How to read this table</summary>'
-            + '<p>Spells with the same mana cost and same simulator-relevant effects are pooled into a single archetype, since they\'re interchangeable to the simulator. The example shown is just one card from the pool.</p>'
+            + '<p>Spells with the same mana cost and same simulator-relevant effects are pooled into a single archetype. The example shown is one card from the pool.</p>'
             + '<ul class="card-perf-help-list">'
-            + '<li><strong>Impact</strong> — Average mana spent in games where you drew at least one copy of this spell, minus games where you didn\'t. Positive = the deck does more when this is in your opening hand or draws.</li>'
-            + '<li><strong>Each extra copy</strong> — How much the 1st, 2nd, 3rd… copy adds on top of the previous count. "+0.50" on the 2nd means having two in hand spends 0.50 more mana than just one. A faded "—" means the 90% CI overlaps zero (effect indistinguishable from chance); ordinals the deck rarely realizes are not shown at all.</li>'
-            + '<li><strong>Recommendation</strong> — A plain-English read of the per-copy trend: add more, you have enough, cut copies, or there isn\'t enough data.</li>'
-            + '<li><sup class="always-drawn">∑</sup> means the spell appeared in nearly every game (so there is no "drew none" comparison group). The Impact shown is the sum of the per-copy effects that were statistically significant.</li>'
+            + '<li>Impact: average mana spent in games where you drew at least one copy minus games where you did not.</li>'
+            + '<li>Each extra copy: marginal value of the 1st, 2nd, and 3rd copy. A faded "-" means the confidence interval overlaps zero. Rare ordinals are hidden.</li>'
+            + '<li>Recommendation: add more, enough, cut copies, or not enough data.</li>'
+            + '<li><sup class="always-drawn">∑</sup> means the spell appeared in nearly every game, so there is no "drew none" group.</li>'
             + '</ul>'
-            + '<p><em>Lands are excluded, except for MDFCs (cards with both a land face and a spell face).</em></p>'
+            + '<p>Lands are excluded. MDFCs stay because their spell face matters.</p>'
             + '</details>';
         const supplementalSuffix = cp.supplemental_games
-            ? ' (+' + cp.supplemental_games + ' supplemental games for marginal precision)'
+            ? '. Includes ' + cp.supplemental_games + ' supplemental games for marginal precision'
             : '';
         html += '<p class="card-perf-summary">Impact of drawing each spell on average mana spent across '
             + cp.total_games + ' games' + supplementalSuffix + '.</p>';
@@ -791,16 +1597,16 @@ var ClientResults = window.ClientResults || (function() {
             const parts = card.marginals.map(m => {
                 const ord = ordinal(m.k);
                 if (m.noise) {
-                    const tip = ord + ' copy: 90% CI overlaps zero, so the effect is too small to distinguish from chance ('
-                        + m.n_curr + ' games drew exactly ' + m.k + ').';
+                    const tip = ord + ' copy: 90% CI overlaps zero, so the effect is too small to distinguish from chance. '
+                        + m.n_curr + ' games drew exactly ' + m.k + '.';
                     return '<span class="marginal noise" data-tip="' + escapeHtml(tip) + '">'
-                        + ord + ': —</span>';
+                        + ord + ': -</span>';
                 }
                 const cls = m.effect > 0 ? 'pos' : 'neg';
                 const sign = m.effect >= 0 ? '+' : '';
                 const tip = 'Drawing the ' + ord + ' copy changes total mana spent by '
-                    + sign + fmt(m.effect, 2) + ' on average (90% CI ±' + fmt(m.ci, 2)
-                    + ', based on ' + m.n_curr + ' games).';
+                    + sign + fmt(m.effect, 2) + ' on average. 90% CI ±' + fmt(m.ci, 2)
+                    + ', based on ' + m.n_curr + ' games.';
                 return '<span class="marginal ' + cls + '" data-tip="' + escapeHtml(tip) + '">'
                     + ord + ': ' + sign + fmt(m.effect, 2) + '</span>';
             });
@@ -819,14 +1625,14 @@ var ClientResults = window.ClientResults || (function() {
                 if (range) {
                     const rangeLabel = range.min_copies === range.max_copies
                         ? range.min_copies + ' copies'
-                        : range.min_copies + '–' + range.max_copies + ' copies';
+                        : range.min_copies + '-' + range.max_copies + ' copies';
                     let statusNote;
                     if (range.status === 'high') {
-                        statusNote = 'Currently ' + copies + ' — consider trimming toward ' + range.max_copies + '.';
+                        statusNote = 'Currently ' + copies + '. Consider trimming toward ' + range.max_copies + '.';
                     } else if (range.status === 'low') {
-                        statusNote = 'Currently ' + copies + ' — could add more, up to about ' + range.max_copies + '.';
+                        statusNote = 'Currently ' + copies + '. Could add more, up to about ' + range.max_copies + '.';
                     } else {
-                        statusNote = 'Currently ' + copies + ' — looks right.';
+                        statusNote = 'Currently ' + copies + '. Looks right.';
                     }
                     const tip = 'Drawing more than ' + k + ' copy in the same game stops adding measurable mana. '
                         + 'Hypergeometric range where you draw it often enough but rarely waste extras: '
@@ -837,7 +1643,7 @@ var ClientResults = window.ClientResults || (function() {
                     return '<span class="sat-badge ' + cls + '" data-tip="' + escapeHtml(tip) + '">≈ Sweet spot: ' + rangeLabel + '</span>';
                 }
                 const tip = 'Drawing more than ' + k + ' copy in the same game does not add measurable mana. '
-                    + 'Currently ' + copies + ' copies — only consider cutting if you frequently draw '
+                    + 'Currently ' + copies + ' copies. Only consider cutting if you frequently draw '
                     + (k + 1) + '+.';
                 return '<span class="sat-badge sat-saturated" data-tip="' + escapeHtml(tip) + '">≈ Enough drawn at ' + k + '</span>';
             }
@@ -871,10 +1677,10 @@ var ClientResults = window.ClientResults || (function() {
 
         const headerCells = '<th>#</th>'
             + '<th>Spell</th>'
-            + '<th title="How many copies of this spell (or simulator-equivalent variants) are in the deck.">Copies</th>'
+            + '<th title="How many copies of this spell or simulator-equivalent variants are in the deck.">Copies</th>'
             + '<th title="Average mana actually paid when this spell was cast across all simulated games.">Avg cost</th>'
             + '<th title="Average mana spent in games that drew at least one copy minus games that drew none. Positive = the deck performs better with this spell in hand.">Impact</th>'
-            + '<th data-tip="Per-copy effect: how much more (or less) mana the deck spends when you draw the 1st, 2nd, 3rd … copy compared to having one fewer. Hover any pill for details.">Each extra copy <span class="help-icon" aria-hidden="true">?</span></th>'
+            + '<th data-tip="Per-copy effect: how much more or less mana the deck spends when you draw the 1st, 2nd, or 3rd copy compared to having one fewer. Hover any pill for details.">Each extra copy <span class="help-icon" aria-hidden="true">?</span></th>'
             + '<th data-tip="Plain-English verdict on whether to add more copies, you have enough, cut copies, or there isn\'t enough data yet.">Recommendation <span class="help-icon" aria-hidden="true">?</span></th>';
 
         const high = cp.high_performing || [];
@@ -962,7 +1768,7 @@ var ClientResults = window.ClientResults || (function() {
                 </div>
             </div>
             <p class="replay-disclaimer">
-                Mana model: every land is treated like a basic Wastes &mdash; one untapped colorless mana.
+                Mana model: every land is treated like a basic Wastes. One untapped colorless mana.
                 Color requirements, tapped lands, and fetches are not simulated.
             </p>
         </div>`;
@@ -1234,7 +2040,7 @@ var ClientResults = window.ClientResults || (function() {
                 + (reg.weighted ? '(Weighted Least Squares)' : '(OLS)')
                 + '</h4>';
             html += '<p>R&sup2; = ' + fmt(reg.r_squared, 4)
-                + ' &mdash; model explains ' + fmt(reg.r_squared * 100, 1)
+                + '. Model explains ' + fmt(reg.r_squared * 100, 1)
                 + '% of score variance.</p>';
             html += '<div class="table-wrap"><table class="stats-table"><thead><tr>';
             html += '<th>Feature</th><th>Coefficient</th><th>Std Beta</th>';
@@ -1310,7 +2116,7 @@ var ClientResults = window.ClientResults || (function() {
      * @param {Array} results - Array of result dicts (from result_to_dict)
      * @param {string} deckName - Deck name for the title
      */
-    function render(container, results, deckName) {
+    function render(container, results, deckName, options) {
         const isOptimization = results.length > 0 && results[0].opt_config !== undefined;
 
         let html = '<div class="results-content">';
@@ -1321,6 +2127,7 @@ var ClientResults = window.ClientResults || (function() {
         // For optimization runs the panel reflects the baseline (input) deck
         // composition, since per-config curve_value would be heavyweight.
         html += renderCurveValue(results);
+        html += renderRampTradeoff(results);
         if (isOptimization) {
             html += renderFeatureAnalysis(results);
         }
@@ -1336,8 +2143,11 @@ var ClientResults = window.ClientResults || (function() {
 
         // Render interactive components after DOM is updated
         renderDeckScoreChart(results);
+        wireCasterShare(results, deckName);
+        renderCurveValueTurnSpendChart(results);
         renderCurveValueChart(results);
-        renderCurveValuePowerChart(results);
+        initCurveValueLazyPanels(results, options || {});
+        initRampTradeoff(results, options || {});
         if (!isOptimization) {
             renderCharts(results);
         }
@@ -1346,7 +2156,16 @@ var ClientResults = window.ClientResults || (function() {
         rebindTooltips();
     }
 
-    return {render, rebindTooltips, renderCharts, initReplayViewer};
+    return {
+        render,
+        rebindTooltips,
+        renderCharts,
+        initReplayViewer,
+        handleRampTradeoffResult,
+        handleRampTradeoffError,
+        handleTurnStructureVariantResult,
+        handleTurnStructureVariantError,
+    };
 })();
 // Make this idempotent across document.write() reloads (see top of file).
 if (typeof window !== 'undefined') { window.ClientResults = ClientResults; }
