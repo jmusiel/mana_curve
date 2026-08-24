@@ -164,6 +164,15 @@ class TestResolveCards:
         mock_post.assert_called_once()
 
     @patch("auto_goldfish.decklist.card_resolver.requests.post")
+    def test_resolve_sends_identifying_user_agent(self, mock_post):
+        """Scryfall rejects HTTP-library default User-Agents with a 400."""
+        mock_post.return_value = self._mock_response([])
+        resolve_cards([(1, "Sol Ring", False)])
+        sent_ua = mock_post.call_args[1]["headers"]["User-Agent"]
+        assert sent_ua.startswith("auto-goldfish/")
+        assert "python-requests" not in sent_ua
+
+    @patch("auto_goldfish.decklist.card_resolver.requests.post")
     def test_resolve_duplicates_merged(self, mock_post):
         mock_post.return_value = self._mock_response([
             {

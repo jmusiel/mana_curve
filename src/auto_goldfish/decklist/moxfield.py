@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import os
 import re
-from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Dict, List, Tuple
 
 import requests
 
 from . import rate_limiter
 from .card_resolver import resolve_cards
+from .user_agent import default_user_agent
 
 _API_BASE = "https://api2.moxfield.com/v3/decks/all"
 
@@ -24,13 +24,6 @@ class MoxfieldAPIError(Exception):
     """Raised when the Moxfield API returns an error."""
 
 
-def _package_version() -> str:
-    try:
-        return version("auto_goldfish")
-    except PackageNotFoundError:
-        return "dev"
-
-
 def _get_user_agent() -> str:
     """Return the User-Agent for Moxfield requests.
 
@@ -41,7 +34,7 @@ def _get_user_agent() -> str:
     override = os.environ.get("MOXFIELD_USER_AGENT", "").strip()
     if override:
         return override
-    return f"auto-goldfish/{_package_version()} (+https://github.com/jmusiel/auto-goldfish)"
+    return default_user_agent()
 
 
 def _slugify(name: str) -> str:

@@ -108,3 +108,32 @@ def test_client_results_can_be_loaded_twice_in_same_context():
         f"stderr:\n{result.stderr}\nstdout:\n{result.stdout}"
     )
     assert "ok" in result.stdout
+
+
+def test_curve_value_less_ramp_delta_is_scenario_minus_current():
+    """The lazy Curve Out Timeline scenario compares the selected scenario
+    against the current-ramp baseline. Higher mana spent should render as a
+    positive, green delta.
+    """
+    source = JS_PATH.read_text()
+    assert "function formatSignedDelta" in source
+    assert "return val > 0 ? '+' + fmt(val, decimals) : fmt(val, decimals);" in source
+    assert "const valueDelta = scenarioTotal - currentTotal;" in source
+    assert "const valueDelta = currentTotal - scenarioTotal;" not in source
+    assert "const displayDelta = deltaClass === 'flat' ? 0 : valueDelta;" in source
+    assert "Total mana spent with current ramp" in source
+    assert "Total mana spent with ' + escapeHtml(rampScenarioSentenceLabel(targetSignets))" in source
+    assert "Delta vs current ramp" in source
+
+
+def test_curve_value_deficit_is_red_when_displayed_deficit_is_positive():
+    """Any card-draw deficit that rounds to 0.1+ should use the red deficit
+    class; only displayed-zero deficits should remain green.
+    """
+    source = JS_PATH.read_text()
+    assert "const deficitPos = deficit >= 0.05;" in source
+    assert "const deficitClass = deficitPos ? 'cv-deficit-pos' : 'cv-deficit-ok';" in source
+    assert ".cv-deficit-pos { border-color: #fca5a5; background: #fef2f2; }" in (
+        Path(__file__).resolve().parents[2]
+        / "src" / "auto_goldfish" / "web" / "static" / "style.css"
+    ).read_text()
