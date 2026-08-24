@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Tuple
 import requests
 
 from . import rate_limiter
+from .user_agent import default_user_agent
 
 _COLLECTION_URL = "https://api.scryfall.com/cards/collection"
 _BATCH_SIZE = 75  # Scryfall max per request
@@ -149,7 +150,10 @@ def resolve_cards(
         resp = requests.post(
             _COLLECTION_URL,
             json={"identifiers": batch},
-            headers={"Accept": "application/json"},
+            headers={
+                "Accept": "application/json",
+                "User-Agent": default_user_agent(),
+            },
             timeout=30,
         )
         resp.raise_for_status()

@@ -5,13 +5,62 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 import requests
-from pyrchidekt.api import getDeckById
+from pyrchidekt.deck import Deck
 from tqdm import tqdm
 
+from . import rate_limiter
 from .loader import get_deckpath, save_decklist
+from .user_agent import default_user_agent
 
 ARCHIDEKT_DECKS_V3_URL = "https://www.archidekt.com/api/decks/v3/"
+ARCHIDEKT_DECK_URL = "https://www.archidekt.com/api/decks/{}/"
 ARCHIDEKT_FORMAT_COMMANDER = 3
+
+
+class ArchidektAPIError(Exception):
+    """Raised when the Archidekt API returns an error."""
+
+
+def _get_deck(deck_id: int) -> Deck:
+    """Fetch a deck from Archidekt.
+
+    Replaces pyrchidekt's ``getDeckById``, which sends no User-Agent, sets no
+    timeout, and collapses every non-404 status into one opaque message. The
+    status code matters: datacenter IPs sending a default library User-Agent
+    are the ones most likely to be throttled or blocked.
+    """
+    rate_limiter.wait("archidekt")
+    resp = requests.get(
+        ARCHIDEKT_DECK_URL.format(deck_id),
+        headers={"User-Agent": default_user_agent()},
+        timeout=30,
+    )
+    if resp.status_code == 404:
+        raise ArchidektAPIError(
+            f"Deck {deck_id} not found (it may be private)"
+        )
+    if resp.status_code != 200:
+        raise ArchidektAPIError(
+            f"Archidekt returned HTTP {resp.status_code} for deck {deck_id}: "
+            f"{resp.text[:200]}"
+        )
+    return Deck.fromJson(resp.json())
+
+
+def _primary_category(card: Any) -> Optional[str]:
+    """Return a card's first Archidekt category, or None if it has none.
+
+    Archidekt leaves ``categories`` unset on cards the owner never tagged.
+    """
+    return card.categories[0] if card.categories else None
+
+
+def _is_in_deck(card: Any, categories_in_deck: Dict[str, bool]) -> bool:
+    """Whether a card counts toward the deck. Untagged cards are mainboard."""
+    category = _primary_category(card)
+    if category is None:
+        return True
+    return categories_in_deck.get(category, False)
 
 
 def fetch_decklist(
@@ -31,24 +80,24 @@ def fetch_decklist(
         Include cards in "Add" category and exclude cards labeled "Cuts".
     """
     deck_id = int(deck_url.split("/")[-2])
-    deck = getDeckById(deck_id)
+    deck = _get_deck(deck_id)
 
     categories_in_deck = {cat.name: cat.included_in_deck for cat in deck.categories}
-    cards = [c for c in deck.cards if categories_in_deck.get(c.categories[0], False)]
+    cards = [c for c in deck.cards if _is_in_deck(c, categories_in_deck)]
 
     if include_cuts_and_adds:
         categories_in_deck["Add"] = True
         categories_in_deck["add"] = True
         cards = [
             c for c in deck.cards
-            if categories_in_deck.get(c.categories[0], False) and c.label != "Cuts"
+            if _is_in_deck(c, categories_in_deck) and c.label != "Cuts"
         ]
 
     deck_list: List[Dict[str, Any]] = []
 
     for card in tqdm(cards, desc="Getting decklist"):
         for _ in range(card.quantity):
-            if not categories_in_deck.get(card.categories[0], False):
+            if not _is_in_deck(card, categories_in_deck):
                 continue
 
             card_dict: Dict[str, Any] = {
@@ -63,9 +112,9 @@ def fetch_decklist(
                 "types": card.card.oracle_card.types,
                 "identity": card.card.oracle_card.color_identity,
                 "default_category": card.card.oracle_card.default_category,
-                "user_category": card.categories[0],
+                "user_category": _primary_category(card),
                 "tag": card.label,
-                "commander": card.categories[0] == "Commander",
+                "commander": _primary_category(card) == "Commander",
             }
 
             if card.custom_cmc is not None:

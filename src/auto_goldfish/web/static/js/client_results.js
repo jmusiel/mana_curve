@@ -71,6 +71,16 @@ var ClientResults = window.ClientResults || (function() {
         return Number(val).toFixed(decimals);
     }
 
+    function formatSignedDelta(val, decimals) {
+        return val > 0 ? '+' + fmt(val, decimals) : fmt(val, decimals);
+    }
+
+    function rampScenarioSentenceLabel(signets) {
+        return signets === 0
+            ? 'no ramp'
+            : signets + ' Signet' + (signets === 1 ? '' : 's') + ' ramp';
+    }
+
     // Engine bookkeeping suffix used to keep simulator card identities unique.
     const COPY_SUFFIX_RE = /\s*\(\d+\)\s*$/;
     function baseCardName(name) {
@@ -370,7 +380,7 @@ var ClientResults = window.ClientResults || (function() {
         const id_ = cv.implied_draw;
         const isv = cv.implied_spell_value || {};
         const deficit = id_.actual_deficit || 0;
-        const deficitPos = deficit > 0.5;
+        const deficitPos = deficit >= 0.05;
         const noRamp = !!isv.no_ramp;
 
         let html = '<div class="curve-value-section">';
@@ -408,7 +418,7 @@ var ClientResults = window.ClientResults || (function() {
             html += '<div class="cv-turn-spend-head">';
             html += '<h3>Curve Out Timeline</h3>';
             html += '<div class="curve-value-summary-row">';
-            html += '<span class="cv-stat"><span class="cv-label">With current ramp</span> <strong>' + fmt(ts.with_ramp_total_value_mana_spent || 0, 1) + '</strong></span>';
+            html += '<span class="cv-stat"><span class="cv-label">Total mana spent with current ramp</span> <strong>' + fmt(ts.with_ramp_total_value_mana_spent || 0, 1) + '</strong></span>';
             html += '</div></div>';
             html += '<div class="cv-turn-spend-charts">';
             html += '<div class="curve-value-turn-chart-wrap cv-turn-spend-chart-wrap"><canvas id="curveValueTurnSpendWithRampChart"></canvas></div>';
@@ -1077,11 +1087,12 @@ var ClientResults = window.ClientResults || (function() {
             && curveValueContext.result.curve_value
             && curveValueContext.result.curve_value.turn_structure;
         const currentTotal = currentTs ? (currentTs.with_ramp_total_value_mana_spent || 0) : 0;
-        const valueDelta = currentTotal - scenarioTotal;
+        const valueDelta = scenarioTotal - currentTotal;
         const deltaClass = valueDelta > 0.05 ? 'pos' : (valueDelta < -0.05 ? 'neg' : 'flat');
+        const displayDelta = deltaClass === 'flat' ? 0 : valueDelta;
         out.innerHTML = '<div class="curve-value-summary-row">'
-            + '<span class="cv-stat"><span class="cv-label">' + escapeHtml(title) + '</span> <strong>' + fmt(scenarioTotal, 1) + '</strong></span>'
-            + '<span class="cv-stat cv-delta-' + deltaClass + '"><span class="cv-label">Spendable delta</span> <strong>' + fmt(valueDelta, 1) + '</strong></span>'
+            + '<span class="cv-stat"><span class="cv-label">Total mana spent with ' + escapeHtml(rampScenarioSentenceLabel(targetSignets)) + '</span> <strong>' + fmt(scenarioTotal, 1) + '</strong></span>'
+            + '<span class="cv-stat cv-delta-' + deltaClass + '"><span class="cv-label">Delta vs current ramp</span> <strong>' + formatSignedDelta(displayDelta, 1) + '</strong></span>'
             + '</div>'
             + '<div class="curve-value-turn-chart-wrap cv-turn-spend-chart-wrap"><canvas id="curveValueTurnSpendScenarioChart"></canvas></div>';
         renderTurnSpendScenarioChart(
